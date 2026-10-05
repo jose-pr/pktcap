@@ -30,17 +30,23 @@ def _udp(sport, dport, payload):
     return struct.pack("!HHHH", sport, dport, 8 + len(payload), 0) + payload
 
 
-def _ipv4(body, ident=1, offset=0, more=False):
+def _tcp(sport, dport, payload):
+    options = bytes([2, 4, 5, 180, 1, 1, 1, 0])  # MSS, padding
+    header = struct.pack("!HHIIBBHHH", sport, dport, 1, 2, 7 << 4, 0x18, 4096, 0, 0)
+    return header + options + payload
+
+
+def _ipv4(body, ident=1, offset=0, more=False, protocol=17):
     flags = (0x2000 if more else 0) | (offset // 8)
     return (
-        struct.pack("!BBHHHBBH", 0x45, 0, 20 + len(body), ident, flags, 64, 17, 0)
+        struct.pack("!BBHHHBBH", 0x45, 0, 20 + len(body), ident, flags, 64, protocol, 0)
         + bytes([192, 0, 2, 5, 192, 0, 2, 1])
         + body
     )
 
 
-def _ethernet(ip):
-    return b"\x02" * 6 + b"\x04" * 6 + b"\x08\x00" + ip
+def _ethernet(ip, tags=b""):
+    return b"\x02" * 6 + b"\x04" * 6 + tags + b"\x08\x00" + ip
 
 
 def _pcap(frames):
@@ -83,13 +89,30 @@ def _inputs():
         )
         for n in range(1000)
     ]
+    tagged = [
+        _ethernet(
+            _ipv4(_tcp(50000, 443, payload), ident=i, protocol=6),
+            tags=b"\x88\xa8\x00\x64\x81\x00\x00\xc8",
+        )
+        for i in range(FRAMES)
+    ]
     return {
         "pcap": _pcap(whole),
         "pcapng": _pcapng(whole),
         "fragments": _pcap(fragmented),
+        "tagged": _pcap(tagged),
         "tiny": tiny,
+        "frames": list(pktcap.read_frames(io.BytesIO(_pcap(whole)))),
+        "dissected": list(pktcap.read_dissected(io.BytesIO(_pcap(whole)))),
         "datagrams": list(pktcap.read_datagrams(io.BytesIO(_pcap(whole)))),
     }
+
+
+def _dissect_payload(data):
+    """A registered dissector of the smallest useful kind."""
+    if len(data) < 2:
+        raise ValueError("two octets at least")
+    return pktcap.Dissected({"kind": data[0], "code": data[1]}, data[2:])
 
 
 def metrics(inputs):
@@ -101,20 +124,47 @@ def metrics(inputs):
             for datagram in datagrams:
                 writer.write_datagram(datagram)
 
+    def write_frames():
+        with pktcap.PcapngWriter(io.BytesIO()) as writer:
+            for frame in inputs["frames"]:
+                writer.write_frame(frame)
+
     def tiny_fragments():
-        decoder = pktcap.FrameDecoder()
+        dissector = pktcap.FrameDissector()
         for frame in inputs["tiny"]:
-            decoder.decode(frame)
+            dissector.dissect(frame)
+
+    registry = pktcap.DissectorRegistry()
+    registry.register("udp", 69, _dissect_payload)
+
+    def registered():
+        dissector = pktcap.FrameDissector(registry)
+        return sum(
+            1
+            for _ in pktcap.read_dissected(
+                io.BytesIO(inputs["pcap"]), dissector=dissector
+            )
+        )
 
     def records():
         for datagram in datagrams:
             pktcap.dumps_record(pktcap.datagram_record(datagram))
+
+    def frame_records():
+        for frame in inputs["dissected"]:
+            pktcap.dumps_record(pktcap.frame_record(frame))
 
     def filtered():
         wanted = pktcap.compile_capture_filter(
             "port=69 and port!=7", lambda c: lambda d: d.destination[1] == int(c.value)
         )
         return sum(1 for datagram in datagrams if wanted(datagram))
+
+    def frame_filtered():
+        wanted = pktcap.compile_capture_filter(
+            "proto=udp and host=192.0.2.0/24 and port!=7", pktcap.frame_filter
+        )
+        return sum(1 for frame in inputs["dissected"] if wanted(frame))
 
     return {
         "read_frames/pcap-2000": lambda: sum(
@@ -123,16 +173,26 @@ def metrics(inputs):
         "read_frames/pcapng-2000": lambda: sum(
             1 for _ in pktcap.read_frames(io.BytesIO(inputs["pcapng"]))
         ),
+        "read_dissected/ethernet-ipv4-udp-2000": lambda: sum(
+            1 for _ in pktcap.read_dissected(io.BytesIO(inputs["pcap"]))
+        ),
+        "read_dissected/qinq-ipv4-tcp-2000": lambda: sum(
+            1 for _ in pktcap.read_dissected(io.BytesIO(inputs["tagged"]))
+        ),
+        "read_dissected/registered-dissector-2000": registered,
         "read_datagrams/ethernet-ipv4-2000": lambda: sum(
             1 for _ in pktcap.read_datagrams(io.BytesIO(inputs["pcap"]))
         ),
         "read_datagrams/fragments-3x666": lambda: sum(
             1 for _ in pktcap.read_datagrams(io.BytesIO(inputs["fragments"]))
         ),
-        "decode/1000-fragments-of-one-datagram": tiny_fragments,
+        "dissect/1000-fragments-of-one-datagram": tiny_fragments,
         "PcapWriter.write/2000": write,
-        "dumps_record/json-2000": records,
+        "PcapngWriter.write_frame/2000": write_frames,
+        "dumps_record/datagram-json-2000": records,
+        "dumps_record/frame-json-2000": frame_records,
         "compile_capture_filter/apply-2000": filtered,
+        "frame_filter/apply-2000": frame_filtered,
     }
 
 

@@ -22,12 +22,18 @@ repeated `--samples` times (15 by default) after one warm-up call.
 | --- | --- |
 | `read_frames/pcap-2000` | reading 2,000 frames of a pcap from memory |
 | `read_frames/pcapng-2000` | the same frames in pcapng |
-| `read_datagrams/ethernet-ipv4-2000` | reading and decoding 2,000 Ethernet, IPv4, UDP frames |
+| `read_dissected/ethernet-ipv4-udp-2000` | reading and dissecting 2,000 Ethernet, IPv4, UDP frames: three layers each |
+| `read_dissected/qinq-ipv4-tcp-2000` | 2,000 frames with two VLAN tags, IPv4 and TCP with options: five layers each |
+| `read_dissected/registered-dissector-2000` | the first input again, with a dissector registered for its UDP port: four layers each |
+| `read_datagrams/ethernet-ipv4-2000` | the same frames through the UDP datagram view |
 | `read_datagrams/fragments-3x666` | 666 datagrams of 4,096 octets, each in three fragments |
-| `decode/1000-fragments-of-one-datagram` | 1,000 eight-octet fragments of one datagram that never completes: the shape that is quadratic when each fragment is compared with all the others |
-| `PcapWriter.write/2000` | writing 2,000 datagrams, checksums included |
-| `dumps_record/json-2000` | the default record of 2,000 datagrams as JSON lines |
-| `compile_capture_filter/apply-2000` | compiling a two-clause filter and applying it 2,000 times |
+| `dissect/1000-fragments-of-one-datagram` | 1,000 eight-octet fragments of one datagram that never completes: the shape that is quadratic when each fragment is compared with all the others |
+| `PcapWriter.write/2000` | writing 2,000 datagrams under synthesised headers, checksums included |
+| `PcapngWriter.write_frame/2000` | writing 2,000 captured frames back as pcapng |
+| `dumps_record/datagram-json-2000` | the default record of 2,000 datagrams as JSON lines |
+| `dumps_record/frame-json-2000` | the default record of 2,000 dissected frames as JSON lines |
+| `compile_capture_filter/apply-2000` | compiling a two-clause filter with a caller's builder and applying it 2,000 times |
+| `frame_filter/apply-2000` | compiling a three-clause filter over the built-in keys and applying it to 2,000 dissected frames |
 
 ## The result file
 
