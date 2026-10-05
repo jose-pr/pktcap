@@ -1,0 +1,49 @@
+{
+  "version": "0.1.0",
+  "python": "3.14.7",
+  "platform": "win-arm64",
+  "samples": 15,
+  "unit": "milliseconds per call",
+  "metrics": {
+    "read_frames/pcap-2000": {
+      "min_ms": 2.0158,
+      "median_ms": 2.0955,
+      "max_ms": 3.9758
+    },
+    "read_frames/pcapng-2000": {
+      "min_ms": 3.6549,
+      "median_ms": 3.6647,
+      "max_ms": 4.7127
+    },
+    "read_datagrams/ethernet-ipv4-2000": {
+      "min_ms": 4.4502,
+      "median_ms": 4.4799,
+      "max_ms": 4.9065
+    },
+    "read_datagrams/fragments-3x666": {
+      "min_ms": 5.3257,
+      "median_ms": 5.3559,
+      "max_ms": 6.0394
+    },
+    "decode/1000-fragments-of-one-datagram": {
+      "min_ms": 1.0989,
+      "median_ms": 1.1067,
+      "max_ms": 1.5695
+    },
+    "PcapWriter.write/2000": {
+      "min_ms": 15.0439,
+      "median_ms": 15.2189,
+      "max_ms": 16.6358
+    },
+    "dumps_record/json-2000": {
+      "min_ms": 13.2397,
+      "median_ms": 13.4821,
+      "max_ms": 14.2955
+    },
+    "compile_capture_filter/apply-2000": {
+      "min_ms": 0.5115,
+      "median_ms": 0.5141,
+      "max_ms": 0.6065
+    }
+  }
+}
