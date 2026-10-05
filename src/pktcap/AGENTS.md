@@ -429,13 +429,43 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `CaptureFormatError` | `PktcapError`, `ValueError` | input that is not a pcap or pcapng capture, or is a damaged one |
 | `CaptureFilterError` | `PktcapError`, `ValueError` | a capture-filter expression that cannot be parsed or compiled |
 | `UnsupportedFormatError` | `PktcapError`, `ValueError` | an output format that does not exist, or that a file name does not tell |
-
 | `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
 
 A format that exists and whose extra is not installed raises the builtin
 `ImportError`, naming the extra. A process that may not open a packet socket
-gets the kernel's `PermissionError`.
+gets the kernel's `PermissionError`. `OSError` from opening, reading or
+writing a file or a socket is let through as it is.
 
 `CaptureFormatError.offset` is how many octets of the input had been read when
 the problem was found, or `None`; the message ends with it and never quotes the
 file.
+
+## Gotchas
+
+- **`read_frames`, `read_datagrams` and `replay_schedule` return iterators.**
+  Arguments are checked at the call; the file is opened and a damaged capture
+  raises only while iterating. Wrap the loop, not the call.
+- **Zero datagrams is not "no traffic" until the counters agree.** Pass a
+  `FrameDecoder` and read `stats`: `unsupported` equal to `frames` is a link
+  type this library does not decode, `malformed` a capture cut too short.
+- **A `CapturedDatagram` is not `netimps.Datagram`.** One is read from a
+  capture (time, both addresses, payload); the other is received on a socket
+  (data, sender, arrival interface).
+- **Check `truncated` and `fragmented` before reading a short payload as a
+  short message.** A capture taken with a small snap length gives every large
+  datagram a cut payload.
+- **`time` is whatever the capture says.** `0.0`, the year 36,812 and a value
+  that goes backwards are all possible; guard `datetime.fromtimestamp`.
+- **`speed=None` sends as fast as the socket takes it.** The default keeps
+  the recorded pace; a capture with a long silence replays it up to
+  `max_delay` each time.
+- **`PcapWriter` and `CaptureWriter` replace an existing file at the first
+  `write`**, not when they are built. `CaptureWriter(append=True)` adds to it.
+- **A stream must be binary**: `sys.stdin.buffer` and `sys.stdout.buffer`,
+  never `sys.stdin` or `sys.stdout`.
+- **Nothing here is safe to share between threads.** A decoder, a writer and a
+  live capture each keep state; give each thread its own or serialise.
+- **This library configures no logging, installs no signal handler and
+  prints nothing.** It logs at `WARNING` on `pktcap._frames` (an unknown link
+  type, once each for the first eight) and `pktcap._output` (the file budget
+  reached, once per writer).

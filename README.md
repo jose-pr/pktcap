@@ -14,8 +14,26 @@ Documentation: <https://jose-pr.github.io/pktcap/>.
 
 ## Features
 
-- **One exception base** — `PktcapError`, for anything the library reports on
-  its own account.
+- **Reads pcap and pcapng** — either byte order, microseconds or nanoseconds,
+  several interfaces, from a file or from a pipe that cannot seek
+  (`tcpdump -w -`, `dumpcap -w -`).
+- **Decodes frames to UDP datagrams** — Ethernet with VLAN tags, Linux cooked
+  capture, BSD loopback and raw IP; IPv4 and IPv6 with extension headers.
+  Reassembling IP fragments is an option.
+- **Treats a capture as untrusted input** — every length, count and offset a
+  file states has a ceiling checked before anything is allocated: a 48-octet
+  file claiming a 1 GiB record costs under 1 MiB and one `CaptureFormatError`.
+  A frame that does not decode is counted, never dropped silently.
+- **Writes pcap** that tcpdump and Wireshark read, with valid checksums, and
+  opens the file only when there is something to write.
+- **Writes records in a format chosen by name** — the datagram, or the plain
+  data a protocol library makes of it, as JSON lines, YAML documents, TOML or
+  INI files, into one growing file or one file per record.
+- **Replays a capture** — on its recorded timing, to a callable or to one
+  destination the caller names; never to the addresses in the file.
+- **Parses the `key=value and key!=value` filter expression**, leaving what a
+  key means to the caller.
+- **Captures live on Linux** without a capture tool, given `CAP_NET_RAW`.
 
 ## Installation
 
@@ -23,19 +41,73 @@ Documentation: <https://jose-pr.github.io/pktcap/>.
 pip install pktcap
 ```
 
-Requires Python 3.9 or newer.
+Requires Python 3.9 or newer. `netimps` is the one dependency.
 
 | Extra | Adds | Needed for |
 | --- | --- | --- |
-| `yaml` | `PyYAML` | writing records as YAML |
-| `toml` | `tomli-w` | writing records as TOML |
+| `yaml` | `PyYAML` | the `yaml` output format |
+| `toml` | `tomli-w` | the `toml` output format |
+
+Importing `pktcap` needs neither; a format whose extra is missing raises
+`ImportError` naming the extra when it is used.
 
 ## Quick start
+
+Write a capture and read it back:
 
 ```python
 import pktcap
 
-print(pktcap.__version__)
+with pktcap.PcapWriter("trace.pcap") as writer:
+    writer.write(1700000000.00, ("192.0.2.5", 50000), ("192.0.2.1", 69), b"request")
+    writer.write(1700000000.05, ("192.0.2.1", 40000), ("192.0.2.5", 50000), b"reply 1")
+    writer.write(1700000000.10, ("192.0.2.1", 40000), ("192.0.2.5", 50000), b"reply 2")
+
+for datagram in pktcap.read_datagrams("trace.pcap"):
+    print(datagram.time, datagram.source, datagram.destination, datagram.payload)
+```
+
+See what a capture held that was not a datagram:
+
+```python
+decoder = pktcap.FrameDecoder(reassemble=True)
+datagrams = list(pktcap.read_datagrams("trace.pcap", decoder=decoder))
+print(decoder.stats)  # frames, datagrams, ignored, malformed, unsupported, ...
+```
+
+Write it in another format, with the record your own protocol makes:
+
+```python
+with pktcap.CaptureWriter("trace.json") as output:  # the format is the suffix
+    for datagram in datagrams:
+        output.write(datagram, {"size": len(datagram.payload), "to": datagram.destination[1]})
+
+print(pktcap.dumps_record(pktcap.datagram_record(datagrams[0]), "ini"))
+```
+
+Filter with the shared expression grammar and your own keys:
+
+```python
+def build(clause):
+    if clause.key != "port":
+        raise ValueError("unknown filter key %r" % clause.key)
+    ports = {int(value) for value in clause.values}
+    return lambda d: d.source[1] in ports or d.destination[1] in ports
+
+wanted = pktcap.compile_capture_filter("port=69,70 and port!=40000", build)
+print([d.payload for d in datagrams if wanted(d)])
+```
+
+Replay it, at the recorded pace, to a destination you name:
+
+```python
+from netimps import bind
+
+listener = bind("127.0.0.1", 0)  # a UDP socket on a free loopback port
+result = pktcap.replay_to("trace.pcap", "127.0.0.1", listener.getsockname()[1])
+print(result)  # ReplayResult(sent=3, partial=0)
+print(listener.recvfrom(1500)[0])
+listener.close()
 ```
 
 ## API overview
@@ -44,7 +116,22 @@ Everything is imported from `pktcap`; the modules below it are private.
 
 | Module | Purpose |
 | --- | --- |
-| `pktcap` | every public name |
+| `pktcap` | every public name, below |
+
+| Names | Purpose |
+| --- | --- |
+| `read_frames`, `CapturedFrame`, `CaptureSource` | read a pcap or pcapng container |
+| `read_datagrams`, `FrameDecoder`, `CapturedDatagram`, `DecodeStats`, `LINKTYPES` | decode frames to UDP datagrams, reassembly optional |
+| `PcapWriter` | write datagrams as pcap |
+| `CaptureWriter`, `dumps_record`, `datagram_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write datagrams or records in a named format |
+| `replay_schedule`, `replay`, `replay_to`, `ReplayResult`, `ReplaySource` | replay a capture |
+| `parse_capture_filter`, `compile_capture_filter`, `FilterClause` | the filter expression |
+| `LiveCapture`, `sniff`, `has_live_capture` | live capture on Linux |
+| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `LiveCaptureError` | the exceptions |
+
+The reference with every signature, bound and gotcha is the API header that
+ships inside the package, `pktcap/AGENTS.md`, also at
+<https://github.com/jose-pr/pktcap/blob/main/src/pktcap/AGENTS.md>.
 
 ## Differences from tshark
 
