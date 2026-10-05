@@ -48,5 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   without them. Every record format writes printable ASCII. A per-record
   writer creates at most `max_files` files and makes each field value safe
   for a file name.
+- `replay_schedule(source, *, speed=1.0, max_delay=5.0, limit=None)` yields
+  `(delay, datagram)` for a capture or any iterable of datagrams and reads no
+  clock; `replay(source, deliver)` sleeps each delay and calls `deliver`;
+  `replay_to(source, dst, port, *, endpoint=None)` sends each payload to the
+  one destination named, through a `netimps` socket, and returns
+  `ReplayResult(sent, partial)`. The addresses in the capture are never sent
+  to, the recorded timing is the default, each wait is capped at `max_delay`,
+  and a `fragmented` or `truncated` datagram is counted and not sent.
 
 [Unreleased]: https://github.com/jose-pr/pktcap/commits/main

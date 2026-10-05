@@ -31,6 +31,7 @@ prints the reason for every skip: a skip is not a pass.
 | `test_filter.py` | the filter grammar: the expressions both protocol libraries use, what is refused, the round trip of the canonical text, compiling with a caller's builder |
 | `test_formats.py` | the record formats: one contract suite over every name in `RECORD_FORMATS` (the text parses back with a parser this library did not write), then each format's dialect and the missing-extra message |
 | `test_output.py` | `CaptureWriter`: every format as a growing file and as one file per record, choosing the format, the name pattern, the file budget, values that try to leave the directory |
+| `test_replay.py` | `replay_schedule`, `replay` and `replay_to`: the waits and their cap, the limit, sends to loopback sockets the test owns over IPv4 and IPv6, partial datagrams, and that the guard sees a replay that would leave the host |
 | `test_reassembly.py` | IP reassembly through `FrameDecoder`: any order, both families, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
 ## Rules

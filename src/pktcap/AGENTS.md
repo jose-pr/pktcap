@@ -22,7 +22,7 @@ installed package (`importlib.resources.files("pktcap")`):
 
 | Header | Covers |
 | --- | --- |
-| `pktcap/AGENTS.md` | this file: reading, decoding, writing, the filter expression, the exceptions |
+| `pktcap/AGENTS.md` | this file: reading, decoding, writing, replaying, the filter expression, the exceptions |
 | `pktcap/_formats/AGENTS.md` | what a record is, and exactly what each record format writes |
 
 **A capture is untrusted input.** Every length, count and offset a file or a
@@ -266,6 +266,58 @@ replaced by `_` and leading and trailing `.` and `_` removed (`unknown` when
 nothing is left), so it cannot hold a path separator or be `..`; a file name
 that Windows would open as a device (`NUL`, `COM1`) gets a leading `_`. A time
 outside any calendar is written as `t<seconds>`.
+
+## Replaying a capture
+
+The datagrams of a capture again, in order and in time. Three functions over
+one schedule; the options `speed`, `max_delay` and `limit` mean the same in
+each.
+
+`source` (`ReplaySource`) is a path or binary stream of a pcap or pcapng
+capture, **or any iterable of `CapturedDatagram`**: choosing which datagrams
+to replay is a generator expression, and the waits are then the gaps between
+the ones chosen.
+
+**`replay_schedule(source, *, speed=1.0, max_delay=5.0, limit=None) -> Iterator[Tuple[float, CapturedDatagram]]`**
+— `(delay, datagram)` for each datagram. `delay` is the seconds to wait before
+it: the time since the one before it in the capture, divided by `speed`. **It
+reads no clock and waits for nothing**, so an event loop drives it with its
+own sleep (`await asyncio.sleep(delay)`, then `endpoint.asend(...)`).
+
+**`replay(source, deliver, *, speed=1.0, max_delay=5.0, limit=None) -> int`**
+— blocks: sleeps each delay, calls `deliver(datagram)`, and returns how many
+were delivered. Partial datagrams are delivered too; an exception from
+`deliver` ends the replay and propagates. A protocol library that knows a
+reply goes to another port builds a faithful replay on this.
+
+**`replay_to(source, dst, port, *, endpoint=None, speed=1.0, max_delay=5.0, limit=None) -> ReplayResult`**
+— blocks: sends each payload to `(dst, port)`.
+
+- **The destination is always the caller's.** The addresses recorded in the
+  capture are never sent to. `dst` is `netimps.HostLike`; a name is looked up
+  once. `port` is 1 to 65535.
+- **A datagram marked `fragmented` or `truncated` is not sent**, since its
+  payload is not the whole message: it is counted in `ReplayResult.partial`.
+- By default a UDP socket is made with `netimps.bind()` for `dst`'s address
+  family (any free port, broadcast off) and closed on return. Pass a
+  `netimps.UDPEndpoint` as `endpoint` to choose the source port or interface
+  or to allow broadcast; it is left open.
+- `OSError` when `dst` does not resolve (`netimps.ResolutionError`) or a send
+  fails, a payload too long for the family included.
+
+**`ReplayResult(sent, partial)`** — a named tuple: datagrams sent, and partial
+datagrams passed over.
+
+| Option | Meaning |
+| --- | --- |
+| `speed` | `1.0` keeps the recorded timing and is the default, so a replay sends no faster than the capture did; `2.0` halves every wait; **`None` removes them** and has to be asked for |
+| `max_delay` | the longest single wait, in seconds. A capture controls its timestamps, and a jump of a year must not hang a replay. A step backwards in time, or a time that is not a number, is a wait of zero |
+| `limit` | stop after this many datagrams; the source is not read past it |
+
+`ValueError` for a `speed` that is not positive and finite, a `max_delay` or
+`limit` below zero, a `port` outside 1-65535 or an empty `dst`; `TypeError`
+for an option of the wrong type or a `deliver` that is not callable; all at
+the call, before anything is read or sent.
 
 ## The capture-filter expression
 

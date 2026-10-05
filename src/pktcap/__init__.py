@@ -29,6 +29,7 @@ from ._formats import (
 )
 from ._frames import LINKTYPES, DecodeStats, FrameDecoder, read_datagrams
 from ._output import CaptureWriter, datagram_record
+from ._replay import ReplayResult, ReplaySource, replay, replay_schedule, replay_to
 from ._writer import PcapWriter
 
 __all__ = [
@@ -46,6 +47,8 @@ __all__ = [
     "PcapWriter",
     "PktcapError",
     "RECORD_FORMATS",
+    "ReplayResult",
+    "ReplaySource",
     "UnsupportedFormatError",
     "compile_capture_filter",
     "datagram_record",
@@ -54,6 +57,9 @@ __all__ = [
     "parse_capture_filter",
     "read_datagrams",
     "read_frames",
+    "replay",
+    "replay_schedule",
+    "replay_to",
 ]
 
 __version__ = _version("pktcap")

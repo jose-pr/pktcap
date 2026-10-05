@@ -24,6 +24,8 @@ EXPECTED = [
     "PcapWriter",
     "PktcapError",
     "RECORD_FORMATS",
+    "ReplayResult",
+    "ReplaySource",
     "UnsupportedFormatError",
     "compile_capture_filter",
     "datagram_record",
@@ -32,6 +34,9 @@ EXPECTED = [
     "parse_capture_filter",
     "read_datagrams",
     "read_frames",
+    "replay",
+    "replay_schedule",
+    "replay_to",
 ]
 
 #: Positional parameters a callable may take: the thing it acts on, and one
@@ -46,10 +51,20 @@ POSITIONAL = {
     "CaptureWriter": 2,
     # The datagram and the record made of it.
     "CaptureWriter.write": 2,
+    # What to replay and who receives it.
+    "replay": 2,
+    # What to replay and where to: a host and a port, as `sendto` takes them.
+    "replay_to": 3,
 }
 
 #: Named tuples are positional by nature.
-NAMED_TUPLES = ("CapturedDatagram", "CapturedFrame", "DecodeStats", "FilterClause")
+NAMED_TUPLES = (
+    "CapturedDatagram",
+    "CapturedFrame",
+    "DecodeStats",
+    "FilterClause",
+    "ReplayResult",
+)
 
 
 def test_all_is_exactly_the_expected_names():
