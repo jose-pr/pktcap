@@ -1,7 +1,9 @@
-"""The shipped ``AGENTS.md`` header stays complete and true.
+"""The shipped ``AGENTS.md`` headers stay complete, listed and true.
 
-Every export is named in it, every signature it prints is the live one, and it
-and the two contributor files stay short enough to be read in one go.
+``src/pktcap/AGENTS.md`` is the top header; a topic with much detail keeps it
+in an ``AGENTS.md`` beside its code. Every export is named in the top header,
+every header below it is listed there, every signature any of them prints is
+the live one, and each file stays short enough to be read in one go.
 """
 
 import ast
@@ -14,11 +16,14 @@ import pytest
 import pktcap
 
 _ROOT = Path(__file__).resolve().parent.parent
-_HEADER = _ROOT / "src" / "pktcap" / "AGENTS.md"
+_PACKAGE = _ROOT / "src" / "pktcap"
+_HEADER = _PACKAGE / "AGENTS.md"
+_SUBHEADERS = sorted(p for p in _PACKAGE.rglob("AGENTS.md") if p != _HEADER)
 
 #: The most lines each file may have. Past these, detail moves to a header
 #: beside the code it describes and the parent points to it.
 HEADER_MAX_LINES = 500
+SUB_MAX_LINES = 300
 ROOT_MAX_LINES = 120
 TESTS_MAX_LINES = 120
 
@@ -27,10 +32,28 @@ def _lines(path):
     return path.read_text(encoding="utf-8").splitlines()
 
 
+def _inside_package(path):
+    """The path a reader of the installed package uses."""
+    return "pktcap/" + path.relative_to(_PACKAGE).as_posix()
+
+
 def test_the_files_are_not_over_their_limits():
     assert len(_lines(_HEADER)) <= HEADER_MAX_LINES
     assert len(_lines(_ROOT / "AGENTS.md")) <= ROOT_MAX_LINES
     assert len(_lines(_ROOT / "tests" / "AGENTS.md")) <= TESTS_MAX_LINES
+    for path in _SUBHEADERS:
+        assert len(_lines(path)) <= SUB_MAX_LINES, _inside_package(path)
+
+
+@pytest.mark.parametrize("path", _SUBHEADERS, ids=_inside_package)
+def test_a_header_below_the_top_is_listed_there_and_says_what_it_is(path):
+    rows = [line for line in _lines(_HEADER) if line.startswith("|")]
+    assert any("`%s`" % _inside_package(path) in row for row in rows)
+    head = "\n".join(_lines(path)[:12])
+    assert head.startswith("# `pktcap`") and "public API header" in head
+    assert "private and not an import path" in " ".join(head.split())
+    links = re.findall(r"\]\(([^)]+)\)", path.read_text(encoding="utf-8"))
+    assert [link for link in links if not link.startswith("http")] == []
 
 
 def test_the_header_has_the_standard_opening():
@@ -148,6 +171,10 @@ def _probe(path):
 
 def test_every_printed_signature_is_the_live_one():
     checked, bad = _probe(_HEADER)
+    for path in _SUBHEADERS:
+        count, mismatches = _probe(path)
+        assert count, "%s prints no signature to check" % _inside_package(path)
+        bad += ["%s: %s" % (_inside_package(path), m) for m in mismatches]
     assert bad == [], "signature drift:\n" + "\n".join(bad)
     exports = [getattr(pktcap, name) for name in pktcap.__all__]
     plain = [

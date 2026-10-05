@@ -29,6 +29,8 @@ prints the reason for every skip: a skip is not a pass.
 | `test_frames.py` | `FrameDecoder` and `read_datagrams`: every link type, IPv4 and IPv6 headers, what is counted as ignored, malformed or unsupported, truncation, the per-frame ceilings, a seeded fuzz per link type |
 | `test_writer.py` | `PcapWriter`: the round trip through `read_datagrams`, checksums, the lazy open, what a bad argument leaves untouched |
 | `test_filter.py` | the filter grammar: the expressions both protocol libraries use, what is refused, the round trip of the canonical text, compiling with a caller's builder |
+| `test_formats.py` | the record formats: one contract suite over every name in `RECORD_FORMATS` (the text parses back with a parser this library did not write), then each format's dialect and the missing-extra message |
+| `test_output.py` | `CaptureWriter`: every format as a growing file and as one file per record, choosing the format, the name pattern, the file budget, values that try to leave the directory |
 | `test_reassembly.py` | IP reassembly through `FrameDecoder`: any order, both families, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
 ## Rules

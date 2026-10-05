@@ -13,15 +13,22 @@ EXPECTED = [
     "CaptureFilterError",
     "CaptureFormatError",
     "CaptureSource",
+    "CaptureWriter",
     "CapturedDatagram",
     "CapturedFrame",
     "DecodeStats",
     "FilterClause",
     "FrameDecoder",
     "LINKTYPES",
+    "OUTPUT_FORMATS",
     "PcapWriter",
     "PktcapError",
+    "RECORD_FORMATS",
+    "UnsupportedFormatError",
     "compile_capture_filter",
+    "datagram_record",
+    "dumps_record",
+    "has_output_format",
     "parse_capture_filter",
     "read_datagrams",
     "read_frames",
@@ -34,6 +41,11 @@ POSITIONAL = {
     "PcapWriter.write": 4,
     # The expression and what turns a clause into a test: both are operands.
     "compile_capture_filter": 2,
+    # What to write and the format to write it in, as `json.dump(obj, fp)`.
+    "dumps_record": 2,
+    "CaptureWriter": 2,
+    # The datagram and the record made of it.
+    "CaptureWriter.write": 2,
 }
 
 #: Named tuples are positional by nature.

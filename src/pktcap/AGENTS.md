@@ -17,6 +17,14 @@ neither. Python 3.9 or newer.
 `pktcap.__version__` — the package version string, the same value the
 installed distribution's metadata carries.
 
+One topic keeps its detail in a header beside its code, also inside the
+installed package (`importlib.resources.files("pktcap")`):
+
+| Header | Covers |
+| --- | --- |
+| `pktcap/AGENTS.md` | this file: reading, decoding, writing, the filter expression, the exceptions |
+| `pktcap/_formats/AGENTS.md` | what a record is, and exactly what each record format writes |
+
 **A capture is untrusted input.** Every length, count and offset a file or a
 frame states is compared with a ceiling before anything is allocated or looped
 over; each section below gives its ceilings and what happens at them.
@@ -187,6 +195,78 @@ IPv4 or IPv6 and UDP headers with valid checksums. A context manager.
 
 pcapng is read and not written.
 
+## Writing in a named format
+
+One writer for every output a capture tool offers. `pcap` takes the datagram;
+a record format takes a **record**: plain data (`dict`, `list`, `str`, `int`,
+`float`, `bool`, `None`) that the protocol library made from one of its
+messages. What each record format writes, exactly: `pktcap/_formats/AGENTS.md`.
+
+**`OUTPUT_FORMATS`** — `("pcap", "json", "yaml", "toml", "ini")`, and
+**`RECORD_FORMATS`** — the last four. `yaml` needs the `yaml` extra and `toml`
+the `toml` extra; a format whose extra is missing stays in both tuples.
+
+**`has_output_format(name) -> bool`** — whether that format can be written on
+this installation. `UnsupportedFormatError` for a name that is no format.
+
+**`dumps_record(record, format="json") -> str`** — one record as text, ending
+in a newline. `ImportError` naming the extra when it is missing.
+
+**`datagram_record(datagram) -> Dict[str, Any]`** — the record of a
+`CapturedDatagram` for a caller with no protocol to decode it: `time`,
+`source` and `destination` as `host:port` text (an IPv6 host in brackets),
+`length`, `payload` as hex, and `fragmented` or `truncated` only when true.
+
+**`CaptureWriter(target, format=None, *, per_record=False, append=False, fields=(), max_files=1000)`**
+— writes datagrams, or the records made of them, in one format. A context
+manager.
+
+- `target` is a path or a **binary** stream (`sys.stdout.buffer`, not
+  `sys.stdout`); a stream stays the caller's to close.
+- `format=None` takes the format from the ending of the target's name
+  (`.pcap`, `.cap`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`,
+  `.ini`; letter case ignored, the longest ending wins). A name given wins
+  over the ending. Content is never sniffed. `UnsupportedFormatError`,
+  listing the formats, when neither says.
+- **`CaptureWriter.write(datagram, record=None, *, names=None) -> None`** —
+  `pcap` writes the datagram and ignores `record`. A record format writes
+  `record`, or `datagram_record(datagram)` when it is `None`.
+- **Nothing is opened until the first `write`**, and each record is flushed.
+  Without `append` an existing file is replaced then; `append=True` adds to
+  it (`json` and `yaml` stay valid streams; `pcap` cannot be appended to).
+- `toml` and `ini` hold one record per file, so they need `per_record=True`.
+- **`per_record=True`**: `target` is a file-name pattern in `str.format`
+  syntax, and each record goes to its own file, directories created as
+  needed. The writer fills `{timestamp}` (the datagram's time in UTC,
+  `20231114T221320.500000Z`), `{index}` (an `int` counting from 0, so
+  `{index:06d}` works) and `{format}`. The caller declares its own fields in
+  `fields=("xid", "client_id")` and gives their values in
+  `write(..., names={"xid": ..., "client_id": ...})`.
+- **`CaptureWriter.close() -> None`** — complete on return, harmless twice.
+- `CaptureWriter.format` is the format's name; `.written` counts what was
+  written and `.refused` the records a full budget turned away.
+- The checks made when the writer is built, each a `ValueError` unless
+  noted: a pattern that is malformed or uses anything but bare field names
+  (`{}`, `{0}`, `{xid.real}`); a pattern field that is neither built in nor in
+  `fields`; a `fields` entry that is built in; a stream of `toml` or `ini`;
+  `append` with `pcap`; `per_record` with a stream; a missing extra
+  (`ImportError`); a text stream (`TypeError`).
+- `write` raises `ValueError` for a closed writer or a field with no value,
+  and what `dumps_record` or `PcapWriter.write` raise; nothing is written.
+
+Ceilings, for a pattern field whose value a peer chose (a client identifier):
+
+| What the network states | Ceiling | At the ceiling |
+| --- | --- | --- |
+| distinct files one writer creates | `max_files` (1,000) | the record is not written, `refused`, one `WARNING` on the logger `pktcap._output` |
+| characters one field value adds to a name | 64 | the rest is dropped |
+
+A field value has every run of characters outside `A-Z a-z 0-9 _ . -`
+replaced by `_` and leading and trailing `.` and `_` removed (`unknown` when
+nothing is left), so it cannot hold a path separator or be `..`; a file name
+that Windows would open as a device (`NUL`, `COM1`) gets a leading `_`. A time
+outside any calendar is written as `t<seconds>`.
+
 ## The capture-filter expression
 
 The grammar two protocol libraries share: clauses `key=value` or `key!=value`
@@ -250,6 +330,10 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `PktcapError` | `Exception` | the base; catch it for "anything pktcap reported" |
 | `CaptureFormatError` | `PktcapError`, `ValueError` | input that is not a pcap or pcapng capture, or is a damaged one |
 | `CaptureFilterError` | `PktcapError`, `ValueError` | a capture-filter expression that cannot be parsed or compiled |
+| `UnsupportedFormatError` | `PktcapError`, `ValueError` | an output format that does not exist, or that a file name does not tell |
+
+A format that exists and whose extra is not installed raises the builtin
+`ImportError`, naming the extra.
 
 `CaptureFormatError.offset` is how many octets of the input had been read when
 the problem was found, or `None`; the message ends with it and never quotes the

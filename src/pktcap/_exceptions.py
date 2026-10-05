@@ -15,7 +15,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-__all__ = ["PktcapError", "CaptureFormatError", "CaptureFilterError"]
+__all__ = [
+    "PktcapError",
+    "CaptureFormatError",
+    "CaptureFilterError",
+    "UnsupportedFormatError",
+]
 
 
 class PktcapError(Exception):
@@ -46,4 +51,13 @@ class CaptureFilterError(PktcapError, ValueError):
     Raised when the filter is parsed or compiled, never while it is applied:
     a clause that is not ``key=value``, an ``or``, or a key or value that the
     protocol library's own builder refused (its ``ValueError`` is chained).
+    """
+
+
+class UnsupportedFormatError(PktcapError, ValueError):
+    """No output format of that name, or none can be told from a file name.
+
+    The message lists the formats there are. A format that exists and whose
+    extra is not installed is not this error: it raises ``ImportError`` naming
+    the extra.
     """

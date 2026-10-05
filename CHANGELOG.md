@@ -36,5 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   tuples and one predicate. The caller's `build` gives each key its meaning
   and is called once per clause when the filter is compiled; its `ValueError`
   becomes a `CaptureFilterError` naming the clause. `or` is refused by name.
+- `CaptureWriter(target, format=None, *, per_record=False, append=False,
+  fields=(), max_files=1000)` writes datagrams as `pcap`, or the records a
+  protocol library makes of them as `json` (one line each), `yaml` (one
+  document each), `toml` or `ini` (one file each), into one growing file or
+  one file per record under a name pattern. `dumps_record(record, format)`
+  writes one record as text; `datagram_record(datagram)` is the record of a
+  datagram with no protocol to decode it; `OUTPUT_FORMATS`, `RECORD_FORMATS`
+  and `has_output_format(name)` say what can be written. `yaml` and `toml`
+  need the extras of those names and raise `ImportError` naming the extra
+  without them. Every record format writes printable ASCII. A per-record
+  writer creates at most `max_files` files and makes each field value safe
+  for a file name.
 
 [Unreleased]: https://github.com/jose-pr/pktcap/commits/main
