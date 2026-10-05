@@ -10,7 +10,11 @@ from importlib.metadata import version
 import pktcap
 
 EXPECTED = [
+    "CaptureFormatError",
+    "CaptureSource",
+    "CapturedFrame",
     "PktcapError",
+    "read_frames",
 ]
 
 #: Positional parameters a callable may take: the thing it acts on, and one
@@ -18,7 +22,7 @@ EXPECTED = [
 POSITIONAL = {}
 
 #: Named tuples are positional by nature.
-NAMED_TUPLES = ()
+NAMED_TUPLES = ("CapturedFrame",)
 
 
 def test_all_is_exactly_the_expected_names():

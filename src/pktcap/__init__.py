@@ -12,10 +12,16 @@ from __future__ import annotations
 
 from importlib.metadata import version as _version
 
-from ._exceptions import PktcapError
+from ._captured import CapturedFrame
+from ._container import CaptureSource, read_frames
+from ._exceptions import CaptureFormatError, PktcapError
 
 __all__ = [
+    "CaptureFormatError",
+    "CaptureSource",
+    "CapturedFrame",
     "PktcapError",
+    "read_frames",
 ]
 
 __version__ = _version("pktcap")

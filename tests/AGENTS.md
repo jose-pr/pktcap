@@ -24,6 +24,8 @@ prints the reason for every skip: a skip is not a pass.
 | `test_shipped_header.py` | the shipped `AGENTS.md`: every export is in it, every printed signature is the live one |
 | `test_import_structure.py` | no module takes a name from the root, none is over 400 lines, nothing imports a private netimps module |
 | `test_comments.py` | the source and the shipped header describe the code as it is |
+| `captures.py` | not a test: builders for headers, frames, pcap records and pcapng blocks, each able to state a wrong length; `Pipe`, a stream that cannot seek and records the largest read asked of it |
+| `test_container.py` | `read_frames`: both containers, byte orders and resolutions; every way a capture is damaged; what a hostile one can cost; two seeded fuzzes |
 
 ## Rules
 

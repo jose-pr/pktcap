@@ -13,8 +13,28 @@ Re-exported from :mod:`pktcap`.
 
 from __future__ import annotations
 
-__all__ = ["PktcapError"]
+from typing import Optional
+
+__all__ = ["PktcapError", "CaptureFormatError"]
 
 
 class PktcapError(Exception):
     """The base of every exception pktcap raises on its own account."""
+
+
+class CaptureFormatError(PktcapError, ValueError):
+    """The input is not a pcap or pcapng capture, or it is a damaged one.
+
+    The one type every malformed container raises: a wrong magic number, a
+    record or block cut short, a length over its ceiling, a block that
+    contradicts itself. The message never quotes the file.
+
+    :ivar offset: how many octets of the input had been read when the problem
+        was found, or ``None`` when that is not known.
+    """
+
+    def __init__(self, message: str, *, offset: Optional[int] = None) -> None:
+        if offset is not None:
+            message = "%s (at octet %d)" % (message, offset)
+        super().__init__(message)
+        self.offset = offset

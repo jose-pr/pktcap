@@ -149,16 +149,15 @@ def _probe(path):
 def test_every_printed_signature_is_the_live_one():
     checked, bad = _probe(_HEADER)
     assert bad == [], "signature drift:\n" + "\n".join(bad)
-    callables = [n for n in pktcap.__all__ if callable(getattr(pktcap, n))]
+    exports = [getattr(pktcap, name) for name in pktcap.__all__]
     plain = [
-        n
-        for n in callables
-        if not (
-            isinstance(getattr(pktcap, n), type)
-            and issubclass(getattr(pktcap, n), BaseException)
-        )
+        obj
+        for obj in exports
+        if inspect.isfunction(obj)
+        or (inspect.isclass(obj) and not issubclass(obj, BaseException))
     ]
-    # A probe that matched nothing would pass whatever the header says.
+    # Every function and class has its signature printed, so a probe that
+    # matched nothing cannot pass.
     assert checked >= len(plain), (checked, len(plain))
 
 
