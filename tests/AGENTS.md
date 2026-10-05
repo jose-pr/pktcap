@@ -51,8 +51,8 @@ capture in `conformance/cases/`, and replays it with no tool installed.
 | `conformance/cases/<kind>-<origin>-<topic>/` | one case: the input (`case.pcap`, `case.pcapng`, or `case.json` for what a writer is asked to write) and `golden.json`, tshark's answer: per frame, the fields of each layer this library dissects; per UDP datagram, its addresses and payload. `read-` cases are read alike, layer by layer; `refuse-` cases are refused alike; `write-` cases are read by tshark as the frames or datagrams asked for |
 | `conformance/test_conformance.py` | the replay; also asserts the README's "Differences from tshark" table is exactly `deviations.json` |
 | `conformance/deviations.json` | hand-written: the cases where pktcap differs on purpose, with the sentence the README prints and what pktcap does |
-| `conformance/build_cases.py` | development only: writes the hand-built cases octet by octet |
-| `conformance/capture_cases.py` | development only, Linux, root: records the cases tcpdump writes and has editcap rewrite three as pcapng |
+| `conformance/build_cases.py` | development only: writes the hand-built cases octet by octet, and the `case.json` of three `write-` cases |
+| `conformance/capture_cases.py` | development only, Linux, root: records the cases tcpdump writes (UDP datagrams, fragments, two TCP connections), has editcap rewrite four as pcapng, and takes one with this library's own `LiveCapture`; naming cases records only those |
 | `conformance/record.py` | development only, needs tshark: writes each `golden.json`; `--check` re-records in memory and reports drift |
 
 A golden is never edited: change the case, or the code, and record again. A

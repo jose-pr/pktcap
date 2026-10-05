@@ -1,0 +1,92 @@
+{
+ "datagrams": [
+  {
+   "destination": [
+    "192.0.2.1",
+    69
+   ],
+   "frame": 1,
+   "ip_checksum": "2",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "192.0.2.5",
+    50000
+   ],
+   "time": "1700000000.000000000",
+   "udp_checksum": "3",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "2001:db8::1",
+    69
+   ],
+   "frame": 3,
+   "ip_checksum": "",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "2001:db8::5",
+    50000
+   ],
+   "time": "1700000000.000002000",
+   "udp_checksum": "4",
+   "udp_length": 25
+  }
+ ],
+ "error": null,
+ "exit_status": 0,
+ "frames": 3,
+ "layers": [
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x0800",
+   "frame.cap_len": "59",
+   "frame.interface_id": "0",
+   "frame.number": "1",
+   "frame.protocols": "eth:ethertype:ip:udp:tftp",
+   "frame.time_epoch": "1700000000.000000000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "45",
+   "ip.proto": "17",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  },
+  {
+   "frame.cap_len": "15",
+   "frame.interface_id": "1",
+   "frame.number": "2",
+   "frame.protocols": "user_dlt:data",
+   "frame.time_epoch": "1700000000.000001000"
+  },
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x86dd",
+   "frame.cap_len": "79",
+   "frame.interface_id": "0",
+   "frame.number": "3",
+   "frame.protocols": "eth:ethertype:ipv6:udp:tftp",
+   "frame.time_epoch": "1700000000.000002000",
+   "ipv6.dst": "2001:db8::1",
+   "ipv6.hlim": "64",
+   "ipv6.nxt": "17",
+   "ipv6.plen": "25",
+   "ipv6.src": "2001:db8::5",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  }
+ ],
+ "reference": {
+  "environment": "Linux aarch64",
+  "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
+ }
+}

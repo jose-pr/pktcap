@@ -1,0 +1,253 @@
+{
+ "datagrams": [
+  {
+   "destination": [
+    "192.0.2.1",
+    69
+   ],
+   "frame": 1,
+   "ip_checksum": "1",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "192.0.2.5",
+    50000
+   ],
+   "time": "1700000000.000000000",
+   "udp_checksum": "3",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "2001:db8::1",
+    69
+   ],
+   "frame": 2,
+   "ip_checksum": "",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "2001:db8::5",
+    50000
+   ],
+   "time": "1700000000.250000000",
+   "udp_checksum": "4",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "192.0.2.1",
+    69
+   ],
+   "frame": 3,
+   "ip_checksum": "1",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "192.0.2.5",
+    50000
+   ],
+   "time": "1700000000.500000000",
+   "udp_checksum": "3",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "2001:db8::1",
+    69
+   ],
+   "frame": 4,
+   "ip_checksum": "",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "2001:db8::5",
+    50000
+   ],
+   "time": "1700000000.750000000",
+   "udp_checksum": "4",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "192.0.2.1",
+    69
+   ],
+   "frame": 5,
+   "ip_checksum": "1",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "192.0.2.5",
+    50000
+   ],
+   "time": "1700000001.000000000",
+   "udp_checksum": "3",
+   "udp_length": 25
+  }
+ ],
+ "error": null,
+ "exit_status": 0,
+ "frames": 8,
+ "layers": [
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x0800",
+   "frame.cap_len": "59",
+   "frame.interface_id": "0",
+   "frame.number": "1",
+   "frame.protocols": "eth:ethertype:ip:udp:tftp",
+   "frame.time_epoch": "1700000000.000000000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "45",
+   "ip.proto": "17",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  },
+  {
+   "frame.cap_len": "65",
+   "frame.interface_id": "1",
+   "frame.number": "2",
+   "frame.protocols": "raw:ipv6:udp:tftp",
+   "frame.time_epoch": "1700000000.250000000",
+   "ipv6.dst": "2001:db8::1",
+   "ipv6.hlim": "64",
+   "ipv6.nxt": "17",
+   "ipv6.plen": "25",
+   "ipv6.src": "2001:db8::5",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  },
+  {
+   "frame.cap_len": "61",
+   "frame.interface_id": "2",
+   "frame.number": "3",
+   "frame.protocols": "sll:ethertype:ip:udp:tftp",
+   "frame.time_epoch": "1700000000.500000000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "45",
+   "ip.proto": "17",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "sll.etype": "0x0800",
+   "sll.hatype": "772",
+   "sll.pkttype": "0",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  },
+  {
+   "frame.cap_len": "85",
+   "frame.interface_id": "3",
+   "frame.number": "4",
+   "frame.protocols": "sll:ethertype:ipv6:udp:tftp",
+   "frame.time_epoch": "1700000000.750000000",
+   "ipv6.dst": "2001:db8::1",
+   "ipv6.hlim": "64",
+   "ipv6.nxt": "17",
+   "ipv6.plen": "25",
+   "ipv6.src": "2001:db8::5",
+   "sll.etype": "0x86dd",
+   "sll.hatype": "772",
+   "sll.ifindex": "1",
+   "sll.pkttype": "0",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  },
+  {
+   "frame.cap_len": "49",
+   "frame.interface_id": "4",
+   "frame.number": "5",
+   "frame.protocols": "null:ip:udp:tftp",
+   "frame.time_epoch": "1700000001.000000000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "45",
+   "ip.proto": "17",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "null.family": "2",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  },
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x88a8",
+   "frame.cap_len": "98",
+   "frame.interface_id": "0",
+   "frame.number": "6",
+   "frame.protocols": "eth:ethertype:ieee8021ad:ethertype:vlan:ethertype:ipv6:tcp:data",
+   "frame.time_epoch": "1700000001.500000000",
+   "ieee8021ad.dei": "0",
+   "ieee8021ad.id": "100",
+   "ieee8021ad.priority": "0",
+   "ipv6.dst": "2001:db8::1",
+   "ipv6.hlim": "64",
+   "ipv6.nxt": "6",
+   "ipv6.plen": "36",
+   "ipv6.src": "2001:db8::5",
+   "tcp.ack_raw": "2000",
+   "tcp.dstport": "47001",
+   "tcp.flags": "0x0018",
+   "tcp.hdr_len": "20",
+   "tcp.payload": "7369787465656e206f63746574732e2e",
+   "tcp.seq_raw": "101",
+   "tcp.srcport": "50000",
+   "tcp.window_size_value": "4096",
+   "vlan.dei": "False",
+   "vlan.etype": "0x86dd",
+   "vlan.id": "200",
+   "vlan.priority": "0"
+  },
+  {
+   "frame.cap_len": "15",
+   "frame.interface_id": "5",
+   "frame.number": "7",
+   "frame.protocols": "user_dlt:data",
+   "frame.time_epoch": "1700000001.750000000"
+  },
+  {
+   "frame.cap_len": "56",
+   "frame.interface_id": "1",
+   "frame.number": "8",
+   "frame.protocols": "raw:ip:tcp:data",
+   "frame.time_epoch": "1700000001.999999000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "56",
+   "ip.proto": "6",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "tcp.ack_raw": "2000",
+   "tcp.dstport": "47001",
+   "tcp.flags": "0x0018",
+   "tcp.hdr_len": "20",
+   "tcp.payload": "7369787465656e206f63746574732e2e",
+   "tcp.seq_raw": "101",
+   "tcp.srcport": "50000",
+   "tcp.window_size_value": "4096"
+  }
+ ],
+ "reference": {
+  "environment": "Linux aarch64",
+  "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
+ },
+ "sha256": "d1ab543824c7ac51a1ffddc054be91fae54d4f0b8cdabc5c259568e5f3ff50d7"
+}

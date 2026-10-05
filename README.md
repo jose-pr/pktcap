@@ -180,15 +180,16 @@ dissector contract and each built-in dissector are in the header beside them,
 ## Differences from tshark
 
 The reference for what a capture holds is **tshark 4.6.8** (Wireshark's
-command-line reader). `tests/conformance/` records what it says about 33
+command-line reader). `tests/conformance/` records what it says about 41
 captures, written by tcpdump 4.99.6, by Wireshark's editcap, by this library's
-writer and by hand, and the suite replays those answers with no tool
-installed. Fidelity is to results: how many frames a capture holds; for each
-frame, which layers it has and the fields of each (addresses, VLAN tags,
-protocol numbers, ports, TCP sequence numbers, flags, options and segment
-payload); which UDP datagrams it carries; which captures are refused and after
-how many frames; and that tshark reads what `PcapWriter` writes with every checksum good. Message
-texts and exit statuses are not reproduced.
+writers and its live capture, and by hand, and the suite replays those answers
+with no tool installed. Fidelity is to results: how many frames a capture
+holds; for each frame, which layers it has and the fields of each (addresses,
+VLAN tags, protocol numbers, ports, TCP sequence numbers, flags, options and
+segment payload); which UDP datagrams it carries; which captures are refused
+and after how many frames; and that tshark reads what `PcapWriter` and
+`PcapngWriter` write, as the frames they were given and with every checksum
+good. Message texts and exit statuses are not reproduced.
 
 pktcap differs on purpose in these cases, each a bound on untrusted input:
 

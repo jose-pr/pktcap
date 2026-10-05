@@ -303,7 +303,7 @@ def _assert_frames_are_the_recorded_ones(frames, rows):
 def test_there_are_cases_of_every_kind_and_each_has_a_golden():
     kinds = {case.name.split("-")[0] for case in CASES}
     assert kinds == {"read", "refuse", "write"}
-    assert len(CASES) >= 33
+    assert len(CASES) >= 41
     for case in CASES:
         assert (case / "golden.json").is_file(), case.name
 
@@ -321,6 +321,24 @@ def test_every_golden_names_the_one_reference_that_produced_it():
 def test_a_deviation_names_a_case_that_exists():
     assert set(DEVIATIONS) <= {case.name for case in CASES}
     assert all(entry["difference"].strip() for entry in DEVIATIONS.values())
+
+
+def test_the_cases_cover_tcp_each_vlan_tag_and_every_built_in_link_type():
+    seen = set()
+    linktypes = set()
+    for case in CASES:
+        for row in _golden(case)["layers"] or ():
+            seen.update(row["frame.protocols"].split(":"))
+        if case.name.startswith("read-"):
+            try:
+                linktypes.update(f.linktype for f in read_frames(_capture(case)))
+            except CaptureFormatError:
+                pass
+    assert {"eth", "vlan", "ieee8021ad", "sll", "null", "raw"} <= seen
+    assert any(case.name.startswith("read-livecapture-") for case in CASES)
+    assert {"ip", "ipv6", "ipv6.hopopts", "ipv6.dstopts", "ipv6.fraghdr"} <= seen
+    assert {"tcp", "udp", "arp", "icmpv6", "user_dlt"} <= seen
+    assert {0, 1, 101, 108, 113, 276} <= linktypes
 
 
 # -- reading --------------------------------------------------------------
@@ -363,6 +381,16 @@ def test_one_case_is_cut_by_a_snap_length_and_both_say_so():
     (datagram,) = read_datagrams(_capture(case))
     (recorded,) = _golden(case)["datagrams"]
     assert datagram.truncated and recorded["udp_length"] - 8 > len(datagram.payload)
+
+
+def test_a_frame_of_a_link_type_without_a_dissector_is_read_and_kept_whole():
+    case = HERE / "cases" / "read-built-linktype-without-dissector"
+    dissector = FrameDissector()
+    frames = list(read_dissected(_capture(case), dissector=dissector))
+    assert [f.frame.linktype for f in frames] == [1, 147, 1]
+    assert frames[1].layers == () and frames[1].payload == b"private framing"
+    assert dissector.stats.unsupported == 1
+    assert _golden(case)["layers"][1]["frame.protocols"].startswith("user_dlt")
 
 
 @pytest.mark.parametrize("case", _named("read-", deviating=True))
