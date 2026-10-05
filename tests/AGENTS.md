@@ -25,6 +25,7 @@ prints the reason for every skip: a skip is not a pass.
 | `test_import_structure.py` | no module takes a name from the root, none is over 400 lines, nothing imports a private netimps module |
 | `test_comments.py` | the source and the shipped header describe the code as it is |
 | `test_readme.py` | the README's sections, badges and links, and every Python block of "Quick start" executed in an empty directory |
+| `test_examples.py` | each script under `examples/` run as its own process, with no argument and with a capture and a filter |
 | `test_values.py` | the named tuples as values (immutable, hashable, copy, pickle, repr) and the exception hierarchy |
 | `typing/api.py` | the static-typing contract of a caller; never executed, checked by `mypy tests/typing/api.py` |
 | `captures.py` | not a test: builders for headers, frames, pcap records and pcapng blocks, each able to state a wrong length; `Pipe`, a stream that cannot seek and records the largest read asked of it |
