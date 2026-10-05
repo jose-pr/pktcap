@@ -1,0 +1,27 @@
+{
+ "datagrams": [
+  {
+   "destination": [
+    "192.0.2.5",
+    50000
+   ],
+   "frame": 1,
+   "ip_checksum": "2",
+   "payload": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435",
+   "source": [
+    "192.0.2.1",
+    69
+   ],
+   "time": "1700000000.000000000",
+   "udp_checksum": "3",
+   "udp_length": 1032
+  }
+ ],
+ "error": null,
+ "exit_status": 0,
+ "frames": 1,
+ "reference": {
+  "environment": "Linux aarch64",
+  "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
+ }
+}

@@ -1,0 +1,75 @@
+{
+ "datagrams": [
+  {
+   "destination": [
+    "192.0.2.1",
+    69
+   ],
+   "frame": 1,
+   "ip_checksum": "2",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "192.0.2.5",
+    50000
+   ],
+   "time": "1700000000.000000000",
+   "udp_checksum": "3",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "2001:db8::1",
+    69
+   ],
+   "frame": 2,
+   "ip_checksum": "",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "2001:db8::5",
+    50000
+   ],
+   "time": "1700000000.000001000",
+   "udp_checksum": "4",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "192.0.2.1",
+    69
+   ],
+   "frame": 3,
+   "ip_checksum": "2",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "192.0.2.5",
+    50000
+   ],
+   "time": "1700000000.000002000",
+   "udp_checksum": "3",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "2001:db8::1",
+    69
+   ],
+   "frame": 4,
+   "ip_checksum": "",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "2001:db8::5",
+    50000
+   ],
+   "time": "1700000000.000003000",
+   "udp_checksum": "4",
+   "udp_length": 25
+  }
+ ],
+ "error": null,
+ "exit_status": 0,
+ "frames": 4,
+ "reference": {
+  "environment": "Linux aarch64",
+  "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
+ }
+}

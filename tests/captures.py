@@ -20,7 +20,11 @@ def udp(sport, dport, payload, *, length=None):
 def ipv4(
     src, dst, body, *, ident=1, offset=0, more=False, protocol=17, total=None, ihl=5
 ):
-    """An IPv4 packet. ``offset`` is in octets and must be a multiple of 8."""
+    """An IPv4 packet. ``offset`` is in octets and must be a multiple of 8.
+
+    The header checksum is valid: a reference tool that checks it does not
+    reassemble a fragment whose checksum is wrong.
+    """
     flags = (0x2000 if more else 0) | (offset // 8)
     stated = ihl * 4 + len(body) if total is None else total
     header = struct.pack(
@@ -35,8 +39,11 @@ def ipv4(
         0,
         ipaddress.IPv4Address(src).packed,
         ipaddress.IPv4Address(dst).packed,
-    )
-    return header + b"\0" * (ihl * 4 - 20) + body
+    ) + b"\0" * (ihl * 4 - 20)
+    total_sum = sum(struct.unpack("!%dH" % (len(header) // 2), header))
+    while total_sum >> 16:
+        total_sum = (total_sum & 0xFFFF) + (total_sum >> 16)
+    return header[:10] + struct.pack("!H", ~total_sum & 0xFFFF) + header[12:] + body
 
 
 def ipv6(src, dst, body, *, next_header=17, length=None):

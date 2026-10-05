@@ -1,0 +1,10 @@
+{
+ "datagrams": [],
+ "error": null,
+ "exit_status": 0,
+ "frames": 0,
+ "reference": {
+  "environment": "Linux aarch64",
+  "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
+ }
+}

@@ -35,6 +35,25 @@ prints the reason for every skip: a skip is not a pass.
 | `test_live.py` | `LiveCapture` and `sniff` with the privileged socket replaced: the lifecycle, what a read is worth, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
 | `test_reassembly.py` | IP reassembly through `FrameDecoder`: any order, both families, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
+## Conformance
+
+`conformance/` holds what the reference, **tshark 4.6.8**, said about each
+capture in `conformance/cases/`, and replays it with no tool installed.
+
+| File | What it is |
+| --- | --- |
+| `conformance/cases/<kind>-<origin>-<topic>/` | one case: the input (`case.pcap`, `case.pcapng`, or `case.json` for what `PcapWriter` is asked to write) and `golden.json`, tshark's answer. `read-` cases decode alike, `refuse-` cases are refused alike, `write-` cases are read by tshark with every checksum good |
+| `conformance/test_conformance.py` | the replay; also asserts the README's "Differences from tshark" table is exactly `deviations.json` |
+| `conformance/deviations.json` | hand-written: the cases where pktcap differs on purpose, with the sentence the README prints and what pktcap does |
+| `conformance/build_cases.py` | development only: writes the hand-built cases octet by octet |
+| `conformance/capture_cases.py` | development only, Linux, root: records the cases tcpdump writes and has editcap rewrite three as pcapng |
+| `conformance/record.py` | development only, needs tshark: writes each `golden.json`; `--check` re-records in memory and reports drift |
+
+A golden is never edited: change the case, or the code, and record again. A
+case file is recorded evidence and is not normalised (`.gitattributes`). A
+capture written by dumpcap carries the capturing host's kernel release, so
+pcapng cases are written by editcap, which adds only its own name.
+
 ## Rules
 
 - **A test asserts through `pktcap`'s public names.** No test imports a private

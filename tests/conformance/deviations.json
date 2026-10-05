@@ -1,0 +1,27 @@
+[
+ {
+  "case": "read-built-ipv4-fragments-overlap",
+  "difference": "A fragment that overlaps another: tshark reassembles the datagram and flags the overlap; pktcap discards the datagram and counts it in `dropped`.",
+  "pktcap": {"datagrams": 0, "dropped": 1, "pending": 1}
+ },
+ {
+  "case": "read-built-fragments-a-minute-apart",
+  "difference": "Fragments more than `reassembly_timeout` (30 s) apart in capture time: tshark reassembles them however far apart; pktcap discards the unfinished datagram, since IP identifiers are reused.",
+  "pktcap": {"datagrams": 0, "dropped": 2, "pending": 1}
+ },
+ {
+  "case": "read-built-fragments-without-end",
+  "difference": "One datagram in more than 1,024 fragments: tshark reassembles it; pktcap gives it up at the 1,025th.",
+  "pktcap": {"datagrams": 0, "dropped": 1, "pending": 0}
+ },
+ {
+  "case": "read-built-reassemblies-in-flight",
+  "difference": "More than `max_reassemblies` (256) datagrams being reassembled at once: tshark holds them all and completes the first when its last fragment arrives; pktcap discarded the oldest when the 257th started, and the rest stay counted in `pending`.",
+  "pktcap": {"datagrams": 0, "dropped": 2, "pending": 256}
+ },
+ {
+  "case": "read-built-pcapng-interfaces-without-end",
+  "difference": "More than 4,096 interfaces described in one pcapng section: tshark reads the capture; pktcap raises `CaptureFormatError`.",
+  "pktcap": {"raises": true, "frames": 0}
+ }
+]

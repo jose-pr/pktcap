@@ -46,6 +46,41 @@ Everything is imported from `pktcap`; the modules below it are private.
 | --- | --- |
 | `pktcap` | every public name |
 
+## Differences from tshark
+
+The reference for what a capture holds is **tshark 4.6.8** (Wireshark's
+command-line reader). `tests/conformance/` records what it says about 39
+captures, written by tcpdump 4.99.6, by Wireshark's editcap and by hand, and
+the suite replays those answers with no tool installed. Fidelity is to
+results: which datagrams a capture holds (time, addresses, ports, payload),
+which captures are refused and after how many frames, and that tshark reads
+what `PcapWriter` writes with every checksum good. Message texts and exit
+statuses are not reproduced.
+
+pktcap differs on purpose in these cases, each a bound on untrusted input:
+
+| Case | Difference |
+| --- | --- |
+| `read-built-ipv4-fragments-overlap` | A fragment that overlaps another: tshark reassembles the datagram and flags the overlap; pktcap discards the datagram and counts it in `dropped`. |
+| `read-built-fragments-a-minute-apart` | Fragments more than `reassembly_timeout` (30 s) apart in capture time: tshark reassembles them however far apart; pktcap discards the unfinished datagram, since IP identifiers are reused. |
+| `read-built-fragments-without-end` | One datagram in more than 1,024 fragments: tshark reassembles it; pktcap gives it up at the 1,025th. |
+| `read-built-reassemblies-in-flight` | More than `max_reassemblies` (256) datagrams being reassembled at once: tshark holds them all and completes the first when its last fragment arrives; pktcap discarded the oldest when the 257th started, and the rest stay counted in `pending`. |
+| `read-built-pcapng-interfaces-without-end` | More than 4,096 interfaces described in one pcapng section: tshark reads the capture; pktcap raises `CaptureFormatError`. |
+
+Two more ceilings are lower than tshark's and have no case, because a capture
+that reaches them is large: a pcapng packet block over 327,680 octets (tshark:
+134,348,832) and a pcapng section header or interface description over 1 MiB
+are refused.
+
+| tshark reads | pktcap |
+| --- | --- |
+| pcap and pcapng, either byte order, microseconds and nanoseconds | yes |
+| Ethernet with VLAN tags, Linux cooked v1 and v2, BSD loopback, raw IP | yes |
+| IPv4 options, IPv6 extension headers, IP fragments | yes |
+| UDP | yes |
+| every other link type, TCP, and every protocol above UDP | no: counted, never decoded |
+| other capture file formats | no |
+
 ## Development
 
 ```bash

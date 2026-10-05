@@ -1,0 +1,140 @@
+{
+ "datagrams": [
+  {
+   "destination": [
+    "192.0.2.1",
+    69
+   ],
+   "frame": 1,
+   "ip_checksum": "1",
+   "payload": "0001626f6f742e656669006f6374657400",
+   "source": [
+    "192.0.2.5",
+    50000
+   ],
+   "time": "1700000000.000000000",
+   "udp_checksum": "1",
+   "udp_length": 25
+  },
+  {
+   "destination": [
+    "192.0.2.5",
+    50000
+   ],
+   "frame": 2,
+   "ip_checksum": "1",
+   "payload": "",
+   "source": [
+    "192.0.2.1",
+    40000
+   ],
+   "time": "1700000000.250000000",
+   "udp_checksum": "1",
+   "udp_length": 8
+  },
+  {
+   "destination": [
+    "192.0.2.5",
+    50000
+   ],
+   "frame": 3,
+   "ip_checksum": "1",
+   "payload": "ff",
+   "source": [
+    "192.0.2.1",
+    40000
+   ],
+   "time": "1700000000.500000000",
+   "udp_checksum": "1",
+   "udp_length": 9
+  },
+  {
+   "destination": [
+    "ff02::1:2",
+    547
+   ],
+   "frame": 4,
+   "ip_checksum": "",
+   "payload": "010203",
+   "source": [
+    "2001:db8::5",
+    546
+   ],
+   "time": "1700000000.750000000",
+   "udp_checksum": "1",
+   "udp_length": 11
+  },
+  {
+   "destination": [
+    "2001:db8::1",
+    547
+   ],
+   "frame": 5,
+   "ip_checksum": "",
+   "payload": "",
+   "source": [
+    "2001:db8::5",
+    546
+   ],
+   "time": "1700000001.000000000",
+   "udp_checksum": "1",
+   "udp_length": 8
+  },
+  {
+   "destination": [
+    "192.0.2.1",
+    67
+   ],
+   "frame": 6,
+   "ip_checksum": "1",
+   "payload": "00ff00ff00",
+   "source": [
+    "192.0.2.5",
+    68
+   ],
+   "time": "1700000001.999999000",
+   "udp_checksum": "1",
+   "udp_length": 13
+  },
+  {
+   "destination": [
+    "2001:db8::1",
+    67
+   ],
+   "frame": 7,
+   "ip_checksum": "",
+   "payload": "abcdef",
+   "source": [
+    "::ffff:192.0.2.5",
+    68
+   ],
+   "time": "1700000002.000000000",
+   "udp_checksum": "1",
+   "udp_length": 11
+  },
+  {
+   "destination": [
+    "ff02::1:2",
+    547
+   ],
+   "frame": 8,
+   "ip_checksum": "",
+   "payload": "aa",
+   "source": [
+    "fe80::1",
+    546
+   ],
+   "time": "1700000003.000000000",
+   "udp_checksum": "1",
+   "udp_length": 9
+  }
+ ],
+ "error": null,
+ "exit_status": 0,
+ "frames": 8,
+ "pcap_sha256": "316eda130069ac4e4b579464d24734de24abf4190e408b2969feeccf55e74625",
+ "reference": {
+  "environment": "Linux aarch64",
+  "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
+ }
+}
