@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-__all__ = ["PktcapError", "CaptureFormatError"]
+__all__ = ["PktcapError", "CaptureFormatError", "CaptureFilterError"]
 
 
 class PktcapError(Exception):
@@ -38,3 +38,12 @@ class CaptureFormatError(PktcapError, ValueError):
             message = "%s (at octet %d)" % (message, offset)
         super().__init__(message)
         self.offset = offset
+
+
+class CaptureFilterError(PktcapError, ValueError):
+    """A capture-filter expression that cannot be compiled.
+
+    Raised when the filter is parsed or compiled, never while it is applied:
+    a clause that is not ``key=value``, an ``or``, or a key or value that the
+    protocol library's own builder refused (its ``ValueError`` is chained).
+    """

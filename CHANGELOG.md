@@ -31,5 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   file and replaces none. A payload over 65,507 octets (IPv4) or 65,527
   (IPv6), a port outside 0-65535 and a time outside 0 to 2**32 raise
   `ValueError` and write nothing.
+- `parse_capture_filter(text)` and `compile_capture_filter(text, build)` read
+  the `key=value and key!=value` filter expression into `FilterClause` named
+  tuples and one predicate. The caller's `build` gives each key its meaning
+  and is called once per clause when the filter is compiled; its `ValueError`
+  becomes a `CaptureFilterError` naming the clause. `or` is refused by name.
 
 [Unreleased]: https://github.com/jose-pr/pktcap/commits/main

@@ -10,15 +10,19 @@ from importlib.metadata import version
 import pktcap
 
 EXPECTED = [
+    "CaptureFilterError",
     "CaptureFormatError",
     "CaptureSource",
     "CapturedDatagram",
     "CapturedFrame",
     "DecodeStats",
+    "FilterClause",
     "FrameDecoder",
     "LINKTYPES",
     "PcapWriter",
     "PktcapError",
+    "compile_capture_filter",
+    "parse_capture_filter",
     "read_datagrams",
     "read_frames",
 ]
@@ -28,10 +32,12 @@ EXPECTED = [
 POSITIONAL = {
     # A datagram is four things, and there is nothing to name among them.
     "PcapWriter.write": 4,
+    # The expression and what turns a clause into a test: both are operands.
+    "compile_capture_filter": 2,
 }
 
 #: Named tuples are positional by nature.
-NAMED_TUPLES = ("CapturedDatagram", "CapturedFrame", "DecodeStats")
+NAMED_TUPLES = ("CapturedDatagram", "CapturedFrame", "DecodeStats", "FilterClause")
 
 
 def test_all_is_exactly_the_expected_names():

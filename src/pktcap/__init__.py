@@ -14,20 +14,25 @@ from importlib.metadata import version as _version
 
 from ._captured import CapturedDatagram, CapturedFrame
 from ._container import CaptureSource, read_frames
-from ._exceptions import CaptureFormatError, PktcapError
+from ._exceptions import CaptureFilterError, CaptureFormatError, PktcapError
+from ._filter import FilterClause, compile_capture_filter, parse_capture_filter
 from ._frames import LINKTYPES, DecodeStats, FrameDecoder, read_datagrams
 from ._writer import PcapWriter
 
 __all__ = [
+    "CaptureFilterError",
     "CaptureFormatError",
     "CaptureSource",
     "CapturedDatagram",
     "CapturedFrame",
     "DecodeStats",
+    "FilterClause",
     "FrameDecoder",
     "LINKTYPES",
     "PcapWriter",
     "PktcapError",
+    "compile_capture_filter",
+    "parse_capture_filter",
     "read_datagrams",
     "read_frames",
 ]

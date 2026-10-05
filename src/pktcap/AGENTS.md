@@ -187,6 +187,57 @@ IPv4 or IPv6 and UDP headers with valid checksums. A context manager.
 
 pcapng is read and not written.
 
+## The capture-filter expression
+
+The grammar two protocol libraries share: clauses `key=value` or `key!=value`
+joined by `and`. **What a key means, how a value converts and how a clause
+matches are the caller's**; this library owns the split into clauses, the
+negation and the conjunction.
+
+```text
+op=RRQ,WRQ and host=10.0.0.0/8
+msg_type=DHCPDISCOVER and option.53!=DHCPOFFER
+```
+
+**`parse_capture_filter(text) -> Tuple[FilterClause, ...]`** — the clauses, in
+order. `None`, empty or blank text is no clause.
+
+**`compile_capture_filter(text, build) -> Callable[[T], bool]`** — one
+predicate over the caller's own item type. `build(clause)` is called once per
+clause, when the filter is compiled and never per item, and returns the test
+for that clause's key and value; a `!=` clause is inverted for it; the
+predicate is true when every clause holds. `None` or blank text matches
+everything.
+
+- `build` raises `ValueError` for a key it does not know or a value that does
+  not convert. It is re-raised as `CaptureFilterError` naming the clause, the
+  original chained: one error at start-up, not one per packet.
+- A test may return anything truthy. Any other exception from `build`
+  propagates, and a `build` that returns something not callable is a
+  `TypeError`.
+
+**`FilterClause(key, value, negated=False)`** — a named tuple. `key` is as
+written (case kept), `value` the text after the operator with surrounding
+space removed, `negated` whether the operator was `!=`.
+
+- `FilterClause.values` — `value` split on commas, each item stripped and
+  empty ones dropped, for a key that reads a comma as "any of". `value`
+  itself is never split.
+- `str(clause)` is the canonical text, `key=value` or `key!=value`, and
+  parsing the clauses' texts joined by ` and ` gives the same clauses back.
+
+The dialect:
+
+- `and` joins clauses in any letter case and needs space on both sides.
+  **There is no `or`**: the word alone, in any case, is refused by name, so a
+  value cannot contain ` or ` or ` and `.
+- A key is one or more of `A-Z a-z 0-9 _ . -`. The first `=` ends it; a `!`
+  just before that `=` negates. Everything after is the value and must not be
+  blank, so a value may itself contain `=`.
+- An expression is at most 4,096 characters.
+- Each of these raises `CaptureFilterError`; text that is not `str` or `None`
+  is a `TypeError`.
+
 ## Exceptions
 
 Every exception pktcap raises on its own account descends from
@@ -198,6 +249,7 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | --- | --- | --- |
 | `PktcapError` | `Exception` | the base; catch it for "anything pktcap reported" |
 | `CaptureFormatError` | `PktcapError`, `ValueError` | input that is not a pcap or pcapng capture, or is a damaged one |
+| `CaptureFilterError` | `PktcapError`, `ValueError` | a capture-filter expression that cannot be parsed or compiled |
 
 `CaptureFormatError.offset` is how many octets of the input had been read when
 the problem was found, or `None`; the message ends with it and never quotes the
