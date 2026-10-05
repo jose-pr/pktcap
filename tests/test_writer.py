@@ -1,4 +1,5 @@
-"""`PcapWriter`: what it writes reads back, and it touches nothing early."""
+"""`PcapWriter` and `PcapngWriter`: what they write reads back, a frame
+round-trips as it was captured, and nothing is touched early."""
 
 import gc
 import io
@@ -8,9 +9,12 @@ import warnings
 
 import pytest
 
+import captures as build
 from pktcap import (
     CapturedDatagram,
-    FrameDecoder,
+    CapturedFrame,
+    FrameDissector,
+    PcapngWriter,
     PcapWriter,
     read_datagrams,
     read_frames,
@@ -18,13 +22,14 @@ from pktcap import (
 
 V4 = (("10.0.0.5", 50000), ("10.0.0.1", 69))
 V6 = (("2001:db8::5", 50000), ("2001:db8::1", 69))
+WRITERS = [PcapWriter, PcapngWriter]
 
 
-def _written(*datagrams):
+def _written(*datagrams, writer=PcapWriter):
     stream = io.BytesIO()
-    with PcapWriter(stream) as writer:
+    with writer(stream) as out:
         for time, source, destination, payload in datagrams:
-            writer.write(time, source, destination, payload)
+            out.write(time, source, destination, payload)
     return stream.getvalue()
 
 
@@ -209,6 +214,16 @@ def test_a_closed_writer_refuses_to_write():
         writer.write(0, *V4, b"x")
 
 
+@pytest.mark.parametrize("writer", [PcapWriter, PcapngWriter])
+def test_a_closed_writer_refuses_a_frame_too(writer):
+    stream = io.BytesIO()
+    out = writer(stream)
+    out.close()
+    with pytest.raises(ValueError, match="closed"):
+        out.write_frame(CapturedFrame(0.0, 1, b"frame"))
+    assert stream.getvalue() == b""
+
+
 # -- a caller's mistake writes nothing ------------------------------------
 
 
@@ -243,9 +258,178 @@ def test_a_target_that_is_neither_path_nor_stream_is_refused(target):
         PcapWriter(target)
 
 
-def test_a_reader_of_the_output_counts_nothing_as_malformed():
-    data = _written((1, *V4, b"a"), (2, *V6, b"b"), (3, *V4, bytes(65507)))
-    decoder = FrameDecoder()
-    assert len(list(read_datagrams(io.BytesIO(data), decoder=decoder))) == 3
-    stats = decoder.stats
-    assert (stats.malformed, stats.ignored, stats.unsupported) == (0, 0, 0)
+@pytest.mark.parametrize("writer", WRITERS)
+def test_a_reader_of_the_output_counts_nothing_as_malformed(writer):
+    data = _written(
+        (1, *V4, b"a"), (2, *V6, b"b"), (3, *V4, bytes(65507)), writer=writer
+    )
+    dissector = FrameDissector()
+    assert len(list(read_datagrams(io.BytesIO(data), dissector=dissector))) == 3
+    stats = dissector.stats
+    assert (stats.malformed, stats.failed, stats.unsupported) == (0, 0, 0)
+
+
+# -- pcapng ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("ends", [V4, V6], ids=["ipv4", "ipv6"])
+def test_pcapng_datagrams_read_back_octet_for_octet(ends):
+    payload = os.urandom(700)
+    data = _written((1_700_000_000.25, ends[0], ends[1], payload), writer=PcapngWriter)
+    assert data[:4] == b"\x0a\x0d\x0d\x0a"
+    assert list(read_datagrams(io.BytesIO(data))) == [
+        CapturedDatagram(1_700_000_000.25, ends[0], ends[1], payload)
+    ]
+
+
+@pytest.mark.parametrize("writer", WRITERS)
+def test_both_writers_open_late_flush_each_record_and_close_what_they_opened(
+    writer, tmp_path
+):
+    path = tmp_path / "trace.cap"
+    out = writer(path)
+    assert not path.exists()
+    out.write(1, *V4, b"first")
+    assert [d.payload for d in read_datagrams(path)] == [b"first"]
+    out.write_datagram(CapturedDatagram(2, V6[0], V6[1], b"second"))
+    assert [d.payload for d in read_datagrams(path)] == [b"first", b"second"]
+    out.close()
+    out.close()
+    with pytest.raises(ValueError, match="closed"):
+        out.write(3, *V4, b"x")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        del out
+        gc.collect()
+    assert [w for w in caught if w.category is ResourceWarning] == []
+
+
+def test_pcapng_writes_nothing_about_the_host():
+    data = _written((1, *V4, b"x"), writer=PcapngWriter)
+    # A section header with no option, one interface with none, one packet.
+    assert len(data) == 28 + 20 + (32 + 32)
+
+
+# -- frames, as captured --------------------------------------------------
+
+UDP = build.udp(50000, 69, b"request")
+FRAMES = [
+    CapturedFrame(
+        1_700_000_000.000001, 1, build.ethernet(build.ipv4("10.0.0.5", "10.0.0.1", UDP))
+    ),
+    CapturedFrame(1_700_000_000.5, 1, b"\x02" * 12 + b"\x08\x06" + bytes(28)),
+    CapturedFrame(1_700_000_001.25, 1, b"odd"),
+]
+MIXED = FRAMES + [
+    CapturedFrame(
+        1_700_000_002.0, 113, build.linux_sll(build.ipv4("10.0.0.5", "10.0.0.1", UDP))
+    ),
+    CapturedFrame(1_700_000_003.0, 105, b"a link type nothing here dissects"),
+    CapturedFrame(1_700_000_004.0, 1, b""),
+]
+
+
+def _frames_written(frames, writer):
+    stream = io.BytesIO()
+    with writer(stream) as out:
+        for frame in frames:
+            out.write_frame(frame)
+    return stream.getvalue()
+
+
+def _same(read, written):
+    assert [(f.linktype, f.data) for f in read] == [
+        (f.linktype, f.data) for f in written
+    ]
+    assert [f.time for f in read] == pytest.approx([f.time for f in written], abs=1e-6)
+
+
+@pytest.mark.parametrize("writer", WRITERS)
+def test_a_frame_is_written_back_as_it_was_captured(writer):
+    _same(list(read_frames(io.BytesIO(_frames_written(FRAMES, writer)))), FRAMES)
+
+
+def test_pcapng_holds_frames_of_any_mix_of_link_types():
+    read = list(read_frames(io.BytesIO(_frames_written(MIXED, PcapngWriter))))
+    _same(read, MIXED)
+    # One interface for each link type, in the order they were first written.
+    assert [f.interface for f in read] == [0, 0, 0, 1, 2, 0]
+
+
+def test_a_pcap_file_has_the_link_type_of_its_first_write_and_refuses_another():
+    stream = io.BytesIO()
+    writer = PcapWriter(stream)
+    writer.write_frame(FRAMES[0])
+    before = stream.getvalue()
+    with pytest.raises(ValueError, match="link type 1 and cannot take 113"):
+        writer.write_frame(MIXED[3])
+    with pytest.raises(ValueError, match="link type 1 and cannot take 101"):
+        writer.write(1, *V4, b"a datagram is raw IP")
+    assert stream.getvalue() == before
+    assert struct.unpack_from("<I", before, 20)[0] == 1
+
+
+def test_a_write_that_was_refused_does_not_fix_the_link_type_of_a_pcap_file():
+    stream = io.BytesIO()
+    writer = PcapWriter(stream)
+    with pytest.raises(ValueError, match="time"):
+        writer.write_frame(CapturedFrame(-1.0, 113, b"refused"))
+    assert stream.getvalue() == b""
+    writer.write_frame(FRAMES[0])
+    assert struct.unpack_from("<I", stream.getvalue(), 20)[0] == 1
+
+
+def test_a_capture_of_several_link_types_round_trips_through_pcapng():
+    """Read any capture, write it back: the frames are the same frames."""
+    original = (
+        build.section()
+        + build.interface(build.ETHERNET)
+        + build.interface(build.LINUX_SLL, tsresol=9)
+        + build.interface(105)
+        + build.packet(FRAMES[0].data, iface=0, stamp=1_700_000_000_250_000)
+        + build.packet(MIXED[3].data, iface=1, stamp=1_700_000_000_500_000_000)
+        + build.packet(b"unknown", iface=2, stamp=1_700_000_000_750_000)
+        + build.block(4, b"a name resolution block, skipped")
+        + build.packet(FRAMES[1].data, iface=0, stamp=1_700_000_001_000_000)
+    )
+    first = list(read_frames(io.BytesIO(original)))
+    assert [f.linktype for f in first] == [1, 113, 105, 1]
+    again = list(read_frames(io.BytesIO(_frames_written(first, PcapngWriter))))
+    _same(again, first)
+    assert [f.interface for f in again] == [f.interface for f in first]
+
+
+@pytest.mark.parametrize("writer", WRITERS)
+def test_a_filtered_capture_keeps_the_frames_that_passed_octet_for_octet(writer):
+    kept = [frame for frame in FRAMES if len(frame.data) > 10]
+    read = list(read_frames(io.BytesIO(_frames_written(kept, writer))))
+    assert [f.data for f in read] == [f.data for f in kept]
+
+
+@pytest.mark.parametrize("writer", WRITERS)
+@pytest.mark.parametrize(
+    "frame, error",
+    [
+        (CapturedFrame(-1.0, 1, b"x"), ValueError),
+        (CapturedFrame(float("nan"), 1, b"x"), ValueError),
+        (CapturedFrame(0.0, 70000, b"x"), ValueError),
+        (CapturedFrame(0.0, -1, b"x"), ValueError),
+        (CapturedFrame(0.0, "1", b"x"), TypeError),
+        (CapturedFrame(0.0, 1, bytes(262145)), ValueError),
+        (CapturedFrame(0.0, 1, "text"), TypeError),
+    ],
+)
+def test_a_frame_that_cannot_be_written_is_refused_and_nothing_is_written(
+    writer, frame, error
+):
+    stream = io.BytesIO()
+    with pytest.raises(error):
+        writer(stream).write_frame(frame)
+    assert stream.getvalue() == b""
+
+
+def test_the_largest_frame_a_reader_accepts_is_written():
+    frame = CapturedFrame(0.0, 1, bytes(262144))
+    for writer in WRITERS:
+        (read,) = read_frames(io.BytesIO(_frames_written([frame], writer)))
+        assert len(read.data) == 262144

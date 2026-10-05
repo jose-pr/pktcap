@@ -5,7 +5,7 @@
 Each case below is a capture spelled out octet by octet with the builders of
 ``tests/captures.py``, for a shape no capture tool can be made to write on
 demand (a tag stack, a second byte order, a block that contradicts itself).
-The cases written by a capture tool come from ``capture_cases.sh`` instead.
+The cases written by a capture tool come from ``capture_cases.py`` instead.
 Running this again rewrites the same octets; the goldens beside them are
 recorded by ``record.py`` and never edited.
 """
@@ -172,7 +172,9 @@ def cases():
         build.pcap(
             [
                 b"\x02" * 6 + b"\x04" * 6 + b"\x08\x06" + bytes(28),  # ARP
-                build.ethernet(build.ipv4(A4, B4, bytes(20), protocol=6)),  # TCP
+                build.ethernet(
+                    build.ipv4(A4, B4, build.tcp(50000, 47001, flags=0x02), protocol=6)
+                ),
                 build.ethernet(build.ipv6(A6, B6, bytes(8), next_header=58), v6=True),
                 build.ethernet(v4),
             ],

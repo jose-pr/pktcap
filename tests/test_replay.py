@@ -16,9 +16,12 @@ from netimps import UDPEndpoint, bind
 
 from pktcap import (
     CapturedDatagram,
+    CapturedFrame,
     CaptureFormatError,
     PcapWriter,
     ReplayResult,
+    read_dissected,
+    read_frames,
     replay,
     replay_schedule,
     replay_to,
@@ -342,7 +345,46 @@ def test_a_bad_option_is_refused_at_the_call_by_all_three(options, error):
 
 
 def test_a_source_or_a_callable_of_the_wrong_kind_is_a_type_error():
-    with pytest.raises(TypeError, match="iterable of datagrams"):
+    with pytest.raises(TypeError, match="iterable of items with a time"):
         replay_schedule(5)
     with pytest.raises(TypeError, match="callable"):
         replay(_datagrams(TIMES), None)
+    with pytest.raises(TypeError, match="has a time, in seconds"):
+        list(replay_schedule([b"octets"]))
+
+
+# -- frames that are not UDP ----------------------------------------------
+
+ARP = b"\x02" * 12 + b"\x08\x06" + bytes(28)
+
+
+def _frame_capture():
+    stream = io.BytesIO()
+    with PcapWriter(stream) as writer:
+        for index, data in enumerate([ARP, b"\x02" * 14, ARP]):
+            writer.write_frame(CapturedFrame(100.0 + index * 0.5, 1, data))
+    return stream.getvalue()
+
+
+def test_every_frame_of_a_capture_is_replayed_to_a_callable():
+    """A capture read as datagrams holds none of these; read as frames, or as
+    dissected frames, each is handed over in order and in time."""
+    data = _frame_capture()
+    assert replay(io.BytesIO(data), lambda d: None, speed=None) == 0
+    seen = []
+    assert replay(read_frames(io.BytesIO(data)), seen.append, speed=None) == 3
+    assert [frame.data for frame in seen] == [ARP, b"\x02" * 14, ARP]
+    dissected = []
+    replay(read_dissected(io.BytesIO(data)), dissected.append, speed=None)
+    assert [len(frame.layers) for frame in dissected] == [1, 1, 1]
+    schedule = replay_schedule(read_frames(io.BytesIO(data)))
+    assert [delay for delay, _frame in schedule] == pytest.approx([0.0, 0.5, 0.5])
+
+
+def test_a_frame_is_never_sent_to_the_network(receiver):
+    host, port = receiver.getsockname()[:2]
+    with pytest.raises(TypeError, match="CapturedDatagram items only"):
+        replay_to(read_frames(io.BytesIO(_frame_capture())), host, port, speed=None)
+    receiver.settimeout(0.2)
+    with pytest.raises((socket.timeout, TimeoutError)):
+        receiver.recvfrom(100)

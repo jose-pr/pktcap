@@ -18,8 +18,8 @@ from ._toml import TOMLFormat
 from ._yaml import YAMLFormat
 
 __all__ = [
+    "CAPTURE_FORMATS",
     "OUTPUT_FORMATS",
-    "PCAP",
     "RECORD_FORMATS",
     "RecordFormat",
     "dumps_record",
@@ -28,8 +28,9 @@ __all__ = [
     "record_format",
 ]
 
-PCAP = "pcap"
-_PCAP_SUFFIXES = (".pcap", ".cap")
+#: The capture formats, which hold frames and datagrams, and their endings.
+CAPTURE_FORMATS: Tuple[str, ...] = ("pcap", "pcapng")
+_CAPTURE_SUFFIXES = ((".pcap", "pcap"), (".cap", "pcap"), (".pcapng", "pcapng"))
 
 _RECORD_FORMATS: Dict[str, RecordFormat] = {
     fmt.name: fmt for fmt in (JSONFormat(), YAMLFormat(), TOMLFormat(), INIFormat())
@@ -38,7 +39,7 @@ _RECORD_FORMATS: Dict[str, RecordFormat] = {
 #: The formats that write a record as text, by name.
 RECORD_FORMATS: Tuple[str, ...] = tuple(_RECORD_FORMATS)
 #: Every format a :class:`CaptureWriter` writes, by name.
-OUTPUT_FORMATS: Tuple[str, ...] = (PCAP,) + RECORD_FORMATS
+OUTPUT_FORMATS: Tuple[str, ...] = CAPTURE_FORMATS + RECORD_FORMATS
 
 
 def _unsupported(name: object, known: Tuple[str, ...]) -> UnsupportedFormatError:
@@ -71,7 +72,7 @@ def infer_format(
         return _normalised(name, OUTPUT_FORMATS)
     if isinstance(target, (str, os.PathLike)):
         text = os.fspath(target).lower()
-        endings = [(suffix, PCAP) for suffix in _PCAP_SUFFIXES]
+        endings = list(_CAPTURE_SUFFIXES)
         for fmt in _RECORD_FORMATS.values():
             endings += [(suffix, fmt.name) for suffix in fmt.suffixes]
         matches = [
@@ -93,7 +94,7 @@ def has_output_format(name: str) -> bool:
     ``UnsupportedFormatError``.
     """
     lowered = _normalised(name, OUTPUT_FORMATS)
-    if lowered == PCAP:
+    if lowered in CAPTURE_FORMATS:
         return True
     try:
         _RECORD_FORMATS[lowered].require()

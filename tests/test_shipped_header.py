@@ -2,8 +2,9 @@
 
 ``src/pktcap/AGENTS.md`` is the top header; a topic with much detail keeps it
 in an ``AGENTS.md`` beside its code. Every export is named in the top header,
-every header below it is listed there, every signature any of them prints is
-the live one, and each file stays short enough to be read in one go.
+every header below it is listed there, every function and class has its
+signature printed in one of them, every signature printed is the live one,
+and each file stays short enough to be read in one go.
 """
 
 import ast
@@ -93,6 +94,23 @@ def test_the_tests_header_names_every_test_file():
     assert missing == [], "tests/AGENTS.md does not name: %s" % ", ".join(missing)
 
 
+def test_the_example_of_the_dissectors_header_runs(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    with pktcap.PcapWriter("trace.pcap") as writer:
+        request = b"\x00\x01boot.efi\x00octet\x00"
+        writer.write(1.0, ("192.0.2.5", 50000), ("192.0.2.1", 69), request)
+        writer.write(2.0, ("192.0.2.1", 40000), ("192.0.2.5", 50000), b"\x00\x03")
+    text = (_PACKAGE / "_dissectors" / "AGENTS.md").read_text(encoding="utf-8")
+    blocks = re.findall(r"```python\n(.*?)```", text, re.DOTALL)
+    assert len(blocks) == 3
+    # The first block shows the shape alone, before the one that imports.
+    namespace = {"__name__": "header_example", "pktcap": pktcap}
+    for block in blocks:
+        exec(compile(block, "AGENTS.md", "exec"), namespace)
+    namespace["test_the_tftp_dissector_keeps_the_contract"]()
+    assert capsys.readouterr().out == "('192.0.2.5', 50000) 1 boot.efi\n"
+
+
 #: ``**`name(args) -> result`**``: how the header prints a signature.
 _SIGNATURE = re.compile(r"\*\*`([A-Za-z_][\w.]*)\(([^`]*?)\)(?: ->[^`]*)?`\*\*")
 
@@ -149,8 +167,8 @@ def _same_default(printed, live):
 
 
 def _probe(path):
-    """``(checked, mismatches)`` for every signature the file prints."""
-    checked, bad = 0, []
+    """``(names checked, mismatches)`` for every signature the file prints."""
+    checked, bad = [], []
     for match in _SIGNATURE.finditer(path.read_text(encoding="utf-8")):
         name, args = match.group(1), match.group(2)
         obj = _resolve(name)
@@ -159,7 +177,7 @@ def _probe(path):
         if isinstance(obj, type) and issubclass(obj, BaseException):
             continue
         printed, live = _printed(args), _live(obj)
-        checked += 1
+        checked.append(name)
         same = len(printed) == len(live) and all(
             p[0] == l[0] and p[1] == l[1] and _same_default(p[2], l[2])
             for p, l in zip(printed, live)
@@ -172,20 +190,23 @@ def _probe(path):
 def test_every_printed_signature_is_the_live_one():
     checked, bad = _probe(_HEADER)
     for path in _SUBHEADERS:
-        count, mismatches = _probe(path)
-        assert count, "%s prints no signature to check" % _inside_package(path)
+        names, mismatches = _probe(path)
+        assert names, "%s prints no signature to check" % _inside_package(path)
+        checked += names
         bad += ["%s: %s" % (_inside_package(path), m) for m in mismatches]
     assert bad == [], "signature drift:\n" + "\n".join(bad)
-    exports = [getattr(pktcap, name) for name in pktcap.__all__]
-    plain = [
-        obj
-        for obj in exports
-        if inspect.isfunction(obj)
-        or (inspect.isclass(obj) and not issubclass(obj, BaseException))
-    ]
-    # Every function and class has its signature printed, so a probe that
-    # matched nothing cannot pass.
-    assert checked >= len(plain), (checked, len(plain))
+    plain = {
+        name
+        for name in pktcap.__all__
+        if inspect.isfunction(getattr(pktcap, name))
+        or (
+            inspect.isclass(getattr(pktcap, name))
+            and not issubclass(getattr(pktcap, name), BaseException)
+        )
+    }
+    # Every function and class has its signature printed in one header or
+    # another, so a probe that matched nothing cannot pass.
+    assert plain - set(checked) == set()
 
 
 def test_the_probe_sees_a_changed_signature(tmp_path, monkeypatch):
@@ -201,5 +222,5 @@ def test_the_probe_sees_a_changed_signature(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     checked, bad = _probe(header)
-    assert checked == 3
+    assert checked == ["sample"] * 3
     assert len(bad) == 2

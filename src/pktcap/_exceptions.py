@@ -21,6 +21,7 @@ __all__ = [
     "CaptureFilterError",
     "UnsupportedFormatError",
     "LiveCaptureError",
+    "DissectError",
 ]
 
 
@@ -61,6 +62,17 @@ class UnsupportedFormatError(PktcapError, ValueError):
     The message lists the formats there are. A format that exists and whose
     extra is not installed is not this error: it raises ``ImportError`` naming
     the extra.
+    """
+
+
+class DissectError(PktcapError, ValueError):
+    """Octets that are not the layer a dissector was asked to read: a header
+    cut short, or one whose length fields contradict what is there.
+
+    What the built-in dissectors raise. It never reaches a caller of
+    :meth:`pktcap.FrameDissector.dissect`, which keeps the frame, leaves that
+    layer undecoded and counts it; a caller that runs a dissector by hand
+    catches it. A dissector of the caller's own may raise any ``ValueError``.
     """
 
 

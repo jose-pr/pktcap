@@ -6,33 +6,46 @@
 [![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://jose-pr.github.io/pktcap/)
 [![CI](https://img.shields.io/github/actions/workflow/status/jose-pr/pktcap/test.yml)](https://github.com/jose-pr/pktcap/actions/workflows/test.yml)
 
-**The capture layer a UDP protocol library needs, and nothing above it**: read
-pcap and pcapng, decode frames to UDP datagrams, write them back, replay them.
-What a datagram means stays with the library that speaks the protocol. Built on
-the standard library and [netimps](https://github.com/jose-pr/netimps).
+**Read any packet capture, dissect it layer by layer, write it back, replay
+it.** Every frame of a pcap or pcapng file comes back, whatever its link type;
+the built-in dissectors read the link layer, IP, UDP and TCP, and any other
+protocol is a dissector you register. Built on the standard library and
+[netimps](https://github.com/jose-pr/netimps).
 Documentation: <https://jose-pr.github.io/pktcap/>.
 
 ## Features
 
-- **Reads pcap and pcapng** — either byte order, microseconds or nanoseconds,
-  several interfaces, from a file or from a pipe that cannot seek
-  (`tcpdump -w -`, `dumpcap -w -`).
-- **Decodes frames to UDP datagrams** — Ethernet with VLAN tags, Linux cooked
-  capture, BSD loopback and raw IP; IPv4 and IPv6 with extension headers.
-  Reassembling IP fragments is an option.
+- **Reads any valid pcap or pcapng capture** — either byte order, microseconds
+  or nanoseconds, several interfaces, from a file or from a pipe that cannot
+  seek (`tcpdump -w -`, `dumpcap -w -`). Every frame is returned with its
+  octets, link type, time and interface; a link type or protocol nothing
+  dissects is never an error and never skipped.
+- **Dissects layer by layer** — Ethernet with 802.1Q and QinQ tags, Linux
+  cooked capture v1 and v2, BSD loopback and raw IP; IPv4, and IPv6 with its
+  extension headers; UDP and TCP headers. A dissected frame is a value you
+  walk: its layers in order, each a small immutable record, and what is left.
+- **Pluggable dissectors** — a dissector is a function from one layer's octets
+  to its fields, its payload and what follows. Register yours for a port, an
+  IP protocol, an ethertype or a link type, in the process-wide registry or
+  in one you build and pass.
+- **A UDP datagram view** on top, for a protocol library that only wants
+  addresses, ports and payload, with IP fragments reassembled.
 - **Treats a capture as untrusted input** — every length, count and offset a
-  file states has a ceiling checked before anything is allocated: a 48-octet
-  file claiming a 1 GiB record costs under 1 MiB and one `CaptureFormatError`.
-  A frame that does not decode is counted, never dropped silently.
-- **Writes pcap** that tcpdump and Wireshark read, with valid checksums, and
-  opens the file only when there is something to write.
-- **Writes records in a format chosen by name** — the datagram, or the plain
-  data a protocol library makes of it, as JSON lines, YAML documents, TOML or
-  INI files, into one growing file or one file per record.
-- **Replays a capture** — on its recorded timing, to a callable or to one
-  destination the caller names; never to the addresses in the file.
-- **Parses the `key=value and key!=value` filter expression**, leaving what a
-  key means to the caller.
+  file or a frame states has a ceiling checked before anything is allocated:
+  a 48-octet file claiming a 1 GiB record costs under 1 MiB and one
+  `CaptureFormatError`. A dissector that fails, built in or registered, costs
+  that frame one layer and is counted; it never stops the reader.
+- **Writes pcap and pcapng** that tcpdump and Wireshark read — any frame back
+  with its link type, octet for octet, or a datagram seen at a socket under
+  synthesised headers with valid checksums.
+- **Writes records in a format chosen by name** — a frame or a datagram, or
+  the plain data a protocol library makes of it, as JSON lines, YAML
+  documents, TOML or INI files, into one growing file or one file per record.
+- **Filters with `key=value and key!=value`** — addresses, ports, protocol,
+  VLAN and link type built in, and a protocol library's own keys beside them.
+- **Replays a capture** — on its recorded timing, to a callable, or its UDP
+  payloads to one destination the caller names; never to the addresses in
+  the file, and never as raw frames.
 - **Captures live on Linux** without a capture tool, given `CAP_NET_RAW`.
 
 ## Installation
@@ -53,52 +66,74 @@ Importing `pktcap` needs neither; a format whose extra is missing raises
 
 ## Quick start
 
-Write a capture and read it back:
+Write a capture, then read every frame of it, layer by layer:
 
 ```python
 import pktcap
 
 with pktcap.PcapWriter("trace.pcap") as writer:
-    writer.write(1700000000.00, ("192.0.2.5", 50000), ("192.0.2.1", 69), b"request")
-    writer.write(1700000000.05, ("192.0.2.1", 40000), ("192.0.2.5", 50000), b"reply 1")
-    writer.write(1700000000.10, ("192.0.2.1", 40000), ("192.0.2.5", 50000), b"reply 2")
+    writer.write(1700000000.00, ("192.0.2.5", 50000), ("192.0.2.1", 69), b"\x00\x01boot.efi\x00octet\x00")
+    writer.write(1700000000.05, ("192.0.2.1", 40000), ("192.0.2.5", 50000), b"\x00\x03\x00\x01data")
+    writer.write(1700000000.10, ("192.0.2.5", 50000), ("192.0.2.1", 40000), b"\x00\x04\x00\x01")
 
+for frame in pktcap.read_dissected("trace.pcap"):
+    ip, udp = frame.layer(pktcap.IPv4Layer), frame.layer(pktcap.UDPLayer)
+    print(ip.source, udp.source_port, "->", ip.destination, udp.destination_port, frame.payload)
+```
+
+Register a dissector for a protocol of your own:
+
+```python
+import struct
+from typing import NamedTuple
+
+
+class TFTPLayer(NamedTuple):
+    opcode: int
+    filename: str
+
+
+def dissect_tftp(data: bytes) -> pktcap.Dissected:
+    if len(data) < 4:
+        raise pktcap.DissectError("a TFTP packet is at least 4 octets")
+    (opcode,) = struct.unpack_from("!H", data)
+    name, _, rest = data[2:].partition(b"\0")
+    return pktcap.Dissected(TFTPLayer(opcode, name.decode("ascii", "replace")), rest)
+
+
+registry = pktcap.DissectorRegistry()  # the built-in dissectors, and now yours
+registry.register("udp", 69, dissect_tftp)
+dissector = pktcap.FrameDissector(registry)
+frames = list(pktcap.read_dissected("trace.pcap", dissector=dissector))
+print(frames[0].layers[-1])  # TFTPLayer(opcode=1, filename='boot.efi')
+print(dissector.stats)  # frames, malformed, failed, unsupported, fragments, ...
+```
+
+Take the UDP datagram view when addresses, ports and payload are all you need:
+
+```python
 for datagram in pktcap.read_datagrams("trace.pcap"):
-    print(datagram.time, datagram.source, datagram.destination, datagram.payload)
+    print(datagram.time, datagram.source, datagram.destination, len(datagram.payload))
 ```
 
-See what a capture held that was not a datagram:
+Filter frames, and write them as records or as a capture:
 
 ```python
-decoder = pktcap.FrameDecoder(reassemble=True)
-datagrams = list(pktcap.read_datagrams("trace.pcap", decoder=decoder))
-print(decoder.stats)  # frames, datagrams, ignored, malformed, unsupported, ...
+wanted = pktcap.compile_capture_filter("proto=tftp and src=192.0.2.0/24", pktcap.frame_filter)
+with pktcap.CaptureWriter("requests.jsonl") as output:  # the ending names the format
+    for frame in frames:
+        if wanted(frame):
+            output.write(frame)
+
+with pktcap.PcapngWriter("copy.pcapng") as writer:  # any frame, as it was captured
+    for captured in pktcap.read_frames("trace.pcap"):
+        writer.write_frame(captured)
+
+print(pktcap.dumps_record(pktcap.datagram_record(frames[0].datagram()), "ini"))
 ```
 
-Write it in another format, with the record your own protocol makes:
-
-```python
-with pktcap.CaptureWriter("trace.json") as output:  # the format is the suffix
-    for datagram in datagrams:
-        output.write(datagram, {"size": len(datagram.payload), "to": datagram.destination[1]})
-
-print(pktcap.dumps_record(pktcap.datagram_record(datagrams[0]), "ini"))
-```
-
-Filter with the shared expression grammar and your own keys:
-
-```python
-def build(clause):
-    if clause.key != "port":
-        raise ValueError("unknown filter key %r" % clause.key)
-    ports = {int(value) for value in clause.values}
-    return lambda d: d.source[1] in ports or d.destination[1] in ports
-
-wanted = pktcap.compile_capture_filter("port=69,70 and port!=40000", build)
-print([d.payload for d in datagrams if wanted(d)])
-```
-
-Replay it, at the recorded pace, to a destination you name:
+Replay it, at the recorded pace: UDP payloads to a destination you name, or
+every frame to a callable:
 
 ```python
 from netimps import bind
@@ -108,6 +143,10 @@ result = pktcap.replay_to("trace.pcap", "127.0.0.1", listener.getsockname()[1])
 print(result)  # ReplayResult(sent=3, partial=0)
 print(listener.recvfrom(1500)[0])
 listener.close()
+
+seen = []
+pktcap.replay(pktcap.read_frames("copy.pcapng"), seen.append, speed=None)
+print(len(seen), "frames handed to a callable")
 ```
 
 ## API overview
@@ -120,29 +159,36 @@ Everything is imported from `pktcap`; the modules below it are private.
 
 | Names | Purpose |
 | --- | --- |
-| `read_frames`, `CapturedFrame`, `CaptureSource` | read a pcap or pcapng container |
-| `read_datagrams`, `FrameDecoder`, `CapturedDatagram`, `DecodeStats`, `LINKTYPES` | decode frames to UDP datagrams, reassembly optional |
-| `PcapWriter` | write datagrams as pcap |
-| `CaptureWriter`, `dumps_record`, `datagram_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write datagrams or records in a named format |
+| `read_frames`, `CapturedFrame`, `CaptureSource` | read every frame of a pcap or pcapng container |
+| `read_dissected`, `FrameDissector`, `DissectedFrame`, `DissectStats`, `LINKTYPES` | dissect frames layer by layer, IP fragments reassembled |
+| `EthernetLayer`, `VLANLayer`, `LinuxCookedLayer`, `LoopbackLayer`, `IPv4Layer`, `IPv6Layer`, `IPv6ExtensionLayer`, `IPv6FragmentLayer`, `UDPLayer`, `TCPLayer` | the records the built-in dissectors make |
+| `Dissector`, `Dissected`, `Fragment`, `Selector`, `DissectorRegistry`, `default_registry`, `register_dissector`, `check_dissector` | write, register and check a dissector |
+| `read_datagrams`, `CapturedDatagram` | the UDP datagram view |
+| `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
+| `CaptureWriter`, `dumps_record`, `datagram_record`, `frame_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format |
+| `parse_capture_filter`, `compile_capture_filter`, `FilterClause`, `frame_filter`, `FRAME_FILTER_KEYS` | the filter expression, and the keys of the built-in layers |
 | `replay_schedule`, `replay`, `replay_to`, `ReplayResult`, `ReplaySource` | replay a capture |
-| `parse_capture_filter`, `compile_capture_filter`, `FilterClause` | the filter expression |
 | `LiveCapture`, `sniff`, `has_live_capture` | live capture on Linux |
-| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `LiveCaptureError` | the exceptions |
+| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `DissectError`, `LiveCaptureError` | the exceptions |
 
 The reference with every signature, bound and gotcha is the API header that
 ships inside the package, `pktcap/AGENTS.md`, also at
-<https://github.com/jose-pr/pktcap/blob/main/src/pktcap/AGENTS.md>.
+<https://github.com/jose-pr/pktcap/blob/main/src/pktcap/AGENTS.md>. The
+dissector contract and each built-in dissector are in the header beside them,
+<https://github.com/jose-pr/pktcap/blob/main/src/pktcap/_dissectors/AGENTS.md>.
 
 ## Differences from tshark
 
 The reference for what a capture holds is **tshark 4.6.8** (Wireshark's
-command-line reader). `tests/conformance/` records what it says about 39
-captures, written by tcpdump 4.99.6, by Wireshark's editcap and by hand, and
-the suite replays those answers with no tool installed. Fidelity is to
-results: which datagrams a capture holds (time, addresses, ports, payload),
-which captures are refused and after how many frames, and that tshark reads
-what `PcapWriter` writes with every checksum good. Message texts and exit
-statuses are not reproduced.
+command-line reader). `tests/conformance/` records what it says about 33
+captures, written by tcpdump 4.99.6, by Wireshark's editcap, by this library's
+writer and by hand, and the suite replays those answers with no tool
+installed. Fidelity is to results: how many frames a capture holds; for each
+frame, which layers it has and the fields of each (addresses, VLAN tags,
+protocol numbers, ports, TCP sequence numbers, flags, options and segment
+payload); which UDP datagrams it carries; which captures are refused and after
+how many frames; and that tshark reads what `PcapWriter` writes with every checksum good. Message
+texts and exit statuses are not reproduced.
 
 pktcap differs on purpose in these cases, each a bound on untrusted input:
 
@@ -162,11 +208,19 @@ are refused.
 | tshark reads | pktcap |
 | --- | --- |
 | pcap and pcapng, either byte order, microseconds and nanoseconds | yes |
-| Ethernet with VLAN tags, Linux cooked v1 and v2, BSD loopback, raw IP | yes |
-| IPv4 options, IPv6 extension headers, IP fragments | yes |
-| UDP | yes |
-| every other link type, TCP, and every protocol above UDP | no: counted, never decoded |
+| a frame of any link type | yes: read and returned; dissected when the link type has a dissector |
+| Ethernet with 802.1Q and QinQ tags, Linux cooked v1 and v2, BSD loopback, raw IP | yes |
+| IPv4, IPv6 extension and fragment headers, IP fragments reassembled | yes; IPv4 options and extension-header contents are kept as octets |
+| UDP and TCP headers | yes; TCP options are kept as octets |
+| TCP streams, reassembled across segments | no: a segment's payload is what follows its header |
+| checksums, verified | no: none is checked |
+| ARP, ICMP and every protocol above UDP and TCP | no built-in dissector: the frame ends there with the rest as its payload, until one is registered |
 | other capture file formats | no |
+
+Limits that are not differences in what is read: a pcapng file written back
+keeps every frame, link type and time, and none of the options of the
+original (comments, interface names); replay sends UDP payloads through an
+ordinary socket and never a raw frame; live capture is Linux only.
 
 ## Development
 

@@ -234,7 +234,7 @@ def _packet(
         raise reader.fail("a packet names an interface its section does not describe")
     linktype, scale, shift = interfaces[index]
     time = 0.0 if stamp is None else stamp * scale + shift
-    return CapturedFrame(time, linktype, body[start : start + captured])
+    return CapturedFrame(time, linktype, body[start : start + captured], index)
 
 
 def read_frames(

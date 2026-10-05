@@ -4,10 +4,14 @@
     python tests/conformance/record.py --check    # re-record in memory, report drift
 
 The reference is tshark, which must be on ``PATH``; ``pktcap`` must be
-importable for the ``write-`` cases, whose input is what ``PcapWriter`` makes
-of ``case.json``. A golden is what tshark answered, with its version, and is
+importable for the ``write-`` cases, whose input is what a writer makes of
+``case.json``. A golden is what tshark answered, with its version, and is
 never edited by hand. ``test_conformance.py`` replays the goldens and needs
 neither this script nor tshark.
+
+A golden holds two readings of the capture: ``layers``, one row per frame of
+the fields tshark printed for the layers this library has dissectors for, and
+``datagrams``, one row per UDP datagram with its payload.
 """
 
 import hashlib
@@ -38,7 +42,64 @@ FIELDS = [
     "ip.checksum.status",
     "udp.checksum.status",
 ]
-#: Checksums are verified for what PcapWriter wrote, where they are the
+#: One line per frame. A field that occurs more than once in a frame (two
+#: VLAN tags, a packet quoted by an ICMP error) is printed once per
+#: occurrence, comma separated, outermost first.
+LAYER_FIELDS = [
+    "frame.number",
+    "frame.time_epoch",
+    "frame.cap_len",
+    "frame.interface_id",
+    "frame.protocols",
+    "eth.dst",
+    "eth.src",
+    "eth.type",
+    "vlan.id",
+    "vlan.priority",
+    "vlan.dei",
+    "vlan.etype",
+    "ieee8021ad.id",
+    "ieee8021ad.priority",
+    "ieee8021ad.dei",
+    "sll.pkttype",
+    "sll.hatype",
+    "sll.ifindex",
+    "sll.etype",
+    "null.family",
+    "ip.src",
+    "ip.dst",
+    "ip.proto",
+    "ip.ttl",
+    "ip.id",
+    "ip.len",
+    "ip.flags.df",
+    "ip.flags.mf",
+    "ip.frag_offset",
+    "ipv6.src",
+    "ipv6.dst",
+    "ipv6.nxt",
+    "ipv6.hlim",
+    "ipv6.plen",
+    "ipv6.fraghdr.offset",
+    "ipv6.fraghdr.more",
+    "ipv6.fraghdr.ident",
+    "tcp.srcport",
+    "tcp.dstport",
+    "tcp.seq_raw",
+    "tcp.ack_raw",
+    "tcp.flags",
+    "tcp.window_size_value",
+    "tcp.hdr_len",
+    "tcp.options",
+    "tcp.payload",
+    "udp.srcport",
+    "udp.dstport",
+    "udp.length",
+]
+#: Per-frame rows are kept for captures of at most this many frames: the
+#: cases about a ceiling have thousands, each the same as the last.
+MOST_LAYER_ROWS = 64
+#: Checksums are verified for what a writer wrote, where they are the
 #: question. A capture is read with tshark's own defaults, which is what its
 #: users have: with verification on, tshark does not reassemble a fragment
 #: whose IP checksum is wrong.
@@ -59,18 +120,22 @@ def _reference():
     }
 
 
+def _fields(path, fields, extra):
+    arguments = ["-r", str(path)] + extra + ["-T", "fields", "-E", "separator=|"]
+    for field in fields:
+        arguments += ["-e", field]
+    return [
+        dict(zip(fields, line.split("|")))
+        for line in _tshark(arguments).stdout.splitlines()
+    ]
+
+
 def _ask(path, verify=False):
     """tshark's reading of one capture file, as plain data."""
     frames = _tshark(["-r", str(path), "-T", "fields", "-e", "frame.number"])
     options = VERIFY if verify else []
-    arguments = ["-r", str(path)] + options + ["-Y", FILTER, "-T", "fields"]
-    arguments += ["-E", "separator=|", "-E", "occurrence=l"]
-    for field in FIELDS:
-        arguments += ["-e", field]
-    decoded = _tshark(arguments)
     datagrams = []
-    for line in decoded.stdout.splitlines():
-        row = dict(zip(FIELDS, line.split("|")))
+    for row in _fields(path, FIELDS, options + ["-Y", FILTER, "-E", "occurrence=l"]):
         datagrams.append(
             {
                 "frame": int(row["frame.number"]),
@@ -86,6 +151,12 @@ def _ask(path, verify=False):
                 "udp_checksum": row["udp.checksum.status"],
             }
         )
+    count = len(frames.stdout.split())
+    layers = None
+    if count <= MOST_LAYER_ROWS:
+        rows = _fields(path, LAYER_FIELDS, ["-E", "occurrence=a", "-E", "aggregator=,"])
+        # Only what tshark printed: a field a frame does not have is left out.
+        layers = [{name: value for name, value in row.items() if value} for row in rows]
     error = None
     if frames.returncode:
         # The message names the file by the path it was given: drop it.
@@ -93,34 +164,42 @@ def _ask(path, verify=False):
     return {
         "exit_status": frames.returncode,
         "error": error,
-        "frames": len(frames.stdout.split()),
+        "frames": count,
+        "layers": layers,
         "datagrams": datagrams,
     }
 
 
-def _written(case):
-    """The pcap that ``PcapWriter`` makes of a ``write-`` case."""
+def written(question):
+    """The capture file a ``write-`` case asks a writer for, as octets.
+
+    ``question`` is the case's ``case.json``: the writer by its format name,
+    and either datagrams to put in frames or frames to write as they are.
+    """
     import io
 
-    from pktcap import PcapWriter
+    from pktcap import CapturedFrame, PcapngWriter, PcapWriter
 
-    question = json.loads((case / "case.json").read_text(encoding="utf-8"))
     stream = io.BytesIO()
-    with PcapWriter(stream) as writer:
-        for time, source, destination, payload in question["datagrams"]:
+    writer_type = PcapngWriter if question.get("writer") == "pcapng" else PcapWriter
+    with writer_type(stream) as writer:
+        for time, source, destination, payload in question.get("datagrams", ()):
             writer.write(
                 time, tuple(source), tuple(destination), bytes.fromhex(payload)
             )
+        for time, linktype, data in question.get("frames", ()):
+            writer.write_frame(CapturedFrame(time, linktype, bytes.fromhex(data)))
     return stream.getvalue()
 
 
 def record(case, reference):
     golden = {"reference": reference}
     if case.name.startswith("write-"):
-        data = _written(case)
-        golden["pcap_sha256"] = hashlib.sha256(data).hexdigest()
+        question = json.loads((case / "case.json").read_text(encoding="utf-8"))
+        data = written(question)
+        golden["sha256"] = hashlib.sha256(data).hexdigest()
         with tempfile.TemporaryDirectory() as temporary:
-            path = pathlib.Path(temporary) / "case.pcap"
+            path = pathlib.Path(temporary) / "case"
             path.write_bytes(data)
             golden.update(_ask(path, verify=True))
     else:
@@ -145,7 +224,7 @@ def main(argv):
         else:
             target.write_bytes(text.encode("utf-8"))
             print(
-                "%-46s exit %-2d %3d frames %3d datagrams"
+                "%-46s exit %-2d %4d frames %3d datagrams"
                 % (
                     case.name,
                     golden["exit_status"],

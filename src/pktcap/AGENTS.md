@@ -17,13 +17,20 @@ neither. Python 3.9 or newer.
 `pktcap.__version__` — the package version string, the same value the
 installed distribution's metadata carries.
 
-One topic keeps its detail in a header beside its code, also inside the
+Two topics keep their detail in a header beside their code, also inside the
 installed package (`importlib.resources.files("pktcap")`):
 
 | Header | Covers |
 | --- | --- |
-| `pktcap/AGENTS.md` | this file: reading, decoding, writing, replaying, live capture, the filter expression, the exceptions |
-| `pktcap/_formats/AGENTS.md` | what a record is, and exactly what each record format writes |
+| `pktcap/AGENTS.md` | this file: reading, dissecting, the datagram view, writing, filtering, replaying, live capture, the exceptions |
+| `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
+| `pktcap/_formats/AGENTS.md` | `CaptureWriter` in full, what a record is, and exactly what each record format writes |
+
+**Any valid capture is read.** Every frame of a pcap or pcapng file comes
+back whatever its link type and whatever it carries: a link type, an
+ethertype or a protocol nothing here dissects is never an error and never
+skipped, it is the frame's undissected payload. Only a damaged container
+raises.
 
 **A capture is untrusted input.** Every length, count and offset a file or a
 frame states is compared with a ceiling before anything is allocated or looped
@@ -37,7 +44,7 @@ are positional by nature. Durations are seconds as `float`.
 ## Reading a capture
 
 **`read_frames(source, *, max_frame_size=262144) -> Iterator[CapturedFrame]`**
-— every packet of a pcap or pcapng capture, in file order.
+— every packet of a pcap or pcapng capture, in file order, undissected.
 
 - `source` (`CaptureSource`) is a path (`str` or `os.PathLike`) or a binary
   stream. The stream need not be seekable, so `sys.stdin.buffer` fed by
@@ -54,10 +61,12 @@ are positional by nature. Durations are seconds as `float`.
   `TypeError` for a text stream or a `source` that is neither, and
   `ValueError` for a `max_frame_size` that is not positive.
 
-**`CapturedFrame(time, linktype, data)`** — a named tuple: one packet as the
-capture recorded it. `time` is seconds since the epoch as a `float`,
-`linktype` the `LINKTYPE_` number saying what `data` starts with, `data` the
-captured octets (a snap length may have cut them short).
+**`CapturedFrame(time, linktype, data, interface=None)`** — a named tuple: one
+packet as the capture recorded it. `time` is seconds since the epoch as a
+`float`, `linktype` the `LINKTYPE_` number saying what `data` starts with,
+`data` the captured octets (a snap length may have cut them short),
+`interface` the number of the pcapng interface it was captured on, counted
+within its section, and `None` in a pcap file, which has none.
 
 - **The file controls `time`.** It is `0.0` for a pcapng simple packet block,
   which has no timestamp, and may be far outside any calendar: guard a call to
@@ -79,132 +88,190 @@ too small for its kind, when its two length fields disagree, when a packet is
 longer than the block holding it, and when a packet names an interface its
 section did not describe.
 
-## Decoding frames to UDP datagrams
+## Dissecting frames
 
-**`read_datagrams(source, *, decoder=None, max_frame_size=262144) -> Iterator[CapturedDatagram]`**
-— `read_frames` and `FrameDecoder.decode` in one call: every UDP datagram of a
-capture, in capture order, IP fragments reassembled. It raises
-`CaptureFormatError` for a damaged container and nothing for a frame that does
-not decode: pass a `decoder` to choose its options and to read `decoder.stats`
-afterwards.
+A frame is dissected layer by layer. The frame's link type selects a
+**dissector**; each dissector reads one layer and names what may follow it;
+the walk ends when no dissector is registered for what follows. The built-in
+dissectors read the link layer (Ethernet, 802.1Q and QinQ tags, Linux cooked
+capture v1 and v2, BSD loopback, raw IP), IPv4 and IPv6 with their extension
+and fragment headers, and UDP and TCP headers. Every other protocol is a
+dissector someone registers: the contract, the registry and each built-in are
+in `pktcap/_dissectors/AGENTS.md`.
+
+**`read_dissected(source, *, dissector=None, max_frame_size=262144) -> Iterator[DissectedFrame]`**
+— `read_frames` and `FrameDissector.dissect` in one call: every frame of a
+capture, dissected, in capture order. It raises `CaptureFormatError` for a
+damaged container and nothing for a frame. Pass a `FrameDissector` to choose
+its registry and options and to read its `stats` afterwards.
+
+**`FrameDissector(registry=None, *, reassemble=True, max_reassemblies=256, reassembly_timeout=30.0)`**
+— dissects frames, keeping IP fragment state between them. Feed it every frame
+of a capture, in order. Not safe to share between threads. `ValueError` for a
+limit that is not positive.
+
+- `registry` is a `DissectorRegistry`; `None` is `default_registry()`, the one
+  `register_dissector` adds to. It is read at each frame, so a dissector
+  registered later is used from then on. `FrameDissector.registry` is it.
+- **`FrameDissector.dissect(frame) -> DissectedFrame`** — `frame` (a
+  `CapturedFrame`) with every layer a registered dissector could read. **It
+  never raises for a frame**, whatever the frame holds and whatever a
+  registered dissector does.
+- **`FrameDissector.stats`** — a `DissectStats` snapshot of the counters.
+- **IP fragments are reassembled**, of any protocol: a frame that is a piece
+  ends at its IP (or IPv6 fragment) layer with the piece as payload; the frame
+  that completes the datagram has `reassembled=True` and the layers read from
+  the whole. `reassemble=False` keeps no state: a first fragment is dissected
+  from the octets it carries, a later one stops at the fragment.
+- **A fragment that overlaps another discards its whole datagram**, in IPv4 as
+  in IPv6 (RFC 5722 requires it for IPv6). The same fragment seen twice, octet
+  for octet, is ignored: a capture taken on a bridge shows a frame twice.
+
+**`DissectedFrame(frame, layers, payloads, error=None, reassembled=False)`** —
+a named tuple: a captured frame and what was read from it.
+
+- `frame` is the `CapturedFrame`; `DissectedFrame.time` is its time.
+- `layers` is the layer records, outermost first: `EthernetLayer`,
+  `VLANLayer`, `LinuxCookedLayer`, `LoopbackLayer`, `IPv4Layer`, `IPv6Layer`,
+  `IPv6ExtensionLayer`, `IPv6FragmentLayer`, `UDPLayer`, `TCPLayer`, and
+  whatever a registered dissector returned. Each built-in one is a named
+  tuple of plain values.
+- `payloads[i]` is the octets that follow `layers[i]`.
+  **`DissectedFrame.payload`** is the last of them: what no dissector read.
+  For a frame with no layer it is the whole frame.
+- **`DissectedFrame.layer(kind) -> Optional[kind]`** — the outermost layer
+  that is an instance of the class `kind`, or `None`:
+  `frame.layer(TCPLayer)`.
+- **`DissectedFrame.payload_of(kind) -> Optional[bytes]`** — the octets after
+  that layer: `frame.payload_of(TCPLayer)` is the TCP segment's payload.
+- **`DissectedFrame.datagram() -> Optional[CapturedDatagram]`** — the frame as
+  a UDP datagram, or `None` when it carries no UDP over IP.
+- `error` is `None`, or why dissection stopped early, as
+  `"<kind> <number>: <reason>"` naming the selector whose dissector could not
+  read its layer (`"ip 17: a UDP header is 8 octets"`). The layers before it
+  are kept and its octets are the payload.
+
+**`DissectStats(frames, malformed, failed, unsupported, fragments, dropped, pending)`**
+— a named tuple of counts.
+
+| Field | Counts |
+| --- | --- |
+| `frames` | frames given to `dissect` |
+| `malformed` | frames in which a dissector could not read its layer (it raised `ValueError`: cut short, a length that lies), or that needed more than 32 dissectors |
+| `failed` | frames in which a dissector raised anything else or returned something that is not a `Dissected`: a defect in that dissector. Logged at `WARNING` on the logger `pktcap._dissect`, once per selector, for the first eight |
+| `unsupported` | frames whose link type has no dissector: they come back with no layer |
+| `fragments` | frames that were a piece of a fragmented IP datagram |
+| `dropped` | reassemblies discarded: an overlap, a ceiling, old age |
+| `pending` | reassemblies still waiting for a fragment |
+
+**`LINKTYPES`** — a read-only mapping from the `LINKTYPE_` numbers with a
+built-in dissector to a name: `0` NULL, `1` ETHERNET, `12`, `14` and `101`
+RAW, `108` LOOP, `113` LINUX_SLL, `228` IPV4, `229` IPV6, `276` LINUX_SLL2.
+A frame of any other link type is read and returned undissected; register a
+dissector under `("linktype", number)` to dissect it.
+
+Registering a protocol is one call, `register_dissector("udp", 69, dissect)`
+for the process or `DissectorRegistry.register` for one registry, with a
+function `dissect(data: bytes) -> Dissected`. The names the other header
+documents: `Dissector` and `Selector` (type aliases), `Dissected`, `Fragment`,
+`DissectorRegistry`, `default_registry`, `register_dissector`,
+`check_dissector`, `DissectError`.
+
+Ceilings:
+
+| What a frame or a capture states | Ceiling | At the ceiling |
+| --- | --- | --- |
+| dissectors run on one frame (a tag stack, a chain of extension headers) | 32 | the walk stops, the frame is `malformed`, the rest is its payload |
+| datagrams being reassembled at once | `max_reassemblies` (256) | the oldest is discarded, `dropped` |
+| octets in one reassembled datagram | 65,535 | the datagram is discarded, `dropped` |
+| fragments of one datagram | 1,024 | the datagram is discarded, `dropped` |
+| capture time between a datagram's first fragment and a later one | `reassembly_timeout` (30 s) | the datagram is discarded, `dropped`, and a new one starts |
+
+A fragment costs a binary search and one insertion whatever the order of
+arrival, and a full table holds at most about 250 KiB for each reassembly in
+flight.
+
+**TCP is read a segment at a time.** `TCPLayer` is the header and
+`payload_of(TCPLayer)` the segment's octets; streams are not reassembled, so a
+message split across segments is for the caller to put together.
+
+## The UDP datagram view
+
+What a UDP protocol library works on, built on the dissection above.
+
+**`read_datagrams(source, *, dissector=None, max_frame_size=262144) -> Iterator[CapturedDatagram]`**
+— `read_dissected` through `DissectedFrame.datagram`: every UDP datagram of a
+capture, in capture order, IP fragments reassembled. Frames that carry no UDP
+are not yielded; pass a `dissector` and read its `stats` to tell an empty
+capture from one of a link type nothing dissects.
 
 **`CapturedDatagram(time, source, destination, payload, fragmented=False, truncated=False)`**
 — a named tuple: one UDP datagram from a capture.
 
 - `source` and `destination` are `(host, port)` pairs, the host as address
   text: usable as a socket address, and as `netimps.SocketAddress`.
+- `payload` is the octets after the UDP header, **whatever dissected them
+  further**: a protocol's registered dissector does not change it.
 - **An address on the wire is not rewritten.** A v4-mapped IPv6 address stays
   mapped, and is written `::ffff:10.0.0.5` on every Python (the standard
   library writes `::ffff:a00:5` before 3.13).
 - `time` of a reassembled datagram is that of the fragment that completed it.
 - `fragmented`: `payload` is only what the first IP fragment carried. Set
-  only by a decoder built with `reassemble=False`.
+  only under a dissector built with `reassemble=False`.
 - `truncated`: `payload` is shorter than the datagram's own length field says,
   because the capture's snap length cut the frame. **Check it before reading a
   short payload as a short message.**
 
-**`FrameDecoder(*, reassemble=True, max_reassemblies=256, reassembly_timeout=30.0)`**
-— decodes frames, keeping IP fragment state between them. Feed it every frame
-of a capture, in order. Not safe to share between threads. `ValueError` for a
-limit that is not positive.
+## Writing a capture
 
-- **`FrameDecoder.decode(frame) -> List[CapturedDatagram]`** — the datagram
-  `frame` (a `CapturedFrame`) carries or completes, as a list of one; an empty
-  list for anything else. **It never raises for a frame**: what it could not
-  use is counted.
-- **`FrameDecoder.stats`** — a `DecodeStats` snapshot of the counters.
-- `reassemble=False` keeps no state: a first fragment is returned with
-  `fragmented=True` and the octets it carries; later fragments are counted and
-  passed over.
-- Fragments of anything that is not UDP are never held.
-- **A fragment that overlaps another discards its whole datagram**, in IPv4 as
-  in IPv6 (RFC 5722 requires it for IPv6). The same fragment seen twice, octet
-  for octet, is ignored: a capture taken on a bridge shows a frame more than
-  once.
-
-**`DecodeStats(frames, datagrams, ignored, malformed, unsupported, fragments, dropped, pending)`**
-— a named tuple of counts.
-
-| Field | Counts |
-| --- | --- |
-| `frames` | frames given to `decode` |
-| `datagrams` | UDP datagrams returned |
-| `ignored` | well-formed frames that are not UDP over IP: ARP, TCP, ICMP |
-| `malformed` | frames cut short or inconsistent |
-| `unsupported` | frames of a link type not in `LINKTYPES`; each such type is logged once, at `WARNING` on the logger `pktcap._frames`, for the first eight |
-| `fragments` | frames that were IP fragments of a UDP datagram |
-| `dropped` | reassemblies discarded: an overlap, a ceiling, old age |
-| `pending` | reassemblies still waiting for a fragment |
-
-A capture that decodes to nothing is told from an empty one by these:
-`unsupported` equal to `frames` is a link type this library does not read.
-
-**`LINKTYPES`** — a read-only mapping from the `LINKTYPE_` numbers understood
-to a name: `0` NULL, `1` ETHERNET (up to eight VLAN or QinQ tags are skipped),
-`12`, `14` and `101` RAW, `108` LOOP, `113` LINUX_SLL, `228` IPV4, `229` IPV6,
-`276` LINUX_SLL2. IPv4 options and the IPv6 hop-by-hop, routing, destination
-and fragment headers are read.
-
-Ceilings:
-
-| What a frame or a capture states | Ceiling | At the ceiling |
-| --- | --- | --- |
-| datagrams being reassembled at once | `max_reassemblies` (256) | the oldest is discarded, `dropped` |
-| octets in one reassembled datagram | 65,535 | the datagram is discarded, `dropped` |
-| fragments of one datagram | 1,024 | the datagram is discarded, `dropped` |
-| capture time between a datagram's first fragment and a later one | `reassembly_timeout` (30 s) | the datagram is discarded, `dropped`, and a new one starts |
-| IPv6 extension headers in one packet | 64 | the frame is `malformed` |
-| VLAN tags on one frame | 8 | the frame is `malformed` |
-
-A fragment costs a binary search and one insertion whatever the order of
-arrival, and a full table holds at most about 250 KiB for each reassembly in
-flight.
-
-## Writing a pcap capture
-
-**`PcapWriter(target)`** — writes UDP datagrams as a pcap file that tcpdump and
-Wireshark read: little-endian, microsecond, link type RAW (101). A datagram
-seen at a socket has no IP header left, so each is written under synthesised
-IPv4 or IPv6 and UDP headers with valid checksums. A context manager.
+**`PcapWriter(target)`** and **`PcapngWriter(target)`** — write a capture that
+tcpdump and Wireshark read. The same three methods; each is a context manager.
 
 - `target` is a path or a binary stream. A stream stays the caller's to
-  close; a path this writer opened is closed by `close()`.
+  close; a path the writer opened is closed by `close()`.
 - **Constructing a writer touches nothing.** A path is opened, an existing
-  file replaced and the file header written by the first `write`; a writer
-  that never writes creates no file.
+  file replaced and the file's opening octets written by the first write; a
+  writer that never writes creates no file. Each record is flushed, so a
+  capture can be read while it grows.
+- **`PcapWriter.write_frame(frame) -> None`** — append a `CapturedFrame` as it
+  is: its octets, its link type, its time to the microsecond. A capture read
+  with `read_frames` and written back holds the same frames, octet for octet.
+  A frame is at most 262,144 octets.
 - **`PcapWriter.write(time, source, destination, payload) -> None`** — append
-  one datagram. `source` and `destination` are `netimps.SocketAddress` values:
-  `(host, port)` or the four-item IPv6 form, the host as address text with or
-  without a `%zone`. `time` is seconds since the epoch, from 0 up to 2**32,
-  kept to the microsecond. `payload` is at most 65,507 octets for IPv4 and
-  65,527 for IPv6.
-- **`PcapWriter.write_datagram(datagram) -> None`** — the same for a
-  `CapturedDatagram`. A `fragmented` or `truncated` one is written with the
-  payload it has; the capture does not record that it was partial.
+  one UDP datagram seen at a socket, which has no link or IP header left: it
+  is written as raw IP (link type 101) under synthesised IPv4 or IPv6 and UDP
+  headers with valid checksums. `source` and `destination` are
+  `netimps.SocketAddress` values: `(host, port)` or the four-item IPv6 form,
+  the host as address text with or without a `%zone`. `time` is seconds since
+  the epoch, from 0 up to 2**32. `payload` is at most 65,507 octets for IPv4
+  and 65,527 for IPv6. A v4-mapped address is written as IPv4; a datagram
+  with one IPv4 and one IPv6 end is written as IPv6, the IPv4 end mapped.
+- **`PcapWriter.write_datagram(datagram) -> None`** — `write` for a
+  `CapturedDatagram`. A partial one is written with the payload it has.
 - **`PcapWriter.close() -> None`** — complete on return, harmless when
   repeated. A closed writer refuses to write.
-- A v4-mapped IPv6 address is written as IPv4, which is what was on the wire
-  when a dual-stack socket reported it; a datagram with one IPv4 and one IPv6
-  end is written as IPv6, the IPv4 end in its mapped form.
-- Each record is flushed, so a capture can be read while it grows.
+- **A pcap file has one link type**, fixed by the first thing written (101 for
+  a datagram, the frame's own for a frame); `PcapWriter` refuses a write of
+  another with `ValueError`. **`PcapngWriter` holds any mix**: it describes
+  one interface per link type, in the order they are first written, so a
+  capture of several link types round-trips through it. A frame's `interface`
+  number is not kept. It writes no option: nothing about the host, the tool
+  or the interfaces beyond their link types.
 - Raises `ValueError` for a host that is not an address (a name is not looked
-  up), a port outside 0-65535, a payload too long, a time out of range or a
-  closed writer, and `TypeError` for an argument of the wrong type; in every
-  case nothing is written. `OSError` when the path cannot be opened.
-- Not safe to share between threads: serialise the calls.
-
-pcapng is read and not written.
+  up), a port outside 0-65535, a payload or frame too long, a time out of
+  range, a link type outside 0-65535 or a closed writer, and `TypeError` for
+  an argument of the wrong type; in every case nothing is written. `OSError`
+  when the path cannot be opened.
 
 ## Writing in a named format
 
-One writer for every output a capture tool offers. `pcap` takes the datagram;
-a record format takes a **record**: plain data (`dict`, `list`, `str`, `int`,
-`float`, `bool`, `None`) that the protocol library made from one of its
-messages. What each record format writes, exactly: `pktcap/_formats/AGENTS.md`.
+A capture format takes the frame or datagram itself; a record format takes a
+**record**: plain data (`dict`, `list`, `str`, `int`, `float`, `bool`,
+`None`) describing it.
 
-**`OUTPUT_FORMATS`** — `("pcap", "json", "yaml", "toml", "ini")`, and
-**`RECORD_FORMATS`** — the last four. `yaml` needs the `yaml` extra and `toml`
-the `toml` extra; a format whose extra is missing stays in both tuples.
+**`OUTPUT_FORMATS`** — `("pcap", "pcapng", "json", "yaml", "toml", "ini")`,
+and **`RECORD_FORMATS`** — the last four. `yaml` needs the `yaml` extra and
+`toml` the `toml` extra; a format whose extra is missing stays in both tuples.
 
 **`has_output_format(name) -> bool`** — whether that format can be written on
 this installation. `UnsupportedFormatError` for a name that is no format.
@@ -217,87 +284,108 @@ in a newline. `ImportError` naming the extra when it is missing.
 `source` and `destination` as `host:port` text (an IPv6 host in brackets),
 `length`, `payload` as hex, and `fragmented` or `truncated` only when true.
 
-**`CaptureWriter(target, format=None, *, per_record=False, append=False, fields=(), max_files=1000)`**
-— writes datagrams, or the records made of them, in one format. A context
-manager.
+**`frame_record(frame) -> Dict[str, Any]`** — the record of a
+`DissectedFrame`: `time`, `linktype`, `length` (of the captured frame),
+`layers` and `payload` (hex of what no dissector read); `interface`, `error`
+and `reassembled` only when they say something. `layers` is a list, outermost
+first, of one mapping per layer: `layer` is its name (the class name without
+`Layer`, in lower case: `ethernet`, `ipv4`, `udp`) and the rest its fields,
+octets as hex. A registered dissector's layer is written from its `_asdict()`
+or, when it is a mapping, its items.
 
-- `target` is a path or a **binary** stream (`sys.stdout.buffer`, not
-  `sys.stdout`); a stream stays the caller's to close.
-- `format=None` takes the format from the ending of the target's name
-  (`.pcap`, `.cap`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`,
-  `.ini`; letter case ignored, the longest ending wins). A name given wins
-  over the ending. Content is never sniffed. `UnsupportedFormatError`,
-  listing the formats, when neither says.
-- **`CaptureWriter.write(datagram, record=None, *, names=None) -> None`** —
-  `pcap` writes the datagram and ignores `record`. A record format writes
-  `record`, or `datagram_record(datagram)` when it is `None`.
-- **Nothing is opened until the first `write`**, and each record is flushed.
-  Without `append` an existing file is replaced then; `append=True` adds to
-  it (`json` and `yaml` stay valid streams; `pcap` cannot be appended to).
-- `toml` and `ini` hold one record per file, so they need `per_record=True`.
-- **`per_record=True`**: `target` is a file-name pattern in `str.format`
-  syntax, and each record goes to its own file, directories created as
-  needed. The writer fills `{timestamp}` (the datagram's time in UTC,
-  `20231114T221320.500000Z`), `{index}` (an `int` counting from 0, so
-  `{index:06d}` works) and `{format}`. The caller declares its own fields in
-  `fields=("xid", "client_id")` and gives their values in
-  `write(..., names={"xid": ..., "client_id": ...})`.
-- **`CaptureWriter.close() -> None`** — complete on return, harmless twice.
-- `CaptureWriter.format` is the format's name; `.written` counts what was
-  written and `.refused` the records a full budget turned away.
-- The checks made when the writer is built, each a `ValueError` unless
-  noted: a pattern that is malformed or uses anything but bare field names
-  (`{}`, `{0}`, `{xid.real}`); a pattern field that is neither built in nor in
-  `fields`; a `fields` entry that is built in; a stream of `toml` or `ini`;
-  `append` with `pcap`; `per_record` with a stream; a missing extra
-  (`ImportError`); a text stream (`TypeError`).
-- `write` raises `ValueError` for a closed writer or a field with no value,
-  and what `dumps_record` or `PcapWriter.write` raise; nothing is written.
+**`CaptureWriter`** — one writer for all six: a growing file, or one file per
+record under a name pattern. It takes a `CapturedDatagram` or a
+`DissectedFrame`; a capture format writes the item itself and a record format
+the record given, or `datagram_record` or `frame_record` of the item. Its
+signature, the name pattern, the file budget and every check are in
+`pktcap/_formats/AGENTS.md`.
 
-Ceilings, for a pattern field whose value a peer chose (a client identifier):
+## Filtering
 
-| What the network states | Ceiling | At the ceiling |
-| --- | --- | --- |
-| distinct files one writer creates | `max_files` (1,000) | the record is not written, `refused`, one `WARNING` on the logger `pktcap._output` |
-| characters one field value adds to a name | 64 | the rest is dropped |
+Clauses `key=value` or `key!=value` joined by `and`:
+`proto=tcp and host=10.0.0.0/8 and port!=22`. The grammar is shared; what a
+key means is the builder's.
 
-A field value has every run of characters outside `A-Z a-z 0-9 _ . -`
-replaced by `_` and leading and trailing `.` and `_` removed (`unknown` when
-nothing is left), so it cannot hold a path separator or be `..`; a file name
-that Windows would open as a device (`NUL`, `COM1`) gets a leading `_`. A time
-outside any calendar is written as `t<seconds>`.
+**`parse_capture_filter(text) -> Tuple[FilterClause, ...]`** — the clauses, in
+order. `None`, empty or blank text is no clause.
+
+**`compile_capture_filter(text, build) -> Callable[[T], bool]`** — one
+predicate over the caller's own item type. `build(clause)` is called once per
+clause, when the filter is compiled and never per item, and returns the test
+for that clause; a `!=` clause is inverted for it; the predicate is true when
+every clause holds. `None` or blank text matches everything.
+
+- `build` raises `ValueError` for a key it does not know or a value that does
+  not convert. It is re-raised as `CaptureFilterError` naming the clause, the
+  original chained: one error at start-up, not one per packet. Any other
+  exception propagates; a `build` that returns something not callable is a
+  `TypeError`.
+
+**`frame_filter(clause) -> Callable[[DissectedFrame], bool]`** — the `build`
+for the built-in layers: `compile_capture_filter(text, frame_filter)` filters
+dissected frames. A comma in a value means "any of". **`FRAME_FILTER_KEYS`**
+is the keys, as a tuple, in this order:
+
+| Key | Matches |
+| --- | --- |
+| `src`, `dst`, `host` | the source, the destination, or either address of the outermost IP layer: an address or a network (`10.0.0.5`, `10.0.0.0/8`, `2001:db8::/32`). A v4-mapped address is the IPv4 host it stands for |
+| `sport`, `dport`, `port` | the source, the destination, or either port of the UDP or TCP layer |
+| `proto` | a layer the frame has, by name (`udp`, `tcp`, `ipv4`, `ipv6`, `vlan`, `ethernet`; for a registered dissector's layer, its class name in lower case without a trailing `Layer`), or an IP protocol number (`17`) |
+| `vlan` | a VLAN identifier on any tag of the frame |
+| `linktype` | the capture's link-type number |
+
+A frame without the layer a key asks about fails the clause, so its `!=` form
+holds. A protocol library adds its own keys by wrapping: its `build` answers
+the keys it knows and returns `frame_filter(clause)` for the rest.
+
+**`FilterClause(key, value, negated=False)`** — a named tuple. `key` is as
+written (case kept), `value` the text after the operator with surrounding
+space removed, `negated` whether the operator was `!=`.
+`FilterClause.values` is `value` split on commas, each item stripped and
+empty ones dropped. `str(clause)` is the canonical text, and parsing the
+clauses' texts joined by ` and ` gives the same clauses back.
+
+The dialect: `and` joins clauses in any letter case and needs space on both
+sides. **There is no `or`**: the word alone is refused by name, so a value
+cannot contain ` or ` or ` and `. A key is one or more of
+`A-Z a-z 0-9 _ . -`; the first `=` ends it and a `!` just before that `=`
+negates; everything after is the value and must not be blank, so a value may
+contain `=`. An expression is at most 4,096 characters. Each violation raises
+`CaptureFilterError`; text that is not `str` or `None` is a `TypeError`.
 
 ## Replaying a capture
 
-The datagrams of a capture again, in order and in time. Three functions over
-one schedule; the options `speed`, `max_delay` and `limit` mean the same in
-each.
+What a capture holds again, in order and in time. Three functions over one
+schedule; the options `speed`, `max_delay` and `limit` mean the same in each.
 
 `source` (`ReplaySource`) is a path or binary stream of a pcap or pcapng
-capture, **or any iterable of `CapturedDatagram`**: choosing which datagrams
-to replay is a generator expression, and the waits are then the gaps between
-the ones chosen.
+capture, read as its UDP datagrams, **or any iterable of items with a `time`
+in seconds**: `CapturedDatagram`, `CapturedFrame` or `DissectedFrame`, so
+`read_dissected(path)` replays every frame, and a generator expression
+chooses which. The waits are the gaps between the items given.
 
-**`replay_schedule(source, *, speed=1.0, max_delay=5.0, limit=None) -> Iterator[Tuple[float, CapturedDatagram]]`**
-— `(delay, datagram)` for each datagram. `delay` is the seconds to wait before
-it: the time since the one before it in the capture, divided by `speed`. **It
-reads no clock and waits for nothing**, so an event loop drives it with its
-own sleep (`await asyncio.sleep(delay)`, then `endpoint.asend(...)`).
+**`replay_schedule(source, *, speed=1.0, max_delay=5.0, limit=None) -> Iterator[Tuple[float, item]]`**
+— `(delay, item)` for each item. `delay` is the seconds to wait before it: the
+time since the one before it, divided by `speed`. **It reads no clock and
+waits for nothing**, so an event loop drives it with its own sleep.
 
 **`replay(source, deliver, *, speed=1.0, max_delay=5.0, limit=None) -> int`**
-— blocks: sleeps each delay, calls `deliver(datagram)`, and returns how many
-were delivered. Partial datagrams are delivered too; an exception from
-`deliver` ends the replay and propagates. A protocol library that knows a
-reply goes to another port builds a faithful replay on this.
+— blocks: sleeps each delay, calls `deliver(item)`, and returns how many were
+delivered. An exception from `deliver` ends the replay and propagates. This is
+the replay for **anything that is not UDP**: what to do with a TCP segment or
+an ARP frame is the callable's.
 
 **`replay_to(source, dst, port, *, endpoint=None, speed=1.0, max_delay=5.0, limit=None) -> ReplayResult`**
-— blocks: sends each payload to `(dst, port)`.
+— blocks: sends the payload of each UDP datagram to `(dst, port)`.
 
 - **The destination is always the caller's.** The addresses recorded in the
   capture are never sent to. `dst` is `netimps.HostLike`; a name is looked up
   once. `port` is 1 to 65535.
-- **A datagram marked `fragmented` or `truncated` is not sent**, since its
-  payload is not the whole message: it is counted in `ReplayResult.partial`.
+- **Only datagrams are sent, as UDP payloads through an ordinary socket.** An
+  item that is not a `CapturedDatagram` is a `TypeError`. This library never
+  writes a raw frame to a network.
+- **A datagram marked `fragmented` or `truncated` is not sent**: it is counted
+  in `ReplayResult.partial`.
 - By default a UDP socket is made with `netimps.bind()` for `dst`'s address
   family (any free port, broadcast off) and closed on return. Pass a
   `netimps.UDPEndpoint` as `endpoint` to choose the source port or interface
@@ -312,28 +400,25 @@ datagrams passed over.
 | --- | --- |
 | `speed` | `1.0` keeps the recorded timing and is the default, so a replay sends no faster than the capture did; `2.0` halves every wait; **`None` removes them** and has to be asked for |
 | `max_delay` | the longest single wait, in seconds. A capture controls its timestamps, and a jump of a year must not hang a replay. A step backwards in time, or a time that is not a number, is a wait of zero |
-| `limit` | stop after this many datagrams; the source is not read past it |
+| `limit` | stop after this many items; the source is not read past it |
 
 `ValueError` for a `speed` that is not positive and finite, a `max_delay` or
 `limit` below zero, a `port` outside 1-65535 or an empty `dst`; `TypeError`
-for an option of the wrong type or a `deliver` that is not callable; all at
-the call, before anything is read or sent.
+for an option of the wrong type, a `deliver` that is not callable or an item
+with no `time`.
 
 ## Capturing live
 
-**Linux only**, through an `AF_PACKET` socket, and the process needs
-`CAP_NET_RAW` (root, or that capability granted). Everywhere else, and
-wherever a capture tool is preferred, pipe one in and read its output:
-
-```text
-tcpdump -i eth0 -U -w - udp | your-program     # read_datagrams(sys.stdin.buffer)
-dumpcap -i Ethernet -w - -f udp | your-program
-```
+**Linux only**, through an `AF_PACKET` socket, and the process needs the
+`CAP_NET_RAW` capability (root, or `setcap cap_net_raw+ep` on the
+interpreter). Everywhere else, and wherever a capture tool is preferred, pipe
+one in: `tcpdump -i eth0 -U -w - | your-program` and
+`read_dissected(sys.stdin.buffer)`. Capturing never sends anything.
 
 **`has_live_capture() -> bool`** — whether this platform has `AF_PACKET`. It
 says nothing about permission.
 
-**`LiveCapture(interface=None, *, timeout=1.0)`** — the IP packets on one
+**`LiveCapture(interface=None, *, timeout=1.0)`** — every packet on one
 interface, or on all of them when `interface` is `None`. A context manager;
 constructing one opens nothing.
 
@@ -343,10 +428,11 @@ constructing one opens nothing.
   nothing when already open. `LiveCaptureError` where the platform has no
   `AF_PACKET`, the kernel's `PermissionError` without the capability,
   `ValueError` when no interface matches.
-- **`LiveCapture.read() -> Optional[CapturedFrame]`** — the next IP packet, or
-  `None` when `timeout` seconds pass without one. Frames have link type 228
-  (IPv4) or 229 (IPv6) and the time they were read, ready for
-  `FrameDecoder.decode`. What is not IP is passed over.
+- **`LiveCapture.read() -> Optional[CapturedFrame]`** — the next packet, IP or
+  not, or `None` when `timeout` seconds pass without one. A frame has link
+  type 276 (Linux cooked capture v2, what tcpdump writes for its `any`
+  device), the time it was read and the interface's index: ready for a
+  `FrameDissector`, and for a writer, whose file other tools then read.
 - Iterating a capture yields frames until it is closed.
 - **`LiveCapture.fileno() -> int`** — the socket's descriptor, for a caller's
   own selector or event loop. There is no asynchronous twin.
@@ -355,66 +441,14 @@ constructing one opens nothing.
 - On a loopback device every packet is seen leaving and arriving; only the
   arriving copy is returned. Loopback is told by the device type the kernel
   reports, not by the name `lo`.
-- Live traffic is untrusted like a file: decode it with a `FrameDecoder`,
-  whose ceilings then apply.
 
-**`sniff(interface=None, *, stop=None, decoder=None) -> Iterator[CapturedDatagram]`**
-— `LiveCapture` and `FrameDecoder` in one call: UDP datagrams as they arrive.
-The socket is opened when the first datagram is asked for (which is when
-`LiveCaptureError` or `PermissionError` is raised) and closed when the
-iterator ends or is closed. `stop()` is called between packets, and at least
-once a second on a quiet interface; returning true ends the iteration.
-
-## The capture-filter expression
-
-The grammar two protocol libraries share: clauses `key=value` or `key!=value`
-joined by `and`. **What a key means, how a value converts and how a clause
-matches are the caller's**; this library owns the split into clauses, the
-negation and the conjunction.
-
-```text
-op=RRQ,WRQ and host=10.0.0.0/8
-msg_type=DHCPDISCOVER and option.53!=DHCPOFFER
-```
-
-**`parse_capture_filter(text) -> Tuple[FilterClause, ...]`** — the clauses, in
-order. `None`, empty or blank text is no clause.
-
-**`compile_capture_filter(text, build) -> Callable[[T], bool]`** — one
-predicate over the caller's own item type. `build(clause)` is called once per
-clause, when the filter is compiled and never per item, and returns the test
-for that clause's key and value; a `!=` clause is inverted for it; the
-predicate is true when every clause holds. `None` or blank text matches
-everything.
-
-- `build` raises `ValueError` for a key it does not know or a value that does
-  not convert. It is re-raised as `CaptureFilterError` naming the clause, the
-  original chained: one error at start-up, not one per packet.
-- A test may return anything truthy. Any other exception from `build`
-  propagates, and a `build` that returns something not callable is a
-  `TypeError`.
-
-**`FilterClause(key, value, negated=False)`** — a named tuple. `key` is as
-written (case kept), `value` the text after the operator with surrounding
-space removed, `negated` whether the operator was `!=`.
-
-- `FilterClause.values` — `value` split on commas, each item stripped and
-  empty ones dropped, for a key that reads a comma as "any of". `value`
-  itself is never split.
-- `str(clause)` is the canonical text, `key=value` or `key!=value`, and
-  parsing the clauses' texts joined by ` and ` gives the same clauses back.
-
-The dialect:
-
-- `and` joins clauses in any letter case and needs space on both sides.
-  **There is no `or`**: the word alone, in any case, is refused by name, so a
-  value cannot contain ` or ` or ` and `.
-- A key is one or more of `A-Z a-z 0-9 _ . -`. The first `=` ends it; a `!`
-  just before that `=` negates. Everything after is the value and must not be
-  blank, so a value may itself contain `=`.
-- An expression is at most 4,096 characters.
-- Each of these raises `CaptureFilterError`; text that is not `str` or `None`
-  is a `TypeError`.
+**`sniff(interface=None, *, stop=None, dissector=None) -> Iterator[CapturedDatagram]`**
+— `LiveCapture`, a `FrameDissector` and the datagram view in one call: UDP
+datagrams as they arrive. The socket is opened when the first datagram is
+asked for (which is when `LiveCaptureError` or `PermissionError` is raised)
+and closed when the iterator ends or is closed. `stop()` is called between
+packets, and at least once a second on a quiet interface; returning true ends
+the iteration.
 
 ## Exceptions
 
@@ -429,6 +463,7 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `CaptureFormatError` | `PktcapError`, `ValueError` | input that is not a pcap or pcapng capture, or is a damaged one |
 | `CaptureFilterError` | `PktcapError`, `ValueError` | a capture-filter expression that cannot be parsed or compiled |
 | `UnsupportedFormatError` | `PktcapError`, `ValueError` | an output format that does not exist, or that a file name does not tell |
+| `DissectError` | `PktcapError`, `ValueError` | raised **by a dissector** for octets that are not its layer. A caller of `FrameDissector` never sees it: it becomes the frame's `error` |
 | `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
 
 A format that exists and whose extra is not installed raises the builtin
@@ -442,30 +477,23 @@ file.
 
 ## Gotchas
 
-- **`read_frames`, `read_datagrams` and `replay_schedule` return iterators.**
-  Arguments are checked at the call; the file is opened and a damaged capture
-  raises only while iterating. Wrap the loop, not the call.
+- **The readers and `replay_schedule` return iterators.** Arguments are
+  checked at the call; the file is opened and a damaged capture raises only
+  while iterating. Wrap the loop, not the call.
 - **Zero datagrams is not "no traffic" until the counters agree.** Pass a
-  `FrameDecoder` and read `stats`: `unsupported` equal to `frames` is a link
-  type this library does not decode, `malformed` a capture cut too short.
+  `FrameDissector` and read `stats`: `unsupported` equal to `frames` is a
+  link type nothing dissects, `malformed` a capture cut too short.
+- **`register_dissector` changes the process.** Every `FrameDissector` built
+  without a registry sees it. A library that must not affect its host builds
+  its own `DissectorRegistry` and passes it.
+- **Installing a package registers nothing.** Entry points are not read: a
+  dissector is in a registry because some code put it there.
 - **A `CapturedDatagram` is not `netimps.Datagram`.** One is read from a
-  capture (time, both addresses, payload); the other is received on a socket
-  (data, sender, arrival interface).
-- **Check `truncated` and `fragmented` before reading a short payload as a
-  short message.** A capture taken with a small snap length gives every large
-  datagram a cut payload.
-- **`time` is whatever the capture says.** `0.0`, the year 36,812 and a value
-  that goes backwards are all possible; guard `datetime.fromtimestamp`.
-- **`speed=None` sends as fast as the socket takes it.** The default keeps
-  the recorded pace; a capture with a long silence replays it up to
-  `max_delay` each time.
-- **`PcapWriter` and `CaptureWriter` replace an existing file at the first
-  `write`**, not when they are built. `CaptureWriter(append=True)` adds to it.
-- **A stream must be binary**: `sys.stdin.buffer` and `sys.stdout.buffer`,
-  never `sys.stdin` or `sys.stdout`.
-- **Nothing here is safe to share between threads.** A decoder, a writer and a
-  live capture each keep state; give each thread its own or serialise.
+  capture (time, both addresses, payload); the other is received on a socket.
+- **A writer replaces an existing file at the first write**, not when it is
+  built. `CaptureWriter(append=True)` adds to a record file.
+- **Nothing here is safe to share between threads.** A frame dissector, a
+  writer and a live capture each keep state.
 - **This library configures no logging, installs no signal handler and
-  prints nothing.** It logs at `WARNING` on `pktcap._frames` (an unknown link
-  type, once each for the first eight) and `pktcap._output` (the file budget
-  reached, once per writer).
+  prints nothing.** It logs at `WARNING` on `pktcap._dissect` (a dissector
+  that failed) and `pktcap._output` (the file budget reached).

@@ -17,6 +17,39 @@ def udp(sport, dport, payload, *, length=None):
     return struct.pack("!HHHH", sport, dport, stated, 0) + payload
 
 
+def tcp(
+    sport,
+    dport,
+    payload=b"",
+    *,
+    flags=0x18,
+    sequence=1000,
+    acknowledgment=2000,
+    window=4096,
+    options=b"",
+    offset=None,
+):
+    """A TCP header and payload; ``offset`` overrides the stated header
+    length, in 32-bit words. ``options`` must be a multiple of 4 octets."""
+    words = (20 + len(options)) // 4 if offset is None else offset
+    return (
+        struct.pack(
+            "!HHIIBBHHH",
+            sport,
+            dport,
+            sequence,
+            acknowledgment,
+            words << 4,
+            flags,
+            window,
+            0,
+            0,
+        )
+        + options
+        + payload
+    )
+
+
 def ipv4(
     src, dst, body, *, ident=1, offset=0, more=False, protocol=17, total=None, ihl=5
 ):
@@ -69,10 +102,15 @@ def ipv6_extension(body, *, next_header=17, kind_length=0):
     return struct.pack("!BB6x", next_header, kind_length) + body
 
 
-def ethernet(ip, *, vlans=0, v6=False, ethertype=None):
+def ethernet(ip, *, vlans=0, v6=False, ethertype=None, tags=()):
+    """An Ethernet frame. ``vlans`` is how many 802.1Q tags for VLAN 5 come
+    before the payload; ``tags`` spells a tag stack out instead, as
+    ``(tag protocol identifier, tag control)`` pairs, outermost first."""
     kind = ethertype if ethertype is not None else (0x86DD if v6 else 0x0800)
-    tags = b"\x81\x00\x00\x05" * vlans
-    return b"\x02" * 6 + b"\x04" * 6 + tags + struct.pack("!H", kind) + ip
+    stack = b"\x81\x00\x00\x05" * vlans
+    for identifier, control in tags:
+        stack += struct.pack("!HH", identifier, control)
+    return b"\x02" * 6 + b"\x04" * 6 + stack + struct.pack("!H", kind) + ip
 
 
 def linux_sll(ip, *, v6=False):

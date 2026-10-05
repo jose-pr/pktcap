@@ -20,6 +20,30 @@
  "error": null,
  "exit_status": 0,
  "frames": 1,
+ "layers": [
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x0800",
+   "frame.cap_len": "59",
+   "frame.interface_id": "0",
+   "frame.number": "1",
+   "frame.protocols": "eth:ethertype:ip:udp:tftp",
+   "frame.time_epoch": "0.000000000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "45",
+   "ip.proto": "17",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  }
+ ],
  "reference": {
   "environment": "Linux aarch64",
   "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."

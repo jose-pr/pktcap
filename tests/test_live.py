@@ -1,4 +1,4 @@
-"""Live capture: its decoding path with the socket replaced, and the real
+"""Live capture: what it makes of a read with the socket replaced, and the real
 socket where the host allows it.
 
 Opening ``AF_PACKET`` needs Linux and ``CAP_NET_RAW``, so every test but the
@@ -17,11 +17,18 @@ import captures as build
 from pktcap import (
     CapturedDatagram,
     CapturedFrame,
-    FrameDecoder,
+    EthernetLayer,
+    FrameDissector,
+    IPv4Layer,
+    IPv6Layer,
+    LinuxCookedLayer,
     LiveCapture,
     LiveCaptureError,
+    PcapngWriter,
     PktcapError,
+    UDPLayer,
     has_live_capture,
+    read_dissected,
     sniff,
 )
 
@@ -142,21 +149,89 @@ def test_a_timeout_that_is_not_positive_is_refused(timeout, error):
 # -- what a read is worth -------------------------------------------------
 
 
-def test_ip_packets_come_back_as_frames_of_their_family(packet_socket):
-    packet_socket(_read(V4, 0x0800), _read(V6, 0x86DD))
+def test_every_packet_comes_back_as_a_cooked_frame(packet_socket):
+    """Linux cooked capture v2: what tcpdump writes for its `any` device."""
+    packet_socket(_read(V4, 0x0800), _read(V6, 0x86DD, HOST, LOOPBACK, "lo"))
     before = time.time()
     with LiveCapture() as capture:
         first, second = capture.read(), capture.read()
-    assert (first.linktype, first.data) == (228, V4)
-    assert (second.linktype, second.data) == (229, V6)
     assert isinstance(first, CapturedFrame) and before <= first.time <= time.time()
+    assert (first.linktype, second.linktype) == (276, 276)
+    assert first.data[20:] == V4 and second.data[20:] == V6
+    dissector = FrameDissector()
+    one, two = dissector.dissect(first), dissector.dissect(second)
+    assert [type(layer) for layer in one.layers] == [
+        LinuxCookedLayer,
+        IPv4Layer,
+        UDPLayer,
+    ]
+    assert [type(layer) for layer in two.layers] == [
+        LinuxCookedLayer,
+        IPv6Layer,
+        UDPLayer,
+    ]
+    cooked = one.layer(LinuxCookedLayer)
+    assert (cooked.packet_type, cooked.hardware_type, cooked.ethertype) == (
+        HOST,
+        ETHER,
+        0x0800,
+    )
+    assert cooked.address == "02" * 6
+    assert two.layer(LinuxCookedLayer).hardware_type == LOOPBACK
+    assert one.datagram().payload == b"request"
 
 
-def test_what_is_not_ip_is_passed_over(packet_socket):
-    arp = bytes(28)
-    packet_socket(_read(arp, 0x0806), _read(arp, 0x88CC), _read(V4, 0x0800))
+def test_a_sender_address_longer_than_the_header_holds_is_cut_to_fit(packet_socket):
+    """An InfiniBand address is 20 octets; the cooked header has room for 8."""
+    packet_socket((V4, ("ib0", 0x0800, HOST, 32, bytes(range(1, 21)))))
     with LiveCapture() as capture:
-        assert capture.read().data == V4
+        captured = capture.read()
+    # The header states the length it holds, for any tool that reads the file.
+    assert captured.data[11] == 8 and captured.data[20:] == V4
+    frame = FrameDissector().dissect(captured)
+    cooked = frame.layer(LinuxCookedLayer)
+    assert cooked.address == bytes(range(1, 9)).hex() and cooked.hardware_type == 32
+    assert frame.datagram().payload == b"request"
+
+
+def test_what_is_not_ip_comes_back_too(packet_socket):
+    arp = bytes(range(28))
+    packet_socket(_read(arp, 0x0806), _read(b"lldp", 0x88CC))
+    with LiveCapture() as capture:
+        frames = [FrameDissector().dissect(capture.read()) for _ in range(2)]
+    assert [f.layer(LinuxCookedLayer).ethertype for f in frames] == [0x0806, 0x88CC]
+    assert [f.payload for f in frames] == [arp, b"lldp"]
+
+
+def test_the_interface_index_is_in_the_frame(packet_socket):
+    loopback = next((i for i in get_interfaces() if i.is_loopback), None)
+    if loopback is None or not loopback.index:
+        pytest.skip("this host reports no loopback interface with an index")
+    packet_socket(
+        _read(V4, 0x0800, HOST, LOOPBACK, loopback.name),
+        _read(V4, 0x0800, name="gone0"),
+    )
+    with LiveCapture() as capture:
+        known, unknown = capture.read(), capture.read()
+    assert known.interface == loopback.index
+    assert (
+        FrameDissector().dissect(known).layer(LinuxCookedLayer).interface
+        == loopback.index
+    )
+    assert unknown.interface == 0  # an interface that has gone has no index
+
+
+def test_a_captured_frame_is_written_as_a_capture_other_tools_read(
+    packet_socket, tmp_path
+):
+    packet_socket(_read(V4, 0x0800), _read(bytes(28), 0x0806))
+    path = tmp_path / "live.pcapng"
+    with LiveCapture() as capture, PcapngWriter(path) as writer:
+        writer.write_frame(capture.read())
+        writer.write_frame(capture.read())
+    first, second = read_dissected(path)
+    assert first.frame.linktype == 276 and first.datagram().payload == b"request"
+    assert second.layer(EthernetLayer) is None and len(second.payload) == 28
 
 
 def test_loopback_gives_each_packet_once(packet_socket):
@@ -169,7 +244,7 @@ def test_loopback_gives_each_packet_once(packet_socket):
     )
     with LiveCapture() as capture:
         frames = [capture.read(), capture.read(), capture.read()]
-    assert [f.linktype if f else None for f in frames] == [228, 229, None]
+    assert [f.data[20:] if f else None for f in frames] == [V4, V6, None]
 
 
 def test_loopback_is_told_by_the_device_type_not_the_name(packet_socket):
@@ -194,10 +269,10 @@ def test_iterating_yields_frames_until_the_capture_is_closed(packet_socket):
     capture.open()
     seen = []
     for frame in capture:
-        seen.append(frame.linktype)
+        seen.append(frame.data[20:])
         if len(seen) == 2:
             capture.close()
-    assert seen == [228, 229]
+    assert seen == [V4, V6]
 
 
 # -- naming the interface -------------------------------------------------
@@ -252,23 +327,23 @@ def test_sniff_opens_at_the_first_datagram_and_closes_when_abandoned(packet_sock
     assert fake.closed
 
 
-def test_sniff_reassembles_and_a_decoder_passed_in_keeps_the_counts(packet_socket):
+def test_sniff_reassembles_and_a_dissector_passed_in_keeps_the_counts(packet_socket):
     datagram = build.udp(7, 9, b"f" * 64)
     packet_socket(
         _read(build.ipv4("10.0.0.5", "10.0.0.1", datagram[:32], more=True), 0x0800),
         _read(build.ipv4("10.0.0.5", "10.0.0.1", datagram[32:], offset=32), 0x0800),
     )
-    decoder = FrameDecoder()
+    dissector = FrameDissector()
     stops = iter([False, False, True])
-    (whole,) = list(sniff(stop=lambda: next(stops), decoder=decoder))
-    assert whole.payload == b"f" * 64 and decoder.stats.fragments == 2
+    (whole,) = list(sniff(stop=lambda: next(stops), dissector=dissector))
+    assert whole.payload == b"f" * 64 and dissector.stats.fragments == 2
 
 
 def test_sniff_checks_its_arguments_at_the_call(packet_socket):
     with pytest.raises(TypeError, match="callable"):
         sniff(stop=5)
-    with pytest.raises(TypeError, match="FrameDecoder"):
-        sniff(decoder=object())
+    with pytest.raises(TypeError, match="FrameDissector"):
+        sniff(dissector=object())
     assert packet_socket.opened == []
 
 
@@ -289,8 +364,9 @@ def test_the_real_socket_captures_a_loopback_datagram_once():
     except PermissionError:
         pytest.skip("opening AF_PACKET needs CAP_NET_RAW: run as root to cover it")
     payload = b"pktcap live capture test %d" % time.time_ns()
-    decoder = FrameDecoder()
+    dissector = FrameDissector()
     seen = []
+    others = 0
     with capture, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
         receiver.bind(("127.0.0.1", 0))
         sent_to = receiver.getsockname()[1]
@@ -304,7 +380,13 @@ def test_the_real_socket_captures_a_loopback_datagram_once():
                 if seen:
                     break
                 continue
-            seen += [d for d in decoder.decode(frame) if d.payload == payload]
+            assert frame.linktype == 276 and frame.interface == loopback.index
+            datagram = dissector.dissect(frame).datagram()
+            if datagram is not None and datagram.payload == payload:
+                seen.append(datagram)
+            else:
+                others += 1
     assert len(seen) == 1
     assert seen[0].source == ("127.0.0.1", sent_from)
     assert seen[0].destination == ("127.0.0.1", sent_to)
+    assert dissector.stats.malformed == 0 and dissector.stats.unsupported == 0

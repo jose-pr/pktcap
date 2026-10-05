@@ -16,27 +16,52 @@ EXPECTED = [
     "CaptureWriter",
     "CapturedDatagram",
     "CapturedFrame",
-    "DecodeStats",
+    "DissectError",
+    "DissectStats",
+    "Dissected",
+    "DissectedFrame",
+    "Dissector",
+    "DissectorRegistry",
+    "EthernetLayer",
+    "FRAME_FILTER_KEYS",
     "FilterClause",
-    "FrameDecoder",
+    "Fragment",
+    "FrameDissector",
+    "IPv4Layer",
+    "IPv6ExtensionLayer",
+    "IPv6FragmentLayer",
+    "IPv6Layer",
     "LINKTYPES",
+    "LinuxCookedLayer",
     "LiveCapture",
     "LiveCaptureError",
+    "LoopbackLayer",
     "OUTPUT_FORMATS",
     "PcapWriter",
+    "PcapngWriter",
     "PktcapError",
     "RECORD_FORMATS",
     "ReplayResult",
     "ReplaySource",
+    "Selector",
+    "TCPLayer",
+    "UDPLayer",
     "UnsupportedFormatError",
+    "VLANLayer",
+    "check_dissector",
     "compile_capture_filter",
     "datagram_record",
+    "default_registry",
     "dumps_record",
+    "frame_filter",
+    "frame_record",
     "has_live_capture",
     "has_output_format",
     "parse_capture_filter",
     "read_datagrams",
+    "read_dissected",
     "read_frames",
+    "register_dissector",
     "replay",
     "replay_schedule",
     "replay_to",
@@ -48,26 +73,47 @@ EXPECTED = [
 POSITIONAL = {
     # A datagram is four things, and there is nothing to name among them.
     "PcapWriter.write": 4,
+    "PcapngWriter.write": 4,
     # The expression and what turns a clause into a test: both are operands.
     "compile_capture_filter": 2,
     # What to write and the format to write it in, as `json.dump(obj, fp)`.
     "dumps_record": 2,
     "CaptureWriter": 2,
-    # The datagram and the record made of it.
+    # What was captured and the record made of it.
     "CaptureWriter.write": 2,
     # What to replay and who receives it.
     "replay": 2,
     # What to replay and where to: a host and a port, as `sendto` takes them.
     "replay_to": 3,
+    # A selector is two things, and a registration is a selector and a dissector.
+    "DissectorRegistry.register": 3,
+    "DissectorRegistry.unregister": 2,
+    "DissectorRegistry.get": 2,
+    "register_dissector": 3,
+    # The dissector under test and the octets to try it on.
+    "check_dissector": 2,
 }
 
 #: Named tuples are positional by nature.
 NAMED_TUPLES = (
     "CapturedDatagram",
     "CapturedFrame",
-    "DecodeStats",
+    "DissectStats",
+    "Dissected",
+    "DissectedFrame",
+    "EthernetLayer",
     "FilterClause",
+    "Fragment",
+    "IPv4Layer",
+    "IPv6ExtensionLayer",
+    "IPv6FragmentLayer",
+    "IPv6Layer",
+    "LinuxCookedLayer",
+    "LoopbackLayer",
     "ReplayResult",
+    "TCPLayer",
+    "UDPLayer",
+    "VLANLayer",
 )
 
 
@@ -109,12 +155,9 @@ def _functions():
             yield name, obj
         elif inspect.isclass(obj):
             yield name, obj.__init__
-            for member, value in vars(obj).items():
-                if member.startswith("_"):
-                    continue
-                if isinstance(value, (staticmethod, classmethod)):
-                    value = value.__func__
-                if inspect.isfunction(value):
+            # Inherited methods too: the two capture writers share theirs.
+            for member, value in inspect.getmembers(obj, inspect.isfunction):
+                if not member.startswith("_"):
                     yield "%s.%s" % (name, member), value
 
 

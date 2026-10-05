@@ -6,6 +6,7 @@ here and not in a reader's terminal. Nothing leaves the host: the one example
 that sends does so to a loopback socket it binds itself.
 """
 
+import json
 import pathlib
 import re
 import socket
@@ -48,7 +49,7 @@ def test_every_link_is_absolute():
 
 
 def test_the_overview_names_exactly_the_public_names():
-    named = set(re.findall(r"`([A-Za-z_]+)`", _section("API overview")))
+    named = set(re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)`", _section("API overview")))
     assert named - {"pktcap"} == set(pktcap.__all__)
 
 
@@ -65,14 +66,26 @@ def test_the_quick_start_examples_run(tmp_path, monkeypatch, capsys):
             if isinstance(value, socket.socket):
                 value.close()
     out = capsys.readouterr().out
-    assert "1700000000.0 ('192.0.2.5', 50000) ('192.0.2.1', 69) b'request'" in out
-    assert "DecodeStats(frames=3, datagrams=3, ignored=0, malformed=0" in out
+    assert "192.0.2.5 50000 -> 192.0.2.1 69 b'\\x00\\x01boot.efi" in out
+    assert "TFTPLayer(opcode=1, filename='boot.efi')" in out
+    assert "DissectStats(frames=3, malformed=0, failed=0, unsupported=0" in out
+    assert "1700000000.05 ('192.0.2.1', 40000) ('192.0.2.5', 50000) 8" in out
     assert '[record]\ntime = 1700000000.0\nsource = "192.0.2.5:50000"' in out
-    assert "[b'request']" in out
     assert "ReplayResult(sent=3, partial=0)" in out
-    assert "b'request'" in out.splitlines()[-1]
-    lines = (tmp_path / "trace.json").read_text(encoding="ascii").splitlines()
-    assert lines[0] == '{"size": 7, "to": 69}' and len(lines) == 3
+    assert out.splitlines()[-1] == "3 frames handed to a callable"
+    # The filter kept the one frame the registered dissector read.
+    (line,) = (tmp_path / "requests.jsonl").read_text(encoding="ascii").splitlines()
+    record = json.loads(line)
+    assert [layer["layer"] for layer in record["layers"]] == ["ipv4", "udp", "tftp"]
+    assert record["layers"][-1] == {
+        "layer": "tftp",
+        "opcode": 1,
+        "filename": "boot.efi",
+    }
+    # The copy holds the frames of the original, octet for octet.
+    assert [f.data for f in pktcap.read_frames(tmp_path / "copy.pcapng")] == [
+        f.data for f in pktcap.read_frames(tmp_path / "trace.pcap")
+    ]
 
 
 def test_the_installation_table_names_the_declared_extras():

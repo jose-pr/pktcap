@@ -3,6 +3,7 @@
  "error": "tshark: The file \"case\" isn't a capture file in a format TShark understands.",
  "exit_status": 3,
  "frames": 0,
+ "layers": [],
  "reference": {
   "environment": "Linux aarch64",
   "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."

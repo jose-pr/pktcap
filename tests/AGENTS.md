@@ -29,14 +29,17 @@ prints the reason for every skip: a skip is not a pass.
 | `typing/api.py` | the static-typing contract of a caller; never executed, checked by `mypy tests/typing/api.py` |
 | `captures.py` | not a test: builders for headers, frames, pcap records and pcapng blocks, each able to state a wrong length; `Pipe`, a stream that cannot seek and records the largest read asked of it |
 | `test_container.py` | `read_frames`: both containers, byte orders and resolutions; every way a capture is damaged; what a hostile one can cost; two seeded fuzzes |
-| `test_frames.py` | `FrameDecoder` and `read_datagrams`: every link type, IPv4 and IPv6 headers, what is counted as ignored, malformed or unsupported, truncation, the per-frame ceilings, a seeded fuzz per link type |
-| `test_writer.py` | `PcapWriter`: the round trip through `read_datagrams`, checksums, the lazy open, what a bad argument leaves untouched |
-| `test_filter.py` | the filter grammar: the expressions both protocol libraries use, what is refused, the round trip of the canonical text, compiling with a caller's builder |
+| `test_registry.py` | `DissectorRegistry`, the default registry and `check_dissector`: a taken selector, replacing, two registries sharing nothing, a dissector that breaks the contract failing the check |
+| `test_dissectors.py` | each built-in dissector called on its own: every field of every layer, every header cut short or lying about its length, and `check_dissector` over each with 5,000 damaged inputs |
+| `test_dissect.py` | `FrameDissector`, `read_dissected` and `read_datagrams`: the walk under every link type, what ends it, the 32-dissector ceiling, a registered dissector that refuses its octets or fails outright, the datagram view, a seeded fuzz per link type |
+| `test_writer.py` | `PcapWriter` and `PcapngWriter`: datagrams under synthesised headers with their checksums, frames written back octet for octet, one link type per pcap file and any mix in pcapng, the lazy open, what a bad argument leaves untouched |
+| `test_filter.py` | the filter grammar: the expressions protocol libraries use, what is refused, the round trip of the canonical text, compiling with a caller's builder |
+| `test_frame_filter.py` | `frame_filter`: each built-in key against IPv4, IPv6, TCP, UDP and tagged frames, a frame without the layer, a wrong value, a caller's own keys on top |
 | `test_formats.py` | the record formats: one contract suite over every name in `RECORD_FORMATS` (the text parses back with a parser this library did not write), then each format's dialect and the missing-extra message |
-| `test_output.py` | `CaptureWriter`: every format as a growing file and as one file per record, choosing the format, the name pattern, the file budget, values that try to leave the directory |
-| `test_replay.py` | `replay_schedule`, `replay` and `replay_to`: the waits and their cap, the limit, sends to loopback sockets the test owns over IPv4 and IPv6, partial datagrams, and that the guard sees a replay that would leave the host |
-| `test_live.py` | `LiveCapture` and `sniff` with the privileged socket replaced: the lifecycle, what a read is worth, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
-| `test_reassembly.py` | IP reassembly through `FrameDecoder`: any order, both families, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
+| `test_output.py` | `CaptureWriter`: every format as a growing file and as one file per record, datagrams and dissected frames, choosing the format, the name pattern, the file budget, values that try to leave the directory |
+| `test_replay.py` | `replay_schedule`, `replay` and `replay_to`: the waits and their cap, the limit, sends to loopback sockets the test owns over IPv4 and IPv6, partial datagrams, frames replayed to a callable and never sent, and that the guard sees a replay that would leave the host |
+| `test_live.py` | `LiveCapture` and `sniff` with the privileged socket replaced: the lifecycle, every packet as a cooked frame, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
+| `test_reassembly.py` | IP reassembly through `FrameDissector`: any order, both families, any protocol, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
 ## Conformance
 
@@ -45,7 +48,7 @@ capture in `conformance/cases/`, and replays it with no tool installed.
 
 | File | What it is |
 | --- | --- |
-| `conformance/cases/<kind>-<origin>-<topic>/` | one case: the input (`case.pcap`, `case.pcapng`, or `case.json` for what `PcapWriter` is asked to write) and `golden.json`, tshark's answer. `read-` cases decode alike, `refuse-` cases are refused alike, `write-` cases are read by tshark with every checksum good |
+| `conformance/cases/<kind>-<origin>-<topic>/` | one case: the input (`case.pcap`, `case.pcapng`, or `case.json` for what a writer is asked to write) and `golden.json`, tshark's answer: per frame, the fields of each layer this library dissects; per UDP datagram, its addresses and payload. `read-` cases are read alike, layer by layer; `refuse-` cases are refused alike; `write-` cases are read by tshark as the frames or datagrams asked for |
 | `conformance/test_conformance.py` | the replay; also asserts the README's "Differences from tshark" table is exactly `deviations.json` |
 | `conformance/deviations.json` | hand-written: the cases where pktcap differs on purpose, with the sentence the README prints and what pktcap does |
 | `conformance/build_cases.py` | development only: writes the hand-built cases octet by octet |

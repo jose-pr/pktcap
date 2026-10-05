@@ -3,6 +3,7 @@
  "error": "tshark: The file \"case\" appears to have been cut short in the middle of a packet.",
  "exit_status": 14,
  "frames": 0,
+ "layers": [],
  "reference": {
   "environment": "Linux aarch64",
   "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."

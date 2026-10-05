@@ -20,6 +20,22 @@
  "error": null,
  "exit_status": 0,
  "frames": 1,
+ "layers": [
+  {
+   "frame.cap_len": "81",
+   "frame.number": "1",
+   "frame.protocols": "raw:ipv6:ipv6.hopopts:ipv6.dstopts:udp:tftp",
+   "frame.time_epoch": "1700000000.000000000",
+   "ipv6.dst": "2001:db8::1",
+   "ipv6.hlim": "64",
+   "ipv6.nxt": "0",
+   "ipv6.plen": "41",
+   "ipv6.src": "2001:db8::5",
+   "udp.dstport": "69",
+   "udp.length": "25",
+   "udp.srcport": "50000"
+  }
+ ],
  "reference": {
   "environment": "Linux aarch64",
   "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."

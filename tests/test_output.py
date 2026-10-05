@@ -9,12 +9,20 @@ import sys
 
 import pytest
 
+import captures as build
 from pktcap import (
     CapturedDatagram,
+    CapturedFrame,
     CaptureWriter,
+    Dissected,
+    DissectorRegistry,
+    FrameDissector,
     UnsupportedFormatError,
     datagram_record,
+    dumps_record,
+    frame_record,
     read_datagrams,
+    read_frames,
 )
 
 FIRST = CapturedDatagram(
@@ -187,14 +195,18 @@ def test_a_name_given_wins_over_the_file_name():
     assert CaptureWriter("x.pcap", "JSON").format == "json"
 
 
-@pytest.mark.parametrize("target", ["capture", "x.pcapng", "x.txt", io.BytesIO()])
+@pytest.mark.parametrize("target", ["capture", "x.pcapx", "x.txt", io.BytesIO()])
 def test_a_format_that_cannot_be_told_must_be_named(target):
-    with pytest.raises(UnsupportedFormatError, match="pcap, json, yaml, toml, ini"):
+    with pytest.raises(
+        UnsupportedFormatError, match="pcap, pcapng, json, yaml, toml, ini"
+    ):
         CaptureWriter(target)
 
 
 def test_an_unknown_format_names_the_ones_there_are():
-    with pytest.raises(UnsupportedFormatError, match="pcap, json, yaml, toml, ini"):
+    with pytest.raises(
+        UnsupportedFormatError, match="pcap, pcapng, json, yaml, toml, ini"
+    ):
         CaptureWriter("x.json", "xml")
 
 
@@ -218,9 +230,149 @@ def test_a_format_of_one_record_per_file_refuses_to_be_a_stream(name):
         CaptureWriter(io.BytesIO(), name)
 
 
-def test_pcap_cannot_be_appended_to():
-    with pytest.raises(ValueError, match="cannot be appended"):
+def test_a_capture_file_cannot_be_appended_to():
+    with pytest.raises(ValueError, match="pcap capture cannot be appended"):
         CaptureWriter("x.pcap", append=True)
+    with pytest.raises(ValueError, match="pcapng capture cannot be appended"):
+        CaptureWriter("x.pcapng", append=True)
+
+
+# -- frames ---------------------------------------------------------------
+
+UDP = build.udp(50000, 69, b"\x00\x01boot\x00")
+DISSECTOR = FrameDissector()
+FRAMES = [
+    DISSECTOR.dissect(
+        CapturedFrame(
+            1_700_000_000.0,
+            1,
+            build.ethernet(build.ipv4("10.0.0.5", "10.0.0.1", UDP), vlans=1),
+        )
+    ),
+    DISSECTOR.dissect(
+        CapturedFrame(1_700_000_001.0, 1, b"\x02" * 12 + b"\x08\x06" + bytes(28))
+    ),
+    DISSECTOR.dissect(CapturedFrame(1_700_000_002.0, 113, b"short")),
+]
+
+
+def test_the_record_of_a_frame_lists_its_layers_as_plain_data():
+    assert frame_record(FRAMES[0]) == {
+        "time": 1_700_000_000.0,
+        "linktype": 1,
+        "length": len(FRAMES[0].frame.data),
+        "layers": [
+            {
+                "layer": "ethernet",
+                "destination": "02:02:02:02:02:02",
+                "source": "04:04:04:04:04:04",
+                "ethertype": 0x8100,
+            },
+            {
+                "layer": "vlan",
+                "id": 5,
+                "priority": 0,
+                "drop_eligible": False,
+                "ethertype": 0x0800,
+            },
+            {
+                "layer": "ipv4",
+                "source": "10.0.0.5",
+                "destination": "10.0.0.1",
+                "protocol": 17,
+                "ttl": 64,
+                "identification": 1,
+                "dont_fragment": False,
+                "more_fragments": False,
+                "fragment_offset": 0,
+                "length": 20 + len(UDP),
+            },
+            {
+                "layer": "udp",
+                "source_port": 50000,
+                "destination_port": 69,
+                "length": len(UDP),
+                "checksum": 0,
+            },
+        ],
+        "payload": b"\x00\x01boot\x00".hex(),
+    }
+
+
+def test_a_frame_record_says_what_went_wrong_and_what_was_left():
+    arp, broken = frame_record(FRAMES[1]), frame_record(FRAMES[2])
+    assert [layer["layer"] for layer in arp["layers"]] == ["ethernet"]
+    assert arp["payload"] == bytes(28).hex() and "error" not in arp
+    assert broken["layers"] == [] and broken["payload"] == b"short".hex()
+    assert broken["error"].startswith("linktype 113: a Linux cooked header")
+
+
+def test_a_layer_from_a_registered_dissector_is_in_the_record_and_octets_are_hex():
+    registry = DissectorRegistry()
+    registry.register(
+        "udp", 69, lambda data: Dissected({"opcode": 1, "raw": data[:2]}, data[2:])
+    )
+    frame = FrameDissector(registry).dissect(FRAMES[0].frame)
+    assert frame_record(frame)["layers"][-1] == {
+        "layer": "dict",
+        "opcode": 1,
+        "raw": "0001",
+    }
+    # Every format can write it.
+    for name in ("json", "yaml", "toml", "ini"):
+        assert dumps_record(frame_record(frame), name)
+
+
+@pytest.mark.parametrize("name", ["pcap", "pcapng"])
+def test_a_capture_format_writes_a_frame_as_it_was_captured(name, tmp_path):
+    path = tmp_path / ("out." + name)
+    same_link_type = FRAMES[:2]
+    with CaptureWriter(path) as writer:
+        for frame in same_link_type:
+            writer.write(frame)
+    assert writer.format == name and writer.written == 2
+    assert [f.data for f in read_frames(path)] == [f.frame.data for f in same_link_type]
+    assert [f.linktype for f in read_frames(path)] == [1, 1]
+
+
+def test_pcapng_takes_frames_of_several_link_types_and_datagrams_together(tmp_path):
+    path = tmp_path / "mixed.pcapng"
+    with CaptureWriter(path) as writer:
+        for frame in FRAMES:
+            writer.write(frame)
+        writer.write(FIRST)
+    assert [f.linktype for f in read_frames(path)] == [1, 1, 113, 101]
+    with CaptureWriter(tmp_path / "one.pcap") as pcap:
+        pcap.write(FRAMES[0])
+        with pytest.raises(ValueError, match="link type 1 and cannot take 113"):
+            pcap.write(FRAMES[2])
+
+
+def test_a_record_format_writes_the_frame_record_by_default(tmp_path):
+    path = tmp_path / "frames.json"
+    with CaptureWriter(path) as writer:
+        for frame in FRAMES:
+            writer.write(frame)
+    lines = path.read_text("ascii").splitlines()
+    assert [json.loads(line) for line in lines] == [frame_record(f) for f in FRAMES]
+
+
+def test_one_file_per_frame_in_a_capture_format(tmp_path):
+    pattern = str(tmp_path / "f{index}.pcapng")
+    with CaptureWriter(pattern, per_record=True) as writer:
+        for frame in FRAMES:
+            writer.write(frame)
+    assert sorted(os.listdir(tmp_path)) == ["f0.pcapng", "f1.pcapng", "f2.pcapng"]
+    (only,) = read_frames(tmp_path / "f2.pcapng")
+    assert (only.linktype, only.data) == (113, b"short")
+
+
+@pytest.mark.parametrize("item", [None, b"octets", FRAMES[0].frame, ("a", "b")])
+def test_an_item_that_is_neither_datagram_nor_dissected_frame_is_a_type_error(item):
+    stream = io.BytesIO()
+    with pytest.raises(TypeError, match="CapturedDatagram or a DissectedFrame"):
+        CaptureWriter(stream, "json").write(item)
+    assert stream.getvalue() == b""
 
 
 def test_a_text_stream_is_refused_by_name():

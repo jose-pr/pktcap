@@ -1,8 +1,9 @@
 """Writing what was captured, in a format chosen by name (internal).
 
-One writer for every output: pcap takes the datagram, the record formats take
-the record a protocol library made of it. The container is this module's: one
-growing file, or one file per record under a name pattern.
+One writer for every output: a capture format (pcap, pcapng) takes the frame
+or the datagram itself, a record format takes the record made of it. The
+container is this module's: one growing file, or one file per record under a
+name pattern.
 """
 
 from __future__ import annotations
@@ -28,14 +29,14 @@ from typing import (
     Union,
 )
 
-from netimps import join_host
-
 from ._captured import CapturedDatagram
-from ._formats import PCAP, infer_format, record_format
+from ._dissect import DissectedFrame
+from ._formats import CAPTURE_FORMATS, infer_format, record_format
 from ._formats._contract import RecordFormat
-from ._writer import pcap_file_header, pcap_record
+from ._records import datagram_record, frame_record
+from ._writer import PcapngWriter, PcapWriter
 
-__all__ = ["CaptureWriter", "datagram_record"]
+__all__ = ["CaptureWriter"]
 
 _LOG = logging.getLogger(__name__)
 
@@ -51,28 +52,6 @@ _DEVICES = frozenset(
     + ["COM%d" % n for n in range(1, 10)]
     + ["LPT%d" % n for n in range(1, 10)]
 )
-
-
-def datagram_record(datagram: CapturedDatagram) -> Dict[str, Any]:
-    """The record of a datagram for a caller with no protocol to decode it:
-    ``time``, ``source``, ``destination``, ``length`` and ``payload`` as hex,
-    plus ``fragmented`` or ``truncated`` when the datagram is partial.
-
-    ``source`` and ``destination`` are ``host:port`` text, an IPv6 host in
-    brackets. ``time`` is the number of seconds the capture states.
-    """
-    record: Dict[str, Any] = {
-        "time": datagram.time,
-        "source": join_host(datagram.source[0], datagram.source[1]),
-        "destination": join_host(datagram.destination[0], datagram.destination[1]),
-        "length": len(datagram.payload),
-        "payload": datagram.payload.hex(),
-    }
-    if datagram.fragmented:
-        record["fragmented"] = True
-    if datagram.truncated:
-        record["truncated"] = True
-    return record
 
 
 def _safe(value: object) -> str:
@@ -119,13 +98,16 @@ def _pattern_fields(pattern: str) -> FrozenSet[str]:
 
 
 class CaptureWriter:
-    """Writes captured datagrams, or the records made of them, in one format.
+    """Writes what was captured, or the records made of it, in one format.
 
-    ``pcap`` writes each datagram through :class:`PcapWriter`'s encoding and
-    ignores the record. A record format writes the record given with each
-    datagram, or :func:`datagram_record` of it when none is given: ``json``
-    one line per record, ``yaml`` one document per record. ``toml`` and
-    ``ini`` cannot hold two records in one file and need ``per_record=True``.
+    What is written is a :class:`CapturedDatagram` (the UDP view) or a
+    :class:`DissectedFrame` (anything). ``pcap`` and ``pcapng`` write the
+    datagram under synthesised headers, or the frame as captured, and ignore
+    the record. A record format writes the record given, or
+    :func:`datagram_record` or :func:`frame_record` when none is given:
+    ``json`` one line per record, ``yaml`` one document per record. ``toml``
+    and ``ini`` cannot hold two records in one file and need
+    ``per_record=True``.
 
     Constructing a writer opens nothing: the file is opened by the first
     ``write``. Not safe to share between threads.
@@ -135,7 +117,7 @@ class CaptureWriter:
     :param format: one of :data:`OUTPUT_FORMATS`. ``None`` takes it from the
         ending of ``target``'s name.
     :param per_record: write one file per record, named by the pattern.
-    :param append: add to an existing file. Not for ``pcap``.
+    :param append: add to an existing file. Not for ``pcap`` or ``pcapng``.
     :param fields: the pattern fields the caller will supply in ``names``, on
         top of ``timestamp``, ``index`` and ``format``.
     :param max_files: the most files a ``per_record`` writer creates. A field
@@ -166,7 +148,7 @@ class CaptureWriter:
             raise ValueError("max_files must be at least 1")
         self._format = infer_format(target, format)
         self._record_format: Optional[RecordFormat] = None
-        if self._format != PCAP:
+        if self._format not in CAPTURE_FORMATS:
             self._record_format = record_format(self._format)
             self._record_format.require()
             if not per_record and not self._record_format.streamable:
@@ -176,7 +158,7 @@ class CaptureWriter:
                     % self._format
                 )
         elif append:
-            raise ValueError("a pcap capture cannot be appended to")
+            raise ValueError("a %s capture cannot be appended to" % self._format)
         self._fields = tuple(fields)
         self._pattern: Optional[str] = None
         if per_record:
@@ -187,12 +169,12 @@ class CaptureWriter:
         self._append = bool(append)
         self._max_files = max_files
         self._file: Optional[BinaryIO] = None
+        self._capture: Optional[Union[PcapWriter, PcapngWriter]] = None
         self._paths: Set[str] = set()
         self._closed = False
         self._warned = False
         self._count = 0
-        self._ident = 0
-        #: Datagrams or records written.
+        #: Frames, datagrams or records written.
         self.written = 0
         #: Records not written because ``max_files`` had been reached.
         self.refused = 0
@@ -217,46 +199,70 @@ class CaptureWriter:
         """The name of the format being written."""
         return self._format
 
+    def _capture_writer(
+        self, target: Union[str, "os.PathLike[str]", BinaryIO]
+    ) -> Union[PcapWriter, PcapngWriter]:
+        return PcapngWriter(target) if self._format == "pcapng" else PcapWriter(target)
+
+    @staticmethod
+    def _capture_write(
+        writer: Union[PcapWriter, PcapngWriter],
+        item: Union[CapturedDatagram, DissectedFrame],
+    ) -> None:
+        if isinstance(item, DissectedFrame):
+            writer.write_frame(item.frame)
+        else:
+            writer.write_datagram(item)
+
     def write(
         self,
-        datagram: CapturedDatagram,
+        item: Union[CapturedDatagram, DissectedFrame],
         record: Optional[Mapping[str, Any]] = None,
         *,
         names: Optional[Mapping[str, object]] = None,
     ) -> None:
-        """Write one datagram, or the record made of it.
+        """Write one datagram or frame, or the record made of it.
 
-        :param datagram: what was captured. ``pcap`` writes it; a record
+        :param item: what was captured: a :class:`CapturedDatagram` or a
+            :class:`DissectedFrame`. A capture format writes it; a record
             format reads its time for ``{timestamp}``.
         :param record: plain data for a record format. ``None`` writes
-            :func:`datagram_record` of ``datagram``.
+            :func:`datagram_record` or :func:`frame_record` of ``item``.
         :param names: with ``per_record``, a value for each of ``fields``.
-        :raises ValueError: a closed writer, a field with no value, or a
-            datagram or record the format must refuse.
-        :raises TypeError: a record the format cannot represent.
+        :raises ValueError: a closed writer, a field with no value, or an
+            item or record the format must refuse.
+        :raises TypeError: an item of another type, or a record the format
+            cannot represent.
         :raises OSError: the file cannot be opened or written.
         """
         if self._closed:
             raise ValueError("the writer is closed")
-        if self._record_format is None:
-            data = pcap_record(
-                datagram.time,
-                datagram.source,
-                datagram.destination,
-                datagram.payload,
-                self._ident + 1,
-            )
-        else:
+        if not isinstance(item, (CapturedDatagram, DissectedFrame)):
+            raise TypeError("item must be a CapturedDatagram or a DissectedFrame")
+        data = b""
+        if self._record_format is not None:
             if record is None:
-                record = datagram_record(datagram)
+                if isinstance(item, DissectedFrame):
+                    record = frame_record(item)
+                else:
+                    record = datagram_record(item)
             elif not isinstance(record, Mapping):
                 raise TypeError("a record is a mapping")
             data = self._record_format.dumps(record).encode("utf-8")
-        index, self._count = self._count, self._count + 1
+        elif self._pattern is not None:
+            buffer = io.BytesIO()
+            self._capture_write(self._capture_writer(buffer), item)
+            data = buffer.getvalue()
         if self._pattern is not None:
-            self._write_file(self._pattern, datagram, data, index, names or {})
+            index, self._count = self._count, self._count + 1
+            self._write_file(self._pattern, item.time, data, index, names or {})
+        elif self._record_format is None:
+            if self._capture is None:
+                self._capture = self._capture_writer(self._target)
+            self._capture_write(self._capture, item)
+            self.written += 1
         else:
-            self._write_stream(data)
+            self._write_stream(self._record_format.separator.encode("ascii") + data)
 
     def _write_stream(self, data: bytes) -> None:
         if self._file is None:
@@ -264,12 +270,6 @@ class CaptureWriter:
                 self._file = open(self._target, "ab" if self._append else "wb")
             else:
                 self._file = self._target
-            if self._record_format is None:
-                self._file.write(pcap_file_header())
-        if self._record_format is None:
-            self._ident = (self._ident + 1) & 0xFFFF
-        else:
-            data = self._record_format.separator.encode("ascii") + data
         self._file.write(data)
         self._file.flush()
         self.written += 1
@@ -277,13 +277,13 @@ class CaptureWriter:
     def _write_file(
         self,
         pattern: str,
-        datagram: CapturedDatagram,
+        time: float,
         data: bytes,
         index: int,
         names: Mapping[str, object],
     ) -> None:
         values: Dict[str, object] = {
-            "timestamp": _timestamp(datagram.time),
+            "timestamp": _timestamp(time),
             "index": index,
             "format": self._format,
         }
@@ -312,8 +312,6 @@ class CaptureWriter:
             self._paths.add(path)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        if self._record_format is None:
-            data = pcap_file_header() + data
         with open(path, "wb") as handle:
             handle.write(data)
         self.written += 1
@@ -324,6 +322,9 @@ class CaptureWriter:
         opened, self._file = self._file, None
         if opened is not None and isinstance(self._target, (str, os.PathLike)):
             opened.close()
+        capture, self._capture = self._capture, None
+        if capture is not None:
+            capture.close()
 
     def __enter__(self) -> "CaptureWriter":
         return self
