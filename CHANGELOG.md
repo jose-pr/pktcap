@@ -25,5 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   decode is counted in `FrameDecoder.stats` (`DecodeStats`: `ignored`,
   `malformed`, `unsupported`, `dropped`, `pending`) and never raised; a
   datagram cut by the snap length is marked `truncated`.
+- `PcapWriter(target)` writes datagrams as pcap (link type RAW, IPv4 or IPv6
+  and UDP headers with valid checksums). The file is opened by the first
+  `write`, not by the constructor, so a writer that never writes creates no
+  file and replaces none. A payload over 65,507 octets (IPv4) or 65,527
+  (IPv6), a port outside 0-65535 and a time outside 0 to 2**32 raise
+  `ValueError` and write nothing.
 
 [Unreleased]: https://github.com/jose-pr/pktcap/commits/main

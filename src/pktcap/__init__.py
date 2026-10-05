@@ -16,6 +16,7 @@ from ._captured import CapturedDatagram, CapturedFrame
 from ._container import CaptureSource, read_frames
 from ._exceptions import CaptureFormatError, PktcapError
 from ._frames import LINKTYPES, DecodeStats, FrameDecoder, read_datagrams
+from ._writer import PcapWriter
 
 __all__ = [
     "CaptureFormatError",
@@ -25,6 +26,7 @@ __all__ = [
     "DecodeStats",
     "FrameDecoder",
     "LINKTYPES",
+    "PcapWriter",
     "PktcapError",
     "read_datagrams",
     "read_frames",

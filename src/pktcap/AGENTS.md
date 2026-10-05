@@ -152,6 +152,41 @@ A fragment costs a binary search and one insertion whatever the order of
 arrival, and a full table holds at most about 250 KiB for each reassembly in
 flight.
 
+## Writing a pcap capture
+
+**`PcapWriter(target)`** — writes UDP datagrams as a pcap file that tcpdump and
+Wireshark read: little-endian, microsecond, link type RAW (101). A datagram
+seen at a socket has no IP header left, so each is written under synthesised
+IPv4 or IPv6 and UDP headers with valid checksums. A context manager.
+
+- `target` is a path or a binary stream. A stream stays the caller's to
+  close; a path this writer opened is closed by `close()`.
+- **Constructing a writer touches nothing.** A path is opened, an existing
+  file replaced and the file header written by the first `write`; a writer
+  that never writes creates no file.
+- **`PcapWriter.write(time, source, destination, payload) -> None`** — append
+  one datagram. `source` and `destination` are `netimps.SocketAddress` values:
+  `(host, port)` or the four-item IPv6 form, the host as address text with or
+  without a `%zone`. `time` is seconds since the epoch, from 0 up to 2**32,
+  kept to the microsecond. `payload` is at most 65,507 octets for IPv4 and
+  65,527 for IPv6.
+- **`PcapWriter.write_datagram(datagram) -> None`** — the same for a
+  `CapturedDatagram`. A `fragmented` or `truncated` one is written with the
+  payload it has; the capture does not record that it was partial.
+- **`PcapWriter.close() -> None`** — complete on return, harmless when
+  repeated. A closed writer refuses to write.
+- A v4-mapped IPv6 address is written as IPv4, which is what was on the wire
+  when a dual-stack socket reported it; a datagram with one IPv4 and one IPv6
+  end is written as IPv6, the IPv4 end in its mapped form.
+- Each record is flushed, so a capture can be read while it grows.
+- Raises `ValueError` for a host that is not an address (a name is not looked
+  up), a port outside 0-65535, a payload too long, a time out of range or a
+  closed writer, and `TypeError` for an argument of the wrong type; in every
+  case nothing is written. `OSError` when the path cannot be opened.
+- Not safe to share between threads: serialise the calls.
+
+pcapng is read and not written.
+
 ## Exceptions
 
 Every exception pktcap raises on its own account descends from

@@ -17,6 +17,7 @@ EXPECTED = [
     "DecodeStats",
     "FrameDecoder",
     "LINKTYPES",
+    "PcapWriter",
     "PktcapError",
     "read_datagrams",
     "read_frames",
@@ -24,7 +25,10 @@ EXPECTED = [
 
 #: Positional parameters a callable may take: the thing it acts on, and one
 #: more operand where it has one. Everything else is keyword-only.
-POSITIONAL = {}
+POSITIONAL = {
+    # A datagram is four things, and there is nothing to name among them.
+    "PcapWriter.write": 4,
+}
 
 #: Named tuples are positional by nature.
 NAMED_TUPLES = ("CapturedDatagram", "CapturedFrame", "DecodeStats")

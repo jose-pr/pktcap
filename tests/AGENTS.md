@@ -27,6 +27,7 @@ prints the reason for every skip: a skip is not a pass.
 | `captures.py` | not a test: builders for headers, frames, pcap records and pcapng blocks, each able to state a wrong length; `Pipe`, a stream that cannot seek and records the largest read asked of it |
 | `test_container.py` | `read_frames`: both containers, byte orders and resolutions; every way a capture is damaged; what a hostile one can cost; two seeded fuzzes |
 | `test_frames.py` | `FrameDecoder` and `read_datagrams`: every link type, IPv4 and IPv6 headers, what is counted as ignored, malformed or unsupported, truncation, the per-frame ceilings, a seeded fuzz per link type |
+| `test_writer.py` | `PcapWriter`: the round trip through `read_datagrams`, checksums, the lazy open, what a bad argument leaves untouched |
 | `test_reassembly.py` | IP reassembly through `FrameDecoder`: any order, both families, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
 ## Rules
