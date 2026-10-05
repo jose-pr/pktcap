@@ -1,0 +1,39 @@
+# Category rule: nothing dot-prefixed at the repo root is tracked except the
+# files and directories re-included below.
+/.*
+!/.gitignore
+!/.gitattributes
+!/.github/
+
+# Private agent config, never tracked in this repo.
+# `.agents` is slashless on purpose: it is usually a symlink, which a
+# directory-only `.agents/` pattern would not match.
+# `*.local.*` is the unshared, per-machine override of its non-local sibling.
+.agents
+*.local.*
+CLAUDE*
+.claude
+
+# Build and distribution output, and the generated docs site
+build/
+dist/
+site/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+*.egg-info/
+.venv/
+.pyvenv/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,80 @@
+[build-system]
+# 1.27 is the first hatchling that reads the PEP 639 license fields below.
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pktcap"
+version = "0.1.0"
+authors = [{ name = "jose-pr", email = "jose-pr@coqui.dev" }]
+description = "Capture files for UDP protocol libraries: read pcap and pcapng, decode to datagrams, write pcap and structured records, replay"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Networking :: Monitoring",
+    "Typing :: Typed",
+]
+# netimps supplies the address, interface and socket helpers: the writer's
+# address handling, the sockets a replay sends through, the interface a live
+# capture names.
+dependencies = ["netimps>=0.4.0,<0.5"]
+
+[project.optional-dependencies]
+# One extra per output format that needs a third-party writer. JSON and INI
+# are written with the standard library and need none.
+yaml = ["PyYAML>=6.0,<7"]
+toml = ["tomli-w>=1.0,<2"]
+# The tests exercise every extra, so dev refers to them rather than repeating
+# their ranges.
+dev = ["pktcap[yaml,toml]", "build", "twine", "hatchling", "pytest", "black", "mypy<2", "types-PyYAML"]
+docs = ["mkdocs", "mkdocs-material", "mkdocstrings[python]"]
+
+[project.urls]
+Homepage = "https://github.com/jose-pr/pktcap"
+Documentation = "https://jose-pr.github.io/pktcap/"
+Issues = "https://github.com/jose-pr/pktcap/issues"
+
+[tool.hatch.build.targets.sdist]
+# "/.*" is dotfiles only and does not cover `*.local.*`, which must never be
+# packaged, so that has a pattern of its own. The root AGENTS.md (contributor
+# orientation) and the benchmarks are for a checkout, not for an installed
+# library.
+exclude = ["/.*", "*.local.*", "CLAUDE*", "/AGENTS.md", "/benchmarks"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pktcap"]
+# The package directory ships wholesale, so the `*.local.*` guard is repeated
+# here: the sdist exclude above does not apply to the wheel.
+exclude = ["*.local.*", "CLAUDE*"]
+
+# src/pktcap/AGENTS.md ships by living in the package directory. The README is
+# added beside it so an installed package carries its overview too.
+[tool.hatch.build.targets.wheel.force-include]
+"README.md" = "pktcap/README.md"
+
+[tool.black]
+# 3.9 is the floor, so black must not emit syntax newer than that.
+target-version = ["py39"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+# Warnings are errors. An exception would be listed here as narrowly as the
+# warning's own text, with the reason it is tolerated; there are none.
+filterwarnings = ["error"]

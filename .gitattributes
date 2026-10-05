@@ -1,0 +1,8 @@
+# One line ending for every text file, on every platform: LF. With this in the
+# repository no tool can leave a file half-converted (mixed CRLF and LF).
+* text=auto eol=lf
+
+# Recorded captures are bytes a capture tool or a case builder chose; they are
+# compared octet for octet and never normalised.
+*.pcap -text
+*.pcapng -text
