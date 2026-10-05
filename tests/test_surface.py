@@ -12,8 +12,13 @@ import pktcap
 EXPECTED = [
     "CaptureFormatError",
     "CaptureSource",
+    "CapturedDatagram",
     "CapturedFrame",
+    "DecodeStats",
+    "FrameDecoder",
+    "LINKTYPES",
     "PktcapError",
+    "read_datagrams",
     "read_frames",
 ]
 
@@ -22,7 +27,7 @@ EXPECTED = [
 POSITIONAL = {}
 
 #: Named tuples are positional by nature.
-NAMED_TUPLES = ("CapturedFrame",)
+NAMED_TUPLES = ("CapturedDatagram", "CapturedFrame", "DecodeStats")
 
 
 def test_all_is_exactly_the_expected_names():

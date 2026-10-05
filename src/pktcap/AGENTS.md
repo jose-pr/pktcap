@@ -71,6 +71,87 @@ too small for its kind, when its two length fields disagree, when a packet is
 longer than the block holding it, and when a packet names an interface its
 section did not describe.
 
+## Decoding frames to UDP datagrams
+
+**`read_datagrams(source, *, decoder=None, max_frame_size=262144) -> Iterator[CapturedDatagram]`**
+— `read_frames` and `FrameDecoder.decode` in one call: every UDP datagram of a
+capture, in capture order, IP fragments reassembled. It raises
+`CaptureFormatError` for a damaged container and nothing for a frame that does
+not decode: pass a `decoder` to choose its options and to read `decoder.stats`
+afterwards.
+
+**`CapturedDatagram(time, source, destination, payload, fragmented=False, truncated=False)`**
+— a named tuple: one UDP datagram from a capture.
+
+- `source` and `destination` are `(host, port)` pairs, the host as address
+  text: usable as a socket address, and as `netimps.SocketAddress`.
+- **An address on the wire is not rewritten.** A v4-mapped IPv6 address stays
+  mapped, and is written `::ffff:10.0.0.5` on every Python (the standard
+  library writes `::ffff:a00:5` before 3.13).
+- `time` of a reassembled datagram is that of the fragment that completed it.
+- `fragmented`: `payload` is only what the first IP fragment carried. Set
+  only by a decoder built with `reassemble=False`.
+- `truncated`: `payload` is shorter than the datagram's own length field says,
+  because the capture's snap length cut the frame. **Check it before reading a
+  short payload as a short message.**
+
+**`FrameDecoder(*, reassemble=True, max_reassemblies=256, reassembly_timeout=30.0)`**
+— decodes frames, keeping IP fragment state between them. Feed it every frame
+of a capture, in order. Not safe to share between threads. `ValueError` for a
+limit that is not positive.
+
+- **`FrameDecoder.decode(frame) -> List[CapturedDatagram]`** — the datagram
+  `frame` (a `CapturedFrame`) carries or completes, as a list of one; an empty
+  list for anything else. **It never raises for a frame**: what it could not
+  use is counted.
+- **`FrameDecoder.stats`** — a `DecodeStats` snapshot of the counters.
+- `reassemble=False` keeps no state: a first fragment is returned with
+  `fragmented=True` and the octets it carries; later fragments are counted and
+  passed over.
+- Fragments of anything that is not UDP are never held.
+- **A fragment that overlaps another discards its whole datagram**, in IPv4 as
+  in IPv6 (RFC 5722 requires it for IPv6). The same fragment seen twice, octet
+  for octet, is ignored: a capture taken on a bridge shows a frame more than
+  once.
+
+**`DecodeStats(frames, datagrams, ignored, malformed, unsupported, fragments, dropped, pending)`**
+— a named tuple of counts.
+
+| Field | Counts |
+| --- | --- |
+| `frames` | frames given to `decode` |
+| `datagrams` | UDP datagrams returned |
+| `ignored` | well-formed frames that are not UDP over IP: ARP, TCP, ICMP |
+| `malformed` | frames cut short or inconsistent |
+| `unsupported` | frames of a link type not in `LINKTYPES`; each such type is logged once, at `WARNING` on the logger `pktcap._frames`, for the first eight |
+| `fragments` | frames that were IP fragments of a UDP datagram |
+| `dropped` | reassemblies discarded: an overlap, a ceiling, old age |
+| `pending` | reassemblies still waiting for a fragment |
+
+A capture that decodes to nothing is told from an empty one by these:
+`unsupported` equal to `frames` is a link type this library does not read.
+
+**`LINKTYPES`** — a read-only mapping from the `LINKTYPE_` numbers understood
+to a name: `0` NULL, `1` ETHERNET (up to eight VLAN or QinQ tags are skipped),
+`12`, `14` and `101` RAW, `108` LOOP, `113` LINUX_SLL, `228` IPV4, `229` IPV6,
+`276` LINUX_SLL2. IPv4 options and the IPv6 hop-by-hop, routing, destination
+and fragment headers are read.
+
+Ceilings:
+
+| What a frame or a capture states | Ceiling | At the ceiling |
+| --- | --- | --- |
+| datagrams being reassembled at once | `max_reassemblies` (256) | the oldest is discarded, `dropped` |
+| octets in one reassembled datagram | 65,535 | the datagram is discarded, `dropped` |
+| fragments of one datagram | 1,024 | the datagram is discarded, `dropped` |
+| capture time between a datagram's first fragment and a later one | `reassembly_timeout` (30 s) | the datagram is discarded, `dropped`, and a new one starts |
+| IPv6 extension headers in one packet | 64 | the frame is `malformed` |
+| VLAN tags on one frame | 8 | the frame is `malformed` |
+
+A fragment costs a binary search and one insertion whatever the order of
+arrival, and a full table holds at most about 250 KiB for each reassembly in
+flight.
+
 ## Exceptions
 
 Every exception pktcap raises on its own account descends from

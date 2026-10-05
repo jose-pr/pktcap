@@ -12,15 +12,21 @@ from __future__ import annotations
 
 from importlib.metadata import version as _version
 
-from ._captured import CapturedFrame
+from ._captured import CapturedDatagram, CapturedFrame
 from ._container import CaptureSource, read_frames
 from ._exceptions import CaptureFormatError, PktcapError
+from ._frames import LINKTYPES, DecodeStats, FrameDecoder, read_datagrams
 
 __all__ = [
     "CaptureFormatError",
     "CaptureSource",
+    "CapturedDatagram",
     "CapturedFrame",
+    "DecodeStats",
+    "FrameDecoder",
+    "LINKTYPES",
     "PktcapError",
+    "read_datagrams",
     "read_frames",
 ]
 

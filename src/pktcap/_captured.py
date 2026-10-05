@@ -1,13 +1,14 @@
-"""What a capture is made of: a frame as it was recorded (internal).
+"""What a capture is made of: a frame as recorded, a datagram as decoded
+(internal).
 
 Re-exported from :mod:`pktcap`.
 """
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import NamedTuple, Tuple
 
-__all__ = ["CapturedFrame"]
+__all__ = ["CapturedFrame", "CapturedDatagram"]
 
 
 class CapturedFrame(NamedTuple):
@@ -23,3 +24,25 @@ class CapturedFrame(NamedTuple):
     time: float
     linktype: int
     data: bytes
+
+
+class CapturedDatagram(NamedTuple):
+    """One UDP datagram from a capture.
+
+    :ivar time: seconds since the epoch; for a reassembled datagram, the time
+        of the fragment that completed it.
+    :ivar source: ``(host, port)`` of the sender, the host as address text.
+    :ivar destination: ``(host, port)`` it was sent to.
+    :ivar payload: the octets after the UDP header.
+    :ivar fragmented: ``payload`` is only what the first IP fragment carried.
+        Set only by a decoder that was told not to reassemble.
+    :ivar truncated: ``payload`` is shorter than the datagram's own length
+        field says, because the capture's snap length cut the frame.
+    """
+
+    time: float
+    source: Tuple[str, int]
+    destination: Tuple[str, int]
+    payload: bytes
+    fragmented: bool = False
+    truncated: bool = False
