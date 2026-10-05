@@ -1,5 +1,5 @@
 site_name: pktcap
-site_description: "Capture files for UDP protocol libraries: read pcap and pcapng, decode to datagrams, write pcap and structured records, replay"
+site_description: "Read, dissect, write and replay packet captures: pcap and pcapng, pluggable dissectors, a UDP datagram view, structured records"
 site_url: https://jose-pr.github.io/pktcap/
 repo_url: https://github.com/jose-pr/pktcap
 repo_name: jose-pr/pktcap
@@ -28,6 +28,10 @@ theme:
 
 nav:
   - Home: index.md
+  - Guide:
+      - The API header: header.md
+      - Dissectors: dissectors.md
+      - Output formats: formats.md
   - API Reference:
       - Overview: api/reference.md
   - Changelog: changelog.md

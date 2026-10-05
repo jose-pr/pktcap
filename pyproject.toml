@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 name = "pktcap"
 version = "0.1.0"
 authors = [{ name = "jose-pr", email = "jose-pr@coqui.dev" }]
-description = "Capture files for UDP protocol libraries: read pcap and pcapng, decode to datagrams, write pcap and structured records, replay"
+description = "Read, dissect, write and replay packet captures: pcap and pcapng, pluggable dissectors, a UDP datagram view, structured records"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

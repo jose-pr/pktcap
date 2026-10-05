@@ -1,12 +1,15 @@
 # pktcap
 
-Contributor orientation for a checkout of `pktcap`, the capture layer shared by
-UDP protocol libraries. This file is development documentation and does not
-ship; the library's reference is the header below, which does.
+Contributor orientation for a checkout of `pktcap`, a library that reads,
+dissects, writes and replays packet captures, with pluggable dissectors. This
+file is development documentation and does not ship; the library's reference
+is the headers below, which do.
 
 | Header | Covers |
 | --- | --- |
 | `src/pktcap/AGENTS.md` | the shipped API header: every public name with its signature and contract, the bounds on untrusted input, the exceptions |
+| `src/pktcap/_dissectors/AGENTS.md` | shipped: the dissector contract, the registry, each built-in dissector and layer |
+| `src/pktcap/_formats/AGENTS.md` | shipped: what each record format writes |
 | `tests/AGENTS.md` | running and writing the tests: the network guard, the capture builders, the conformance cases |
 
 A public API change updates the shipped header in the same commit.
@@ -63,7 +66,15 @@ clean run says nothing about the other two.
 - **A capture is untrusted input.** Every length, count and offset a file or a
   frame controls is checked against a ceiling before anything is allocated or
   looped over, and each ceiling has a test that fails without it.
-- **Nothing is dropped silently.** A frame that does not decode is counted.
+- **Any valid capture is read, and nothing is dropped silently.** A frame
+  nothing dissects comes back whole; one a dissector could not read is
+  counted, and keeps the layers before it.
+- **A protocol is a dissector in a registry.** The built-in ones stop at UDP
+  and TCP headers; anything above is registered by whoever needs it, and
+  nothing is registered on import or through an entry point.
+- **One path.** The UDP datagram view, the readers, the filter keys, replay
+  and live capture are all built on `FrameDissector`; there is no second
+  decoder.
 - **A private module imports a name from the module that owns it**, never from
   the root.
 - **netimps supplies addresses, interfaces and sockets.** No local copy of
@@ -75,7 +86,8 @@ clean run says nothing about the other two.
 ## Releasing
 
 This project follows [Semantic Versioning](https://semver.org/) and keeps a
-[`CHANGELOG.md`](CHANGELOG.md). Before 1.0 a minor bump means the documented
+[`CHANGELOG.md`](CHANGELOG.md), with the benchmark figures and the validation
+evidence of each release in [`RELEASENOTES.md`](RELEASENOTES.md). Before 1.0 a minor bump means the documented
 API broke; additions and fixes are patches. Pushing a tag matching `v*`
 triggers the release workflow: test gate → build → strict docs build (a gate,
 not a deploy) → GitHub release → PyPI. The last job dispatches `docs.yml` at
