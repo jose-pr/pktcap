@@ -22,7 +22,7 @@ installed package (`importlib.resources.files("pktcap")`):
 
 | Header | Covers |
 | --- | --- |
-| `pktcap/AGENTS.md` | this file: reading, decoding, writing, replaying, the filter expression, the exceptions |
+| `pktcap/AGENTS.md` | this file: reading, decoding, writing, replaying, live capture, the filter expression, the exceptions |
 | `pktcap/_formats/AGENTS.md` | what a record is, and exactly what each record format writes |
 
 **A capture is untrusted input.** Every length, count and offset a file or a
@@ -319,6 +319,52 @@ datagrams passed over.
 for an option of the wrong type or a `deliver` that is not callable; all at
 the call, before anything is read or sent.
 
+## Capturing live
+
+**Linux only**, through an `AF_PACKET` socket, and the process needs
+`CAP_NET_RAW` (root, or that capability granted). Everywhere else, and
+wherever a capture tool is preferred, pipe one in and read its output:
+
+```text
+tcpdump -i eth0 -U -w - udp | your-program     # read_datagrams(sys.stdin.buffer)
+dumpcap -i Ethernet -w - -f udp | your-program
+```
+
+**`has_live_capture() -> bool`** — whether this platform has `AF_PACKET`. It
+says nothing about permission.
+
+**`LiveCapture(interface=None, *, timeout=1.0)`** — the IP packets on one
+interface, or on all of them when `interface` is `None`. A context manager;
+constructing one opens nothing.
+
+- `interface` is `netimps.InterfaceLike`: a name, a `netimps.Interface`, or
+  anything `netimps.get_interface` finds one by (an address, a MAC).
+- **`LiveCapture.open() -> None`** — open the socket; `with` does it. Does
+  nothing when already open. `LiveCaptureError` where the platform has no
+  `AF_PACKET`, the kernel's `PermissionError` without the capability,
+  `ValueError` when no interface matches.
+- **`LiveCapture.read() -> Optional[CapturedFrame]`** — the next IP packet, or
+  `None` when `timeout` seconds pass without one. Frames have link type 228
+  (IPv4) or 229 (IPv6) and the time they were read, ready for
+  `FrameDecoder.decode`. What is not IP is passed over.
+- Iterating a capture yields frames until it is closed.
+- **`LiveCapture.fileno() -> int`** — the socket's descriptor, for a caller's
+  own selector or event loop. There is no asynchronous twin.
+- **`LiveCapture.close() -> None`** — final, complete on return, harmless
+  twice.
+- On a loopback device every packet is seen leaving and arriving; only the
+  arriving copy is returned. Loopback is told by the device type the kernel
+  reports, not by the name `lo`.
+- Live traffic is untrusted like a file: decode it with a `FrameDecoder`,
+  whose ceilings then apply.
+
+**`sniff(interface=None, *, stop=None, decoder=None) -> Iterator[CapturedDatagram]`**
+— `LiveCapture` and `FrameDecoder` in one call: UDP datagrams as they arrive.
+The socket is opened when the first datagram is asked for (which is when
+`LiveCaptureError` or `PermissionError` is raised) and closed when the
+iterator ends or is closed. `stop()` is called between packets, and at least
+once a second on a quiet interface; returning true ends the iteration.
+
 ## The capture-filter expression
 
 The grammar two protocol libraries share: clauses `key=value` or `key!=value`
@@ -384,8 +430,11 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `CaptureFilterError` | `PktcapError`, `ValueError` | a capture-filter expression that cannot be parsed or compiled |
 | `UnsupportedFormatError` | `PktcapError`, `ValueError` | an output format that does not exist, or that a file name does not tell |
 
+| `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
+
 A format that exists and whose extra is not installed raises the builtin
-`ImportError`, naming the extra.
+`ImportError`, naming the extra. A process that may not open a packet socket
+gets the kernel's `PermissionError`.
 
 `CaptureFormatError.offset` is how many octets of the input had been read when
 the problem was found, or `None`; the message ends with it and never quotes the

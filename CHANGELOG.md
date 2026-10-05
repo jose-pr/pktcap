@@ -56,5 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ReplayResult(sent, partial)`. The addresses in the capture are never sent
   to, the recorded timing is the default, each wait is capped at `max_delay`,
   and a `fragmented` or `truncated` datagram is counted and not sent.
+- `LiveCapture(interface=None, *, timeout=1.0)` and `sniff(interface=None, *,
+  stop=None, decoder=None)` capture live on Linux through an `AF_PACKET`
+  socket, which needs `CAP_NET_RAW`; `has_live_capture()` says whether the
+  platform has one, and `LiveCaptureError`, an `OSError`, is raised where it
+  does not.
 
 [Unreleased]: https://github.com/jose-pr/pktcap/commits/main

@@ -32,12 +32,18 @@ prints the reason for every skip: a skip is not a pass.
 | `test_formats.py` | the record formats: one contract suite over every name in `RECORD_FORMATS` (the text parses back with a parser this library did not write), then each format's dialect and the missing-extra message |
 | `test_output.py` | `CaptureWriter`: every format as a growing file and as one file per record, choosing the format, the name pattern, the file budget, values that try to leave the directory |
 | `test_replay.py` | `replay_schedule`, `replay` and `replay_to`: the waits and their cap, the limit, sends to loopback sockets the test owns over IPv4 and IPv6, partial datagrams, and that the guard sees a replay that would leave the host |
+| `test_live.py` | `LiveCapture` and `sniff` with the privileged socket replaced: the lifecycle, what a read is worth, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
 | `test_reassembly.py` | IP reassembly through `FrameDecoder`: any order, both families, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
 ## Rules
 
 - **A test asserts through `pktcap`'s public names.** No test imports a private
-  module to call it.
+  module to call it. One file patches a private name: `test_live.py` replaces
+  `pktcap._live._open_socket`, because the real socket needs a capability.
+- **Expected skips**: one, the real `AF_PACKET` test in `test_live.py`, on any
+  platform but Linux and on Linux without `CAP_NET_RAW`. As root on Linux
+  there are none. The IPv6 tests of `test_replay.py` skip on a host with no
+  IPv6 loopback address.
 - **A bound is seen to fail.** A test for a ceiling is run once against the
   code with the ceiling removed, and must fail there.
 - **Nothing leaves the host.** Sockets are loopback, bound to port 0. The guard

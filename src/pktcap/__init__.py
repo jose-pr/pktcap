@@ -17,6 +17,7 @@ from ._container import CaptureSource, read_frames
 from ._exceptions import (
     CaptureFilterError,
     CaptureFormatError,
+    LiveCaptureError,
     PktcapError,
     UnsupportedFormatError,
 )
@@ -28,6 +29,7 @@ from ._formats import (
     has_output_format,
 )
 from ._frames import LINKTYPES, DecodeStats, FrameDecoder, read_datagrams
+from ._live import LiveCapture, has_live_capture, sniff
 from ._output import CaptureWriter, datagram_record
 from ._replay import ReplayResult, ReplaySource, replay, replay_schedule, replay_to
 from ._writer import PcapWriter
@@ -43,6 +45,8 @@ __all__ = [
     "FilterClause",
     "FrameDecoder",
     "LINKTYPES",
+    "LiveCapture",
+    "LiveCaptureError",
     "OUTPUT_FORMATS",
     "PcapWriter",
     "PktcapError",
@@ -53,6 +57,7 @@ __all__ = [
     "compile_capture_filter",
     "datagram_record",
     "dumps_record",
+    "has_live_capture",
     "has_output_format",
     "parse_capture_filter",
     "read_datagrams",
@@ -60,6 +65,7 @@ __all__ = [
     "replay",
     "replay_schedule",
     "replay_to",
+    "sniff",
 ]
 
 __version__ = _version("pktcap")

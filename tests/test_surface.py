@@ -20,6 +20,8 @@ EXPECTED = [
     "FilterClause",
     "FrameDecoder",
     "LINKTYPES",
+    "LiveCapture",
+    "LiveCaptureError",
     "OUTPUT_FORMATS",
     "PcapWriter",
     "PktcapError",
@@ -30,6 +32,7 @@ EXPECTED = [
     "compile_capture_filter",
     "datagram_record",
     "dumps_record",
+    "has_live_capture",
     "has_output_format",
     "parse_capture_filter",
     "read_datagrams",
@@ -37,6 +40,7 @@ EXPECTED = [
     "replay",
     "replay_schedule",
     "replay_to",
+    "sniff",
 ]
 
 #: Positional parameters a callable may take: the thing it acts on, and one

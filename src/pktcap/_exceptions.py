@@ -20,6 +20,7 @@ __all__ = [
     "CaptureFormatError",
     "CaptureFilterError",
     "UnsupportedFormatError",
+    "LiveCaptureError",
 ]
 
 
@@ -60,4 +61,13 @@ class UnsupportedFormatError(PktcapError, ValueError):
     The message lists the formats there are. A format that exists and whose
     extra is not installed is not this error: it raises ``ImportError`` naming
     the extra.
+    """
+
+
+class LiveCaptureError(PktcapError, OSError):
+    """This platform cannot capture live: it has no ``AF_PACKET``.
+
+    An :class:`OSError`, as the failure to open any other socket is. A process
+    that lacks the capability gets the kernel's own ``PermissionError``, which
+    is not this class.
     """
