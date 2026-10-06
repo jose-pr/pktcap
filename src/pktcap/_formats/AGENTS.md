@@ -61,12 +61,16 @@ Ceilings, for a pattern field whose value a peer chose (a client identifier):
 | What the network states | Ceiling | At the ceiling |
 | --- | --- | --- |
 | distinct files one writer creates | `max_files` (1,000) | the record is not written, `refused`, one `WARNING` on the logger `pktcap._output` |
-| characters one field value adds to a name | 64 | the rest is dropped |
+| characters one field value adds to a name | 64 | cut to its first 55 characters, `-` and 8 hex digits of a digest of the whole |
 
 A field value has every run of characters outside `A-Z a-z 0-9 _ . -`
 replaced by `_` and leading and trailing `.` and `_` removed (`unknown` when
 nothing is left), so it cannot hold a path separator or be `..`; a file name
-that Windows would open as a device (`NUL`, `COM1`) gets a leading `_`. A time
+that Windows would open as a device (`NUL`, `COM1`) gets a leading `_`. The
+cut keeps two long values that start alike apart: the cleaned value is cut to
+its first 55 characters, trailing `.` and `_` removed, and followed by `-` and
+the first 8 hexadecimal digits of the SHA-256 of the value as given (UTF-8),
+64 characters at most; a value of 64 or fewer is untouched. A time
 outside any calendar is written as `t<seconds>`.
 
 ## What a record is

@@ -9,6 +9,7 @@ name pattern.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import io
 import logging
 import math
@@ -46,6 +47,9 @@ _FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _UNSAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 #: The most characters one field value contributes to a file name.
 _MAX_VALUE_LENGTH = 64
+#: Hexadecimal digits of the SHA-256 of a cut value that follow its first
+#: characters and a hyphen, so two long values with one start name two files.
+_DIGEST_LENGTH = 8
 #: Names Windows opens as devices, whatever follows the first dot.
 _DEVICES = frozenset(
     ["CON", "PRN", "AUX", "NUL"]
@@ -55,9 +59,16 @@ _DEVICES = frozenset(
 
 
 def _safe(value: object) -> str:
-    """A field value as part of a file name: no separator, no ``..``, short."""
-    text = _UNSAFE.sub("_", str(value)).strip("._")[:_MAX_VALUE_LENGTH]
-    return text or "unknown"
+    """A field value as part of a file name: no separator, no ``..``, at most
+    ``_MAX_VALUE_LENGTH`` characters. A longer one is cut and ends in a hyphen
+    and a digest of the whole value as given."""
+    original = str(value)
+    text = _UNSAFE.sub("_", original).strip("._") or "unknown"
+    if len(text) <= _MAX_VALUE_LENGTH:
+        return text
+    digest = hashlib.sha256(original.encode("utf-8", "surrogatepass")).hexdigest()
+    kept = text[: _MAX_VALUE_LENGTH - _DIGEST_LENGTH - 1].rstrip("._")
+    return "%s-%s" % (kept, digest[:_DIGEST_LENGTH])
 
 
 def _timestamp(time: float) -> str:

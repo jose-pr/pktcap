@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- A field value used in a per-record file name and longer than 64 characters
+  is cut to 55 and ends in `-` and 8 hexadecimal digits of the SHA-256 of the
+  whole value, so two long values that start alike name two files. Before, the
+  value was cut at 64 characters and they named one.
+
 ### Added
 
 - The package, with one exception base, `PktcapError`, and `__version__`.

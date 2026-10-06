@@ -1,6 +1,7 @@
 """`CaptureWriter`: one writer, every format, a growing file or one per record."""
 
 import configparser
+import hashlib
 import io
 import json
 import logging
@@ -488,7 +489,7 @@ def test_a_field_with_no_value_is_refused_when_written(tmp_path):
         ("\x00\x1b[2J", "2J"),
         ("NUL", "_NUL"),
         ("com1", "_com1"),
-        ("x" * 500, "x" * 64),
+        ("x" * 500, "x" * 55 + "-" + hashlib.sha256(b"x" * 500).hexdigest()[:8]),
     ],
 )
 def test_a_value_from_the_network_cannot_leave_the_directory_or_name_a_device(
@@ -526,3 +527,42 @@ def test_the_default_budget_is_a_thousand_files(tmp_path):
         for _ in range(1003):
             writer.write(THIRD, {})
     assert (writer.written, writer.refused) == (1000, 3)
+
+
+# -- a value cut for a file name keeps a digest ----------------------------------
+
+#: What the rule gives for these values: the first 55 characters that survive
+#: the clean-up, a hyphen, and the first 8 hex digits of the SHA-256 of the
+#: value as given. Written out, so a change of the rule fails here.
+LONG_ID = "01:" + ":".join("%02x" % number for number in range(1, 90))
+
+
+@pytest.mark.parametrize(
+    "value, name",
+    [
+        ("a" * 300, "a" * 55 + "-9835fa6b"),
+        ("a" * 299 + "b", "a" * 55 + "-daf00507"),
+        (LONG_ID, "01_01_02_03_04_05_06_07_08_09_0a_0b_0c_0d_0e_0f_10_11_1-fd60b6a7"),
+        ("a" * 65, "a" * 55 + "-635361c4"),
+        ("a" * 64, "a" * 64),
+        ("a" * 54 + "." + "b" * 40, "a" * 54 + "-4adc9d0e"),
+    ],
+)
+def test_a_value_over_the_ceiling_is_cut_and_ends_in_a_digest_of_the_whole(
+    value, name, tmp_path
+):
+    pattern = str(tmp_path / "{client}.json")
+    with CaptureWriter(pattern, per_record=True, fields=("client",)) as writer:
+        writer.write(FIRST, {"n": 1}, names={"client": value})
+    assert os.listdir(tmp_path) == [name + ".json"]
+    assert len(name) <= 64
+
+
+def test_two_long_values_that_agree_at_the_start_name_two_files(tmp_path):
+    pattern = str(tmp_path / "{client}.json")
+    with CaptureWriter(pattern, per_record=True, fields=("client",)) as writer:
+        writer.write(FIRST, {"n": 1}, names={"client": "a" * 300})
+        writer.write(FIRST, {"n": 2}, names={"client": "a" * 299 + "b"})
+        writer.write(FIRST, {"n": 3}, names={"client": "a" * 300})
+    assert len(os.listdir(tmp_path)) == 2
+    assert writer.written == 3 and writer.refused == 0
