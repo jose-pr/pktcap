@@ -529,6 +529,38 @@ def test_the_default_budget_is_a_thousand_files(tmp_path):
     assert (writer.written, writer.refused) == (1000, 3)
 
 
+# -- a growing file's directories ----------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["out.jsonl", "out.yaml", "out.pcap", "out.pcapng"])
+def test_a_growing_file_gets_its_parent_directories_at_the_first_write(name, tmp_path):
+    path = tmp_path / "a" / "b" / name
+    writer = CaptureWriter(path)
+    assert not (tmp_path / "a").exists()  # building the writer does no I/O
+    writer.write(FIRST, {"n": 1})
+    writer.close()
+    assert path.is_file()
+    with CaptureWriter(path, append=name.endswith(("l", "yaml"))) as again:
+        again.write(SECOND, {"n": 2})  # the directories are there already
+
+
+def test_a_growing_file_in_the_current_directory_needs_no_directory(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    with CaptureWriter("out.json") as writer:
+        writer.write(FIRST, {"n": 1})
+    assert (tmp_path / "out.json").read_text() == '{"n": 1}\n'
+
+
+def test_a_parent_that_is_a_file_is_an_os_error_and_writes_nothing(tmp_path):
+    (tmp_path / "blocked").write_text("a file")
+    with CaptureWriter(tmp_path / "blocked" / "out.json") as writer:
+        with pytest.raises(OSError):
+            writer.write(FIRST, {"n": 1})
+    assert writer.written == 0
+
+
 # -- a value cut for a file name keeps a digest ----------------------------------
 
 #: What the rule gives for these values: the first 55 characters that survive

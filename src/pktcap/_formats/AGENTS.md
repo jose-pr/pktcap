@@ -35,6 +35,8 @@ context manager.
 - **Nothing is opened until the first `write`**, and each record is flushed.
   Without `append` an existing file is replaced then; `append=True` adds to
   it (`json` and `yaml` stay valid streams; a capture cannot be appended to).
+  The directories above a growing file are made then, as for a per-record
+  file; building the writer touches nothing.
 - `toml` and `ini` hold one record per file, so they need `per_record=True`.
 - **`per_record=True`**: `target` is a file-name pattern in `str.format`
   syntax, and each record goes to its own file, directories created as

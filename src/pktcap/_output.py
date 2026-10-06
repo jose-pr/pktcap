@@ -269,15 +269,25 @@ class CaptureWriter:
             self._write_file(self._pattern, item.time, data, index, names or {})
         elif self._record_format is None:
             if self._capture is None:
+                self._make_parents(self._target)
                 self._capture = self._capture_writer(self._target)
             self._capture_write(self._capture, item)
             self.written += 1
         else:
             self._write_stream(self._record_format.separator.encode("ascii") + data)
 
+    @staticmethod
+    def _make_parents(path: Union[str, "os.PathLike[str]", BinaryIO]) -> None:
+        """The directories above a growing file, made at its first write."""
+        if isinstance(path, (str, os.PathLike)):
+            directory = os.path.dirname(os.fspath(path))
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+
     def _write_stream(self, data: bytes) -> None:
         if self._file is None:
             if isinstance(self._target, (str, os.PathLike)):
+                self._make_parents(self._target)
                 self._file = open(self._target, "ab" if self._append else "wb")
             else:
                 self._file = self._target
