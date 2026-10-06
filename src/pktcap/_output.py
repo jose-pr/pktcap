@@ -230,6 +230,7 @@ class CaptureWriter:
         item: Union[CapturedDatagram, DissectedFrame],
         record: Optional[Mapping[str, Any]] = None,
         *,
+        text: Optional[str] = None,
         names: Optional[Mapping[str, object]] = None,
     ) -> None:
         """Write one datagram or frame, or the record made of it.
@@ -239,11 +240,17 @@ class CaptureWriter:
             format reads its time for ``{timestamp}``.
         :param record: plain data for a record format. ``None`` writes
             :func:`datagram_record` or :func:`frame_record` of ``item``.
+        :param text: the record already rendered by the caller, for a record
+            format; written as UTF-8 exactly as given, with nothing added. A
+            growing file gets the format's separator before it (nothing for
+            ``json``, ``---`` and a line feed for ``yaml``). Not with
+            ``record``.
         :param names: with ``per_record``, a value for each of ``fields``.
-        :raises ValueError: a closed writer, a field with no value, or an
-            item or record the format must refuse.
-        :raises TypeError: an item of another type, or a record the format
-            cannot represent.
+        :raises ValueError: a closed writer, a field with no value, ``text``
+            with a capture format or with ``record`` or that is not
+            encodable, or an item or record the format must refuse.
+        :raises TypeError: an item of another type, ``text`` that is not
+            ``str``, or a record the format cannot represent.
         :raises OSError: the file cannot be opened or written.
         """
         if self._closed:
@@ -251,7 +258,18 @@ class CaptureWriter:
         if not isinstance(item, (CapturedDatagram, DissectedFrame)):
             raise TypeError("item must be a CapturedDatagram or a DissectedFrame")
         data = b""
-        if self._record_format is not None:
+        if text is not None:
+            if not isinstance(text, str):
+                raise TypeError("text must be a str")
+            if self._record_format is None:
+                raise ValueError(
+                    "text is for a record format: a %s capture writes the frame "
+                    "or datagram itself" % self._format
+                )
+            if record is not None:
+                raise ValueError("give a record or the text of one, not both")
+            data = text.encode("utf-8")
+        elif self._record_format is not None:
             if record is None:
                 if isinstance(item, DissectedFrame):
                     record = frame_record(item)

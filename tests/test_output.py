@@ -598,3 +598,136 @@ def test_two_long_values_that_agree_at_the_start_name_two_files(tmp_path):
         writer.write(FIRST, {"n": 3}, names={"client": "a" * 300})
     assert len(os.listdir(tmp_path)) == 2
     assert writer.written == 3 and writer.refused == 0
+
+
+# -- text the caller rendered ----------------------------------------------------
+
+
+def test_a_caller_rendered_record_is_one_file_with_exactly_those_octets(tmp_path):
+    ini = "[message]\nop = 1\n\n[options]\n53 = 1\n\n\n"  # one more line feed
+    pattern = str(tmp_path / "{index}_{xid}.ini")
+    with CaptureWriter(pattern, per_record=True, fields=("xid",)) as writer:
+        writer.write(FIRST, text=ini, names={"xid": "0000002A"})
+        writer.write(SECOND, text="no line feed at all", names={"xid": "2B"})
+    assert (tmp_path / "0_0000002A.ini").read_bytes() == ini.encode()
+    assert (tmp_path / "1_2B.ini").read_bytes() == b"no line feed at all"
+    assert writer.written == 2
+
+
+def test_the_text_is_written_as_utf_8_and_never_normalised(tmp_path):
+    text = "café  \r\n\x00\r\n"
+    with CaptureWriter(str(tmp_path / "x.toml"), per_record=True) as writer:
+        writer.write(FIRST, text=text)
+    assert (tmp_path / "x.toml").read_bytes() == text.encode("utf-8")
+
+
+def test_a_growing_json_file_is_the_texts_one_after_another(tmp_path):
+    path = tmp_path / "out.jsonl"
+    with CaptureWriter(path) as writer:
+        writer.write(FIRST, text='{"a": 1}\n')
+        writer.write(SECOND, text='{"b": 2}')  # nothing is added after it
+        writer.write(THIRD, text="\n")
+    assert path.read_bytes() == b'{"a": 1}\n{"b": 2}\n'
+    assert writer.written == 3
+
+
+def test_a_growing_yaml_file_leads_each_text_with_the_marker(tmp_path):
+    path = tmp_path / "out.yaml"
+    with CaptureWriter(path) as writer:
+        writer.write(FIRST, text="a: 1\n")
+        writer.write(SECOND, text="b: 2\n\n")
+    assert path.read_bytes() == b"---\na: 1\n---\nb: 2\n\n"
+
+
+def test_a_stream_gets_the_text_and_is_left_open():
+    stream = io.BytesIO()
+    with CaptureWriter(stream, "yaml") as writer:
+        writer.write(FIRST, text="a: 1\n")
+    assert stream.getvalue() == b"---\na: 1\n" and not stream.closed
+
+
+def test_text_can_be_appended_to_what_is_there(tmp_path):
+    path = tmp_path / "out.jsonl"
+    path.write_bytes(b'{"earlier": 0}\n')
+    with CaptureWriter(path, append=True) as writer:
+        writer.write(FIRST, text='{"a": 1}\n')
+    assert path.read_bytes() == b'{"earlier": 0}\n{"a": 1}\n'
+
+
+def test_the_text_of_a_record_with_a_name_pattern_uses_the_items_time(tmp_path):
+    with CaptureWriter(str(tmp_path / "{timestamp}.ini"), per_record=True) as writer:
+        writer.write(FIRST, text="x")
+    assert os.listdir(tmp_path) == ["20231114T221320.500000Z.ini"]
+
+
+def test_the_budget_and_the_refusal_count_hold_for_text(tmp_path, caplog):
+    pattern = str(tmp_path / "{client}.ini")
+    with caplog.at_level(logging.WARNING, logger="pktcap"):
+        with CaptureWriter(
+            pattern, per_record=True, fields=("client",), max_files=2
+        ) as writer:
+            for number in range(5):
+                writer.write(FIRST, text="x", names={"client": "c%d" % number})
+    assert len(os.listdir(tmp_path)) == 2
+    assert (writer.written, writer.refused) == (2, 3)
+
+
+def test_a_field_with_no_value_is_refused_for_text_too(tmp_path):
+    pattern = str(tmp_path / "{client}.ini")
+    with CaptureWriter(pattern, per_record=True, fields=("client",)) as writer:
+        with pytest.raises(ValueError, match="client"):
+            writer.write(FIRST, text="x")
+    assert os.listdir(tmp_path) == []
+
+
+@pytest.mark.parametrize("name", ["pcap", "pcapng"])
+@pytest.mark.parametrize("per_record", [False, True])
+def test_text_is_refused_with_a_capture_format(name, per_record, tmp_path):
+    target = str(tmp_path / ("{index}.x" if per_record else "out.x"))
+    with CaptureWriter(target, name, per_record=per_record) as writer:
+        with pytest.raises(ValueError, match="record format"):
+            writer.write(FIRST, text="x")
+    assert os.listdir(tmp_path) == [] and writer.written == 0
+
+
+@pytest.mark.parametrize("text", [b"x", 1, ["x"], object()])
+def test_text_that_is_not_a_str_is_a_type_error(text):
+    stream = io.BytesIO()
+    with CaptureWriter(stream, "json") as writer:
+        with pytest.raises(TypeError, match="text must be a str"):
+            writer.write(FIRST, text=text)
+    assert stream.getvalue() == b""
+
+
+def test_text_and_a_record_together_are_refused():
+    stream = io.BytesIO()
+    with CaptureWriter(stream, "json") as writer:
+        with pytest.raises(ValueError, match="not both"):
+            writer.write(FIRST, {"n": 1}, text="x")
+        with pytest.raises(ValueError, match="not both"):
+            writer.write(FIRST, {}, text="")
+    assert stream.getvalue() == b"" and writer.written == 0
+
+
+def test_text_that_cannot_be_encoded_writes_nothing_and_uses_no_index(tmp_path):
+    pattern = str(tmp_path / "{index}.ini")
+    with CaptureWriter(pattern, per_record=True) as writer:
+        with pytest.raises(ValueError):
+            writer.write(FIRST, text="lone \ud800 surrogate")
+        writer.write(FIRST, text="fine")
+    assert os.listdir(tmp_path) == ["0.ini"]
+
+
+def test_empty_text_is_a_record_of_no_octets(tmp_path):
+    with CaptureWriter(str(tmp_path / "e.ini"), per_record=True) as writer:
+        writer.write(FIRST, text="")
+    assert (tmp_path / "e.ini").read_bytes() == b"" and writer.written == 1
+
+
+def test_text_still_checks_the_item_and_a_closed_writer():
+    writer = CaptureWriter(io.BytesIO(), "json")
+    with pytest.raises(TypeError, match="item must be"):
+        writer.write(b"octets", text="x")
+    writer.close()
+    with pytest.raises(ValueError, match="closed"):
+        writer.write(FIRST, text="x")

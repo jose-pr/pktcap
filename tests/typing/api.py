@@ -97,6 +97,7 @@ with pktcap.PcapngWriter(io.BytesIO()) as ng:
 
 with pktcap.CaptureWriter("x_{xid}.toml", per_record=True, fields=("xid",)) as output:
     output.write(datagram, {"a": 1}, names={"xid": "1"})
+    output.write(datagram, text="a = 1\n", names={"xid": "1"})
     output.write(dissected)
     assert_type(output.format, str)
     assert_type(output.refused, int)

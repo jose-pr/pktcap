@@ -27,11 +27,23 @@ context manager.
   `.toml`, `.ini`; letter case ignored, the longest ending wins). A name given
   wins over the ending. Content is never sniffed. `UnsupportedFormatError`,
   listing the formats, when neither says.
-- **`CaptureWriter.write(item, record=None, *, names=None) -> None`** —
+- **`CaptureWriter.write(item, record=None, *, text=None, names=None) -> None`** —
   `item` is a `CapturedDatagram` or a `DissectedFrame`. `pcap` and `pcapng`
   write it (a datagram under synthesised headers, a frame as captured) and
   ignore `record`. A record format writes `record`, or `datagram_record` or
   `frame_record` of `item` when it is `None`.
+- **`text=`** is a record the caller rendered itself, for a record format:
+  this library keeps the container (the growing file, the name pattern, the
+  file budget, the refusal count) and the octets are the caller's, encoded as
+  UTF-8 and written exactly as given, with no line feed, marker or
+  normalisation added or removed. A growing file gets the format's separator
+  before the text and nothing after it: none for `json`, `---` and a line feed
+  for `yaml`; text that ends in a line feed gives a `json` line and a `yaml`
+  document each. A per-record file is the text
+  and nothing else. `item` still gives `{timestamp}`, and `names` the caller's
+  fields. `ValueError` for `text` with `pcap` or `pcapng`, with a `record`
+  (two sources for one record), or that UTF-8 cannot encode; `TypeError` for a
+  `text` that is not a `str`. Nothing is written, and no index used, then.
 - **Nothing is opened until the first `write`**, and each record is flushed.
   Without `append` an existing file is replaced then; `append=True` adds to
   it (`json` and `yaml` stay valid streams; a capture cannot be appended to).
