@@ -117,7 +117,8 @@ limit that is not positive.
   `CapturedFrame`) with every layer a registered dissector could read. **It
   never raises for a frame**, whatever the frame holds and whatever a
   registered dissector does.
-- **`FrameDissector.stats`** — a `DissectStats` snapshot of the counters.
+- **`FrameDissector.stats`** — a `DissectStats` snapshot of the counters;
+  `FrameDissector.unsupported_linktypes` says which link types it counted.
 - **IP fragments are reassembled**, of any protocol: a frame that is a piece
   ends at its IP (or IPv6 fragment) layer with the piece as payload; the frame
   that completes the datagram has `reassembled=True` and the layers read from
@@ -159,7 +160,7 @@ a named tuple: a captured frame and what was read from it.
 | `frames` | frames given to `dissect` |
 | `malformed` | frames in which a dissector could not read its layer (it raised `ValueError`: cut short, a length that lies), or that needed more than 32 dissectors |
 | `failed` | frames in which a dissector raised anything else or returned something that is not a `Dissected`: a defect in that dissector. Logged at `WARNING` on the logger `pktcap._dissect`, once per selector, for the first eight |
-| `unsupported` | frames whose link type has no dissector: they come back with no layer |
+| `unsupported` | frames whose link type has no dissector: they come back with no layer. `FrameDissector.unsupported_linktypes` is a read-only snapshot mapping each such `LINKTYPE_` number to its frame count (`{105: 3}`), telling the first 64 distinct ones apart |
 | `fragments` | frames that were a piece of a fragmented IP datagram |
 | `dropped` | reassemblies discarded: an overlap, a ceiling, old age |
 | `pending` | reassemblies still waiting for a fragment |

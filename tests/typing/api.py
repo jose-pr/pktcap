@@ -7,7 +7,7 @@ stating the result a caller gets, so a public annotation that degrades to
 """
 
 import io
-from typing import Any, Callable, Dict, Iterator, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Tuple
 
 from netimps import UDPEndpoint
 from typing_extensions import assert_type
@@ -58,6 +58,7 @@ for captured in pktcap.read_frames(source):
     assert_type(captured.interface, Optional[int])
     frame = dissector.dissect(captured)
     assert_type(frame, pktcap.DissectedFrame)
+    assert_type(dissector.unsupported_linktypes, Mapping[int, int])
     assert_type(frame.layers, Tuple[object, ...])
     assert_type(frame.payload, bytes)
     assert_type(frame.error, Optional[str])

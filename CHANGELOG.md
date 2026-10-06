@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `FrameDissector.unsupported_linktypes`, a read-only snapshot mapping each
+  link type that had no dissector to the number of frames of it (`{105: 3}`),
+  so a caller can say which link type a capture it could not read was made
+  on. The first 64 distinct link types are told apart;
+  `DissectStats.unsupported` counts every frame.
 - The package, with one exception base, `PktcapError`, and `__version__`.
 - `read_frames(source, *, max_frame_size=262144)` reads every frame of a pcap
   or pcapng capture, from a path or from a stream that cannot seek, as

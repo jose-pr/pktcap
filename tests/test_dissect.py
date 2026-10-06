@@ -462,7 +462,32 @@ def test_a_capture_of_another_link_type_is_told_from_an_empty_one():
     data = build.pcap([build.ethernet(V4)], linktype=105) + build.pcap_record(b"x")
     assert list(read_datagrams(io.BytesIO(data), dissector=dissector)) == []
     assert dissector.stats.unsupported == 2 and dissector.stats.frames == 2
+    assert dissector.unsupported_linktypes == {105: 2}
     assert len(list(read_dissected(io.BytesIO(data)))) == 2
+
+
+def test_the_link_types_with_no_dissector_are_counted_by_number():
+    dissector = FrameDissector()
+    assert dissector.unsupported_linktypes == {}
+    for linktype in (105, 1, 105, 127):
+        dissector.dissect(CapturedFrame(1.0, linktype, build.ethernet(V4)))
+    counted = dissector.unsupported_linktypes
+    assert counted == {105: 2, 127: 1} and dissector.stats.unsupported == 3
+    with pytest.raises(TypeError):
+        counted[1] = 1
+    dissector.dissect(CapturedFrame(1.0, 105, b""))
+    assert counted == {105: 2, 127: 1}
+    assert dissector.unsupported_linktypes == {105: 3, 127: 1}
+
+
+def test_only_so_many_distinct_link_types_are_told_apart():
+    dissector = FrameDissector()
+    for linktype in range(1000, 1100):
+        dissector.dissect(CapturedFrame(1.0, linktype, b"x"))
+    dissector.dissect(CapturedFrame(1.0, 1000, b"x"))
+    counted = dissector.unsupported_linktypes
+    assert len(counted) == 64 and counted[1000] == 2 and 1099 not in counted
+    assert dissector.stats.unsupported == 101
 
 
 def test_a_pcap_frame_has_no_interface_number():

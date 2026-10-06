@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from types import MappingProxyType
 from typing import (
+    Dict,
     Iterator,
     List,
     Mapping,
@@ -55,6 +56,8 @@ LINKTYPES: Mapping[int, str] = MappingProxyType(dict(LINKTYPE_NAMES))
 _MAX_LAYERS = 32
 #: How many distinct selectors one frame dissector logs a failure for.
 _MAX_LOGGED = 8
+#: How many distinct link types one frame dissector counts frames by.
+_MAX_COUNTED = 64
 
 
 class DissectStats(NamedTuple):
@@ -65,7 +68,8 @@ class DissectStats(NamedTuple):
         (a ``ValueError``), or that had more layers than the ceiling.
     :ivar failed: frames in which a dissector raised anything else, or
         returned something that is not a :class:`Dissected`: a defect in it.
-    :ivar unsupported: frames whose link type has no dissector.
+    :ivar unsupported: frames whose link type has no dissector;
+        :attr:`FrameDissector.unsupported_linktypes` says which.
     :ivar fragments: frames that were a piece of a fragmented IP datagram.
     :ivar dropped: reassemblies discarded: an overlap, a ceiling, old age.
     :ivar pending: reassemblies still waiting for a fragment.
@@ -197,6 +201,7 @@ class FrameDissector:
         self._frames = self._malformed = self._failed = 0
         self._unsupported = self._fragments = 0
         self._logged: Set[Selector] = set()
+        self._by_linktype: Dict[int, int] = {}
 
     @property
     def registry(self) -> DissectorRegistry:
@@ -216,6 +221,13 @@ class FrameDissector:
             len(self._table),
         )
 
+    @property
+    def unsupported_linktypes(self) -> Mapping[int, int]:
+        """How many frames each link type with no dissector had, by its
+        ``LINKTYPE_`` number: a read-only snapshot. The first 64 distinct
+        link types are told apart; ``stats.unsupported`` counts every frame."""
+        return MappingProxyType(dict(self._by_linktype))
+
     def dissect(self, frame: CapturedFrame) -> DissectedFrame:
         """``frame`` with every layer a registered dissector could read."""
         self._frames += 1
@@ -224,6 +236,9 @@ class FrameDissector:
         dissector = lookup(*selector)
         if dissector is None:
             self._unsupported += 1
+            counted = self._by_linktype
+            if frame.linktype in counted or len(counted) < _MAX_COUNTED:
+                counted[frame.linktype] = counted.get(frame.linktype, 0) + 1
             return DissectedFrame(frame, (), ())
         layers: List[object] = []
         payloads: List[bytes] = []
