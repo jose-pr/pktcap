@@ -426,7 +426,7 @@ constructing one opens nothing.
   anything `netimps.get_interface` finds one by (an address, a MAC).
 - **`LiveCapture.open() -> None`** — open the socket; `with` does it. Does
   nothing when already open. `LiveCaptureError` where the platform has no
-  `AF_PACKET`, the kernel's `PermissionError` without the capability,
+  `AF_PACKET` (before any interface is looked up), the kernel's `PermissionError` without the capability,
   `ValueError` when no interface matches.
 - **`LiveCapture.read() -> Optional[CapturedFrame]`** — the next packet, IP or
   not, or `None` when `timeout` seconds pass without one. A frame has link

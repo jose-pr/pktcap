@@ -80,6 +80,9 @@ def packet_socket(monkeypatch):
         return state["socket"] or install()
 
     monkeypatch.setattr("pktcap._live._open_socket", open_socket)
+    # The platform is Linux's too, so a test that names an interface gets as far
+    # as looking it up on a host with no AF_PACKET.
+    monkeypatch.setattr("pktcap._live._AF_PACKET", 17)
     install.opened = state["opened"]
     return install
 
@@ -99,6 +102,22 @@ def test_a_platform_without_packet_sockets_says_what_to_do_instead(monkeypatch):
     assert isinstance(caught.value, PktcapError) and isinstance(caught.value, OSError)
     with pytest.raises(LiveCaptureError):
         next(sniff())
+
+
+@pytest.mark.parametrize("interface", ["eth0", "no-such-interface-0", "127.0.0.1"])
+def test_a_platform_without_packet_sockets_is_refused_before_the_interface_is_looked_up(
+    monkeypatch, interface
+):
+    """A caller that catches the documented error gets it, not a `ValueError`
+    about a name that only means something where capture exists."""
+    monkeypatch.setattr("pktcap._live._AF_PACKET", None)
+    with pytest.raises(LiveCaptureError, match="pipe a capture tool"):
+        LiveCapture(interface).open()
+    with pytest.raises(LiveCaptureError):
+        next(sniff(interface))
+    with pytest.raises(LiveCaptureError):
+        with LiveCapture(interface):
+            pass
 
 
 # -- the lifecycle --------------------------------------------------------

@@ -64,8 +64,9 @@ pcapng cases are written by editcap, which adds only its own name.
 ## Rules
 
 - **A test asserts through `pktcap`'s public names.** No test imports a private
-  module to call it. One file patches a private name: `test_live.py` replaces
-  `pktcap._live._open_socket`, because the real socket needs a capability.
+  module to call it. One file patches private names: `test_live.py` replaces
+  `pktcap._live._open_socket` and `_AF_PACKET`, because the real socket needs
+  a capability and a platform that has it.
 - **Expected skips**: one, the real `AF_PACKET` test in `test_live.py`, on any
   platform but Linux and on Linux without `CAP_NET_RAW`. As root on Linux
   there are none. The IPv6 tests of `test_replay.py` skip on a host with no

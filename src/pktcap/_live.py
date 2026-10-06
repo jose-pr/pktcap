@@ -48,16 +48,22 @@ def has_live_capture() -> bool:
     return _AF_PACKET is not None
 
 
-def _open_socket(name: Optional[str]) -> socket.socket:
-    """A cooked packet socket on the named interface, or on all of them."""
+def _packet_family() -> int:
+    """``AF_PACKET``; ``LiveCaptureError`` where the platform has none."""
     if _AF_PACKET is None:
         raise LiveCaptureError(
             "live capture needs Linux (AF_PACKET); pipe a capture tool's output "
             "to read_frames() here"
         )
+    return _AF_PACKET
+
+
+def _open_socket(name: Optional[str]) -> socket.socket:
+    """A cooked packet socket on the named interface, or on all of them."""
+    family = _packet_family()
     # SOCK_DGRAM is the cooked mode: the kernel removes the link-layer header
     # and reports the protocol, so every device type reads the same.
-    sock = socket.socket(_AF_PACKET, socket.SOCK_DGRAM, socket.htons(_ETH_P_ALL))
+    sock = socket.socket(family, socket.SOCK_DGRAM, socket.htons(_ETH_P_ALL))
     try:
         if name is not None:
             sock.bind((name, 0))
@@ -111,6 +117,9 @@ class LiveCapture:
             raise ValueError("the capture is closed")
         if self._socket is not None:
             return
+        # Before the interface is looked up: a platform with no capture says so
+        # whatever name was given.
+        _packet_family()
         name: Optional[str] = None
         if isinstance(self._interface, Interface):
             name = self._interface.name
