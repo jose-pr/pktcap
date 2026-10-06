@@ -79,8 +79,10 @@ Ceilings, for a pattern field whose value a peer chose (a client identifier):
 
 A field value has every run of characters outside `A-Z a-z 0-9 _ . -`
 replaced by `_` and leading and trailing `.` and `_` removed (`unknown` when
-nothing is left), so it cannot hold a path separator or be `..`; a file name
-that Windows would open as a device (`NUL`, `COM1`) gets a leading `_`. The
+nothing is left), so it cannot hold a path separator or be `..`; a part of
+the path that a field value made a name Windows would open as a device (`NUL`,
+`COM1.x`), a directory or the file, gets a leading `_` on every platform, and
+a part the pattern spells out is kept as written. The
 cut keeps two long values that start alike apart: the cleaned value is cut to
 its first 55 characters, trailing `.` and `_` removed, and followed by `-` and
 the first 8 hexadecimal digits of the SHA-256 of the value as given (UTF-8),

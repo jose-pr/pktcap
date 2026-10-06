@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is cut to 55 and ends in `-` and 8 hexadecimal digits of the SHA-256 of the
   whole value, so two long values that start alike name two files. Before, the
   value was cut at 64 characters and they named one.
+- A field value can no longer make a directory of a per-record path
+  (`{client}/{index}.json`) a name Windows opens as a device: the part gets a
+  leading `_` on every platform, as the file's own name did. Before, a value
+  of `nul` there made every write under it fail on Windows. A part the
+  pattern spells out is kept as written.
 
 ### Added
 

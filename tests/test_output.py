@@ -501,6 +501,38 @@ def test_a_value_from_the_network_cannot_leave_the_directory_or_name_a_device(
     assert os.listdir(tmp_path) == [name + ".json"]
 
 
+@pytest.mark.parametrize(
+    "pattern, names, written",
+    [
+        ("{client}/{index}.json", {"client": "nul"}, "_nul/0.json"),
+        ("{client}/{index}.json", {"client": "COM1.d"}, "_COM1.d/0.json"),
+        ("{a}{b}/{index}.json", {"a": "au", "b": "x"}, "_aux/0.json"),
+        ("co{a}/{b}.json", {"a": "n", "b": "lpt9"}, "_con/_lpt9.json"),
+        # A part the pattern spells out is the caller's own choice.
+        ("aux/{client}.json", {"client": "c"}, "aux/c.json"),
+        ("{client}/prn/x{index}.json", {"client": "c"}, "c/prn/x0.json"),
+    ],
+)
+def test_a_value_cannot_make_a_directory_of_the_path_a_device(
+    pattern, names, written, tmp_path, monkeypatch
+):
+    """A part that holds a field value is renamed on every platform, so one
+    pattern names the same files everywhere; the test never creates a
+    directory Windows reads as a device."""
+    opened = []
+
+    def record(path, mode):
+        opened.append(os.path.relpath(path, tmp_path).replace(os.sep, "/"))
+        return io.BytesIO()
+
+    monkeypatch.setattr("builtins.open", record)
+    monkeypatch.setattr(os, "makedirs", lambda path, exist_ok=False: None)
+    target = str(tmp_path / pattern)
+    with CaptureWriter(target, per_record=True, fields=tuple(names)) as writer:
+        writer.write(FIRST, {"n": 1}, names=names)
+    assert opened == [written]
+
+
 def test_one_writer_creates_at_most_its_budget_of_files(tmp_path, caplog):
     """A field value a peer chooses would otherwise decide how many files
     land on the disk."""

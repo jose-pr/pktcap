@@ -50,6 +50,8 @@ _MAX_VALUE_LENGTH = 64
 #: Hexadecimal digits of the SHA-256 of a cut value that follow its first
 #: characters and a hyphen, so two long values with one start name two files.
 _DIGEST_LENGTH = 8
+#: What separates the parts of a path on this platform.
+_SEPARATOR = re.compile("([%s])" % re.escape(os.sep + (os.altsep or "")))
 #: Names Windows opens as devices, whatever follows the first dot.
 _DEVICES = frozenset(
     ["CON", "PRN", "AUX", "NUL"]
@@ -69,6 +71,19 @@ def _safe(value: object) -> str:
     digest = hashlib.sha256(original.encode("utf-8", "surrogatepass")).hexdigest()
     kept = text[: _MAX_VALUE_LENGTH - _DIGEST_LENGTH - 1].rstrip("._")
     return "%s-%s" % (kept, digest[:_DIGEST_LENGTH])
+
+
+def _no_devices(path: str, pattern: str) -> str:
+    """``path``, made by filling ``pattern``, with an underscore before each
+    part a field value made a Windows device name. A part the pattern spells
+    out is the caller's and is kept."""
+    spelled = set(_SEPARATOR.split(pattern))
+    parts = _SEPARATOR.split(path)
+    for at in range(0, len(parts), 2):  # the odd ones are the separators
+        part = parts[at]
+        if part not in spelled and part.split(".", 1)[0].upper() in _DEVICES:
+            parts[at] = "_" + part
+    return "".join(parts)
 
 
 def _timestamp(time: float) -> str:
@@ -334,9 +349,8 @@ class CaptureWriter:
             path = pattern.format(**values)
         except (ValueError, TypeError) as exc:
             raise ValueError("the name pattern cannot be filled: %s" % exc) from None
-        directory, name = os.path.split(path)
-        if name.split(".", 1)[0].upper() in _DEVICES:
-            path = os.path.join(directory, "_" + name)
+        path = _no_devices(path, pattern)
+        directory = os.path.dirname(path)
         if path not in self._paths:
             if len(self._paths) >= self._max_files:
                 self.refused += 1
