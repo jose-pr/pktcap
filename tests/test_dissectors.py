@@ -1,8 +1,10 @@
 """Each built-in dissector, on its own: what it reads, what it refuses, and
 that nothing else ever comes out of it."""
 
+import ipaddress
 import struct
 
+import netimps
 import pytest
 
 import captures as build
@@ -178,6 +180,26 @@ def test_ipv6():
     )
     assert payload == UDP and following == (("ip", 17),) and fragment is None
     assert run("ethertype", 0x86DD, packet + bytes(9)).payload == UDP
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "2001:db8::5",
+        "::ffff:10.0.0.1",
+        "::ffff:a00:1",
+        "::ffff:0.0.0.0",
+        "fe80::1",
+        "::",
+        "::1",
+    ],
+)
+def test_an_address_is_written_as_netimps_writes_it(address):
+    """The dissector keeps its own copy of the rule for speed; the two agree."""
+    expected = netimps.format_address(ipaddress.IPv6Address(address))
+    packet = build.ipv6(address, address, UDP)
+    layer = run("ethertype", 0x86DD, packet).layer
+    assert layer.source == layer.destination == expected
 
 
 @pytest.mark.parametrize("header", [0, 43, 60])
