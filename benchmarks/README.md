@@ -23,6 +23,7 @@ repeated `--samples` times (15 by default) after one warm-up call.
 | `read_frames/pcap-2000` | reading 2,000 frames of a pcap from memory |
 | `read_frames/pcapng-2000` | the same frames in pcapng |
 | `read_dissected/ethernet-ipv4-udp-2000` | reading and dissecting 2,000 Ethernet, IPv4, UDP frames: three layers each |
+| `read_dissected/ethernet-ipv6-udp-2000` | 2,000 Ethernet, IPv6, UDP frames: three layers each, two IPv6 addresses written as text in each |
 | `read_dissected/qinq-ipv4-tcp-2000` | 2,000 frames with two VLAN tags, IPv4 and TCP with options: five layers each |
 | `read_dissected/registered-dissector-2000` | the first input again, with a dissector registered for its UDP port: four layers each |
 | `read_datagrams/ethernet-ipv4-2000` | the same frames through the UDP datagram view |

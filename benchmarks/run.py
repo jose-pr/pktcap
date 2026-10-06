@@ -45,8 +45,17 @@ def _ipv4(body, ident=1, offset=0, more=False, protocol=17):
     )
 
 
-def _ethernet(ip, tags=b""):
-    return b"\x02" * 6 + b"\x04" * 6 + tags + b"\x08\x00" + ip
+def _ipv6(body, protocol=17):
+    return (
+        struct.pack("!IHBB", 0x60000000, len(body), protocol, 64)
+        + bytes.fromhex("20010db8000000000000000000000005")
+        + bytes.fromhex("20010db8000000000000000000000001")
+        + body
+    )
+
+
+def _ethernet(ip, tags=b"", ethertype=b"\x08\x00"):
+    return b"\x02" * 6 + b"\x04" * 6 + tags + ethertype + ip
 
 
 def _pcap(frames):
@@ -76,6 +85,10 @@ def _pcapng(frames):
 def _inputs():
     payload = bytes(512)
     whole = [_ethernet(_ipv4(_udp(50000, 69, payload), ident=i)) for i in range(FRAMES)]
+    v6 = [
+        _ethernet(_ipv6(_udp(50000, 69, payload)), ethertype=b"\x86\xdd")
+        for _ in range(FRAMES)
+    ]
     big = _udp(50000, 69, bytes(4096))
     pieces = [big[i : i + 1480] for i in range(0, len(big), 1480)]
     fragmented = [
@@ -99,6 +112,7 @@ def _inputs():
     return {
         "pcap": _pcap(whole),
         "pcapng": _pcapng(whole),
+        "ipv6": _pcap(v6),
         "fragments": _pcap(fragmented),
         "tagged": _pcap(tagged),
         "tiny": tiny,
@@ -175,6 +189,9 @@ def metrics(inputs):
         ),
         "read_dissected/ethernet-ipv4-udp-2000": lambda: sum(
             1 for _ in pktcap.read_dissected(io.BytesIO(inputs["pcap"]))
+        ),
+        "read_dissected/ethernet-ipv6-udp-2000": lambda: sum(
+            1 for _ in pktcap.read_dissected(io.BytesIO(inputs["ipv6"]))
         ),
         "read_dissected/qinq-ipv4-tcp-2000": lambda: sum(
             1 for _ in pktcap.read_dissected(io.BytesIO(inputs["tagged"]))
