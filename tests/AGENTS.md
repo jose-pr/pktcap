@@ -42,6 +42,7 @@ prints the reason for every skip: a skip is not a pass.
 | `test_cli_convert.py` | `pktcap convert`: one record per frame, a round trip through pcapng octet for octet, the filter, the datagram view, a cut capture, each combination refused before anything is read, and the capture octets on a real standard output compared with the file's |
 | `test_cli_replay.py` | `pktcap replay` to loopback sockets the test owns: the whole datagrams in order and the partial one counted, `--json`, the limit, the filter, the recorded pace and `--max-delay`, the source port, a destination with no port or that does not resolve, a cut capture, standard input |
 | `test_cli_tools.py` | `convert` served as a tool and nothing else: the tool list, a call that returns the records as its result, capture octets refused as text, and the real server driven over pipes with `PKTCAP_MCP=stdio` |
+| `test_cli_capture.py` | `pktcap capture`: the refusal off Linux, every option with `test_live.py`'s stand-in socket (count, filter, datagram view, duration, Ctrl-C, no capability), and one test of the real socket on loopback |
 | `test_copy.py` | `copy_frames`: a capture of UDP, TCP and ARP frames copied whole and as datagrams, the filter, the limit that leaves the source unread, the file budget's refusals, and what is refused at the call |
 | `test_replay.py` | `replay_schedule`, `replay` and `replay_to`: the waits and their cap, the limit, sends to loopback sockets the test owns over IPv4 and IPv6, partial datagrams, frames replayed to a callable and never sent, and that the guard sees a replay that would leave the host |
 | `test_live.py` | `LiveCapture`, `sniff_frames` and `sniff` with the privileged socket replaced: the lifecycle, every packet as a cooked frame, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
@@ -71,9 +72,11 @@ pcapng cases are written by editcap, which adds only its own name.
 - **A test asserts through `pktcap`'s public names.** No test imports a private
   module to call it. One file patches private names: `test_live.py` replaces
   `pktcap._live._open_socket` and `_AF_PACKET`, because the real socket needs
-  a capability and a platform that has it.
-- **Expected skips**: one, the real `AF_PACKET` test in `test_live.py`, on any
-  platform but Linux and on Linux without `CAP_NET_RAW`. As root on Linux
+  a capability and a platform that has it; `test_cli_capture.py` uses its
+  `packet_socket` fixture and patches nothing itself.
+- **Expected skips**: two, the real `AF_PACKET` tests in `test_live.py` and
+  `test_cli_capture.py`, on any platform but Linux and on Linux without
+  `CAP_NET_RAW`. As root on Linux
   there are none. The IPv6 tests of `test_replay.py` skip on a host with no
   IPv6 loopback address.
 - **A bound is seen to fail.** A test for a ceiling is run once against the

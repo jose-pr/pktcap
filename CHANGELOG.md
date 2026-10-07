@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   time, through `replay_to`. `--to` is the only destination there is: the
   addresses in the file are never sent to. The result is the one line
   `sent 12, partial 0`, or an object with `--json`.
+- `pktcap capture [--interface NAME] [--filter EXPR] [--output TARGET]
+  [--format FMT] [--datagrams] [--per-record] [--max-files N] [--count N]
+  [--duration SECONDS]` captures live through `sniff_frames` and `copy_frames`
+  (Linux, `CAP_NET_RAW`). Ctrl-C ends it with status 0 and the summary; off
+  Linux the one line says to pipe a capture tool into `pktcap convert`.
 - `PKTCAP_MCP=stdio pktcap` serves `convert` as a tool (`pktcap.convert`):
   the records come back as the tool's result, and a capture format is refused
   for standard output, which a tool call has no octets for. `capture` and

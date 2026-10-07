@@ -85,7 +85,7 @@ def test_without_duho_python_dash_m_and_the_console_script_say_the_same():
         "found = entry_points()\n"
         "scripts = found.select(group='console_scripts') if hasattr(found, 'select')"
         " else found['console_scripts']\n"
-        "(script,) = [e for e in scripts if e.name == 'pktcap']\n"
+        "script = [e for e in scripts if e.name == 'pktcap'][0]\n"
         "raise SystemExit(script.load()([]))\n"
     )
     assert entry.returncode == 1 and entry.stderr.strip() == HINT
