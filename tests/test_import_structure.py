@@ -17,6 +17,13 @@ _SRC = Path(pktcap.__file__).parent
 
 #: The most lines a module may have.
 MAX_MODULE_LINES = 400
+#: The most lines a command module may have: past it, logic belongs in the
+#: library, where it is public and tested without a parser.
+MAX_COMMAND_LINES = 200
+
+#: ``pktcap.cli`` is the one public subpackage, and each subcommand is a module
+#: named for it. Everything else is private.
+COMMAND_MODULES = {"cli/capture.py", "cli/convert.py", "cli/replay.py"}
 
 
 def _modules():
@@ -34,7 +41,47 @@ def test_every_module_but_the_root_is_private():
         if path.name != "__init__.py"
         and not any(part.startswith("_") for part in path.relative_to(_SRC).parts)
     ]
-    assert public == []
+    assert sorted(public) == sorted(COMMAND_MODULES)
+
+
+def test_duho_is_imported_by_the_command_line_alone():
+    offenders = []
+    for path in _modules():
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                names = [node.module or ""]
+            if any(name.split(".")[0] == "duho" for name in names):
+                if not _name(path).startswith("cli/"):
+                    offenders.append(_name(path))
+    assert offenders == []
+
+
+def test_the_package_init_of_the_command_line_imports_duho_inside_main_only():
+    tree = ast.parse((_SRC / "cli" / "__init__.py").read_text(encoding="utf-8"))
+    top = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        and any(
+            (
+                alias.name if isinstance(node, ast.Import) else node.module or ""
+            ).startswith("duho")
+            for alias in node.names
+        )
+    ]
+    assert top == []
+
+
+def test_a_command_module_stays_short():
+    long = {
+        _name(path): len(path.read_text(encoding="utf-8").splitlines())
+        for path in (_SRC / "cli").glob("*.py")
+        if len(path.read_text(encoding="utf-8").splitlines()) > MAX_COMMAND_LINES
+    }
+    assert long == {}, "move what is not parsing, calling and printing into the library"
 
 
 def test_no_module_imports_a_name_from_the_root():
@@ -84,10 +131,12 @@ def test_every_module_has_future_annotations():
 
 def test_importing_the_package_loads_no_optional_dependency():
     """`import pktcap` works with no extra installed and imports none of them,
-    nor asyncio, which only a caller driving a loop needs."""
+    nor the command line, nor asyncio, which only a caller driving a loop
+    needs."""
     code = (
         "import sys, pktcap; "
-        "print(sorted(m for m in ('yaml', 'tomli_w', 'asyncio') if m in sys.modules))"
+        "print(sorted(m for m in ('yaml', 'tomli_w', 'asyncio', 'duho', "
+        "'pktcap.cli') if m in sys.modules))"
     )
     out = subprocess.run(
         [sys.executable, "-c", code],

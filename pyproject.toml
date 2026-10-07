@@ -36,10 +36,15 @@ dependencies = ["netimps>=0.4.0,<0.5"]
 # are written with the standard library and need none.
 yaml = ["PyYAML>=6.0,<7"]
 toml = ["tomli-w>=1.0,<2"]
+# The command line: duho, and only the modules under pktcap.cli import it.
+cli = ["duho>=0.7.0,<0.8"]
 # The tests exercise every extra, so dev refers to them rather than repeating
 # their ranges.
-dev = ["pktcap[yaml,toml]", "build", "twine", "hatchling", "pytest", "black", "mypy<2", "types-PyYAML"]
+dev = ["pktcap[yaml,toml,cli]", "build", "twine", "hatchling", "pytest", "black", "mypy<2", "types-PyYAML"]
 docs = ["mkdocs", "mkdocs-material", "mkdocstrings[python]"]
+
+[project.scripts]
+pktcap = "pktcap.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/jose-pr/pktcap"

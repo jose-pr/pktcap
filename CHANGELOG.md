@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The `pktcap` command, also `python -m pktcap`, behind the new `cli` extra
+  (`pip install "pktcap[cli]"`, which brings `duho`). Without the extra the
+  command prints the one line naming it and exits 1. `import pktcap` imports
+  neither `duho` nor the command package, `pktcap.cli`, which is not library
+  API. Exit status: 0 done, 1 the operation failed, 2 the invocation was
+  wrong.
 - `sniff_frames(interface=None, *, stop=None, dissector=None)` yields every
   frame seen live, dissected, as `read_dissected` does for a file; `sniff` is
   its datagram view, with the behaviour it had.

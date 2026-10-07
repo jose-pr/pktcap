@@ -60,9 +60,10 @@ Requires Python 3.9 or newer. `netimps` is the one dependency.
 | --- | --- | --- |
 | `yaml` | `PyYAML` | the `yaml` output format |
 | `toml` | `tomli-w` | the `toml` output format |
+| `cli` | `duho` | the `pktcap` command |
 
-Importing `pktcap` needs neither; a format whose extra is missing raises
-`ImportError` naming the extra when it is used.
+Importing `pktcap` needs none of them; a format whose extra is missing raises
+`MissingExtraError` (an `ImportError`) naming the extra when it is used.
 
 ## Quick start
 

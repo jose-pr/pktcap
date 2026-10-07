@@ -96,4 +96,4 @@ def test_the_installation_table_names_the_declared_extras():
     manifest = tomllib.loads((README.parent / "pyproject.toml").read_text("utf-8"))
     extras = set(manifest["project"]["optional-dependencies"]) - {"dev", "docs"}
     rows = set(re.findall(r"^\| `([a-z]+)` \|", _section("Installation"), re.MULTILINE))
-    assert rows == extras == {"yaml", "toml"}
+    assert rows == extras == {"yaml", "toml", "cli"}
