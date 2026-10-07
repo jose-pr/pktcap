@@ -49,7 +49,12 @@ from ._formats import (
     dumps_record,
     has_output_format,
 )
-from ._frame_filter import FRAME_FILTER_KEYS, frame_filter
+from ._frame_filter import (
+    FRAME_FILTER_KEYS,
+    frame_filter,
+    frame_filter_for,
+    frame_filter_keys,
+)
 from ._layers import (
     EthernetLayer,
     IPv4Layer,
@@ -116,6 +121,8 @@ __all__ = [
     "default_registry",
     "dumps_record",
     "frame_filter",
+    "frame_filter_for",
+    "frame_filter_keys",
     "frame_record",
     "has_live_capture",
     "has_output_format",

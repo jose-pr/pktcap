@@ -7,7 +7,7 @@ stating the result a caller gets, so a public annotation that degrades to
 """
 
 import io
-from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, Mapping, NamedTuple, Optional, Tuple
 
 from netimps import UDPEndpoint
 from typing_extensions import assert_type
@@ -125,6 +125,23 @@ assert_type(
     pktcap.compile_capture_filter("proto=udp", pktcap.frame_filter),
     Callable[[pktcap.DissectedFrame], bool],
 )
+assert_type(
+    pktcap.compile_capture_filter("ipv4.ttl=64", pktcap.frame_filter_for(registry)),
+    Callable[[pktcap.DissectedFrame], bool],
+)
+assert_type(pktcap.frame_filter_keys(registry), Tuple[str, ...])
+assert_type(pktcap.frame_filter_keys(), Tuple[str, ...])
+
+
+class DemoLayer(NamedTuple):
+    opcode: int
+
+
+registry.register_layer(
+    DemoLayer, name="demo", keys={"op": lambda clause: lambda layer: True}, replace=True
+)
+registry.unregister_layer("demo")
+assert_type(registry.layers(), Dict[str, type])
 assert_type(pktcap.parse_capture_filter(None), Tuple[pktcap.FilterClause, ...])
 assert_type(pktcap.FRAME_FILTER_KEYS, Tuple[str, ...])
 

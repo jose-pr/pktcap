@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `DissectorRegistry.register_layer(layer, *, name=None, keys=None,
+  replace=False)`, `unregister_layer(name)` and `layers()` declare the class
+  of a layer a dissector returns, and optionally the filter keys over it.
+  `frame_filter_for(registry)` is the filter `build` that knows them:
+  `LAYER.FIELD` reads any field of a built-in or declared layer by the type of
+  its value (`ipv4.ttl=64`, `udp.destination_port=0x270f`), `LAYER.KEY` and
+  the bare `KEY` read a library's own keys, and a wrong key or a value that
+  can never match is refused when the filter is compiled.
+  `frame_filter_keys(registry=None)` lists every key that compiles.
+  `frame_filter` reads no registry; it answers `LAYER.FIELD` of the built-in
+  layers.
 - The `pktcap` command, also `python -m pktcap`, behind the new `cli` extra
   (`pip install "pktcap[cli]"`, which brings `duho`). Without the extra the
   command prints the one line naming it and exits 1. `import pktcap` imports

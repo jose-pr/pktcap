@@ -1,5 +1,7 @@
 """The dissector registry, and the contract check a dissector is held to."""
 
+import typing
+
 import pytest
 
 import pktcap
@@ -207,3 +209,146 @@ def test_the_check_is_the_same_run_for_the_same_seed():
 def test_dissect_error_is_a_value_error_of_this_package():
     assert issubclass(DissectError, ValueError)
     assert issubclass(DissectError, pktcap.PktcapError)
+
+
+# -- layers -----------------------------------------------------------------
+
+
+class DemoLayer(typing.NamedTuple):
+    opcode: int
+
+
+def _build(clause):
+    return lambda layer: True
+
+
+def test_a_layer_is_named_as_proto_and_frame_record_name_it():
+    registry = DissectorRegistry()
+    registry.register_layer(DemoLayer)
+    assert registry.layers() == {"demo": DemoLayer}
+
+    class Plain:
+        pass
+
+    class Layer:
+        pass
+
+    registry.register_layer(Plain)
+    registry.register_layer(Layer)  # a class called Layer keeps its name
+    assert sorted(registry.layers()) == ["demo", "layer", "plain"]
+    registry.register_layer(Plain, name="other")
+    assert registry.layers()["other"] is Plain
+
+
+@pytest.mark.parametrize("name", ["", "Demo", "9a", "a.b", "a-b", "a b", "ünï"])
+def test_a_layer_name_that_is_not_a_lower_case_word_is_refused(name):
+    registry = DissectorRegistry()
+    with pytest.raises(ValueError, match="not a layer name"):
+        registry.register_layer(DemoLayer, name=name)
+    assert registry.layers() == {}
+
+
+def test_a_class_whose_name_gives_no_valid_layer_name_must_be_named():
+    class _HiddenLayer:
+        pass
+
+    registry = DissectorRegistry()
+    with pytest.raises(ValueError, match="pass name="):
+        registry.register_layer(_HiddenLayer)
+    registry.register_layer(_HiddenLayer, name="hidden")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ethernet",
+        "vlan",
+        "linuxcooked",
+        "loopback",
+        "ipv4",
+        "ipv6",
+        "ipv6extension",
+        "ipv6fragment",
+        "udp",
+        "tcp",
+    ],
+)
+def test_a_built_in_layers_name_is_never_registered(name):
+    registry = DissectorRegistry(builtins=False)
+    with pytest.raises(ValueError, match="built-in layer"):
+        registry.register_layer(DemoLayer, name=name)
+    with pytest.raises(ValueError, match="built-in layer"):
+        registry.register_layer(DemoLayer, name=name, replace=True)
+    assert registry.layers() == {}
+
+
+def test_a_layer_name_that_is_taken_is_an_error_unless_replacing_is_asked_for():
+    registry = DissectorRegistry()
+    registry.register_layer(DemoLayer, keys={"op": _build})
+
+    class Other(typing.NamedTuple):
+        x: int
+
+    with pytest.raises(ValueError, match="already registered"):
+        registry.register_layer(Other, name="demo")
+    assert registry.layers() == {"demo": DemoLayer}
+    registry.register_layer(Other, name="demo", replace=True)
+    assert registry.layers() == {"demo": Other}
+    assert "demo.op" not in pktcap.frame_filter_keys(registry)  # the keys went with it
+
+
+def test_what_is_not_a_class_or_a_key_table_is_refused_and_nothing_registered():
+    registry = DissectorRegistry()
+    for layer in (DemoLayer(1), "demo", None, 5):
+        with pytest.raises(TypeError, match="class"):
+            registry.register_layer(layer)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        registry.register_layer(DemoLayer, name=5)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="maps a key name"):
+        registry.register_layer(DemoLayer, keys=[("a", _build)])  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="cannot be called"):
+        registry.register_layer(DemoLayer, keys={"a": 5})  # type: ignore[dict-item]
+    for key in ("", "A", "a.b", "1a", "a b", 5):
+        with pytest.raises(ValueError, match="not a key name"):
+            registry.register_layer(DemoLayer, keys={key: _build})  # type: ignore[dict-item]
+    assert registry.layers() == {}
+
+
+def test_unregistering_a_layer_forgets_it_and_its_keys():
+    registry = DissectorRegistry()
+    registry.register_layer(DemoLayer, keys={"op": _build})
+    registry.unregister_layer("demo")
+    assert registry.layers() == {}
+    assert not [k for k in pktcap.frame_filter_keys(registry) if k.startswith("demo")]
+    for name in ("demo", "udp", "", None):
+        with pytest.raises(ValueError, match="no layer named"):
+            registry.unregister_layer(name)  # type: ignore[arg-type]
+    assert DissectorRegistry().layers() == {}  # built-in layers are not registered
+
+
+def test_layers_is_a_copy():
+    registry = DissectorRegistry()
+    registry.register_layer(DemoLayer)
+    snapshot = registry.layers()
+    snapshot.clear()
+    assert registry.layers() == {"demo": DemoLayer}
+
+
+def test_a_copy_carries_the_layers_and_keys_and_then_changes_on_its_own():
+    registry = DissectorRegistry()
+    registry.register_layer(DemoLayer, keys={"op": _build})
+    registry.register("udp", 9999, _dhcp)
+    clone = registry.copy()
+    assert clone.layers() == {"demo": DemoLayer}
+    assert "demo.op" in pktcap.frame_filter_keys(clone)
+    assert clone.get("udp", 9999) is _dhcp
+    clone.unregister_layer("demo")
+    clone.register_layer(typing.NamedTuple("Extra", [("x", int)]), name="extra")
+    assert registry.layers() == {"demo": DemoLayer}
+    assert "demo.op" in pktcap.frame_filter_keys(registry)
+
+
+def test_two_registries_share_no_layer_and_the_default_has_none():
+    one, two = DissectorRegistry(), DissectorRegistry()
+    one.register_layer(DemoLayer)
+    assert two.layers() == {} and default_registry().layers() == {}

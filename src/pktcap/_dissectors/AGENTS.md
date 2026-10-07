@@ -72,6 +72,8 @@ What a dissector must do, and what happens when it does not:
 A layer record is best a `typing.NamedTuple` of plain values named
 `<Protocol>Layer`: immutable and hashable, `frame.layer(TFTPLayer)` finds it,
 `frame_record` writes its fields, and the filter key `proto=tftp` matches it.
+Declared with `register_layer`, each of its fields is also a filter key,
+`tftp.opcode=1`.
 
 ## The registry
 
@@ -94,8 +96,15 @@ choose.
   walk, not an error.
 - **`DissectorRegistry.selectors() -> Tuple[Selector, ...]`** — every selector
   with a dissector, sorted.
-- **`DissectorRegistry.copy() -> DissectorRegistry`** — the same dissectors in
-  a registry that then changes on its own.
+- **`DissectorRegistry.copy() -> DissectorRegistry`** — the same dissectors,
+  layers and keys in a registry that then changes on its own.
+- **`DissectorRegistry.register_layer(layer, *, name=None, keys=None, replace=False) -> None`**
+  — declare the class of a layer a dissector returns, and optionally the
+  filter keys that read it, so a filter can name it.
+  **`DissectorRegistry.unregister_layer(name) -> None`** forgets one, and
+  **`DissectorRegistry.layers() -> Dict[str, type]`** is a copy of the
+  registered ones. The rules, and how a filter reads them, are in
+  `pktcap/_plugins/AGENTS.md`.
 
 **`default_registry() -> DissectorRegistry`** — the one registry a
 `FrameDissector` uses when given none. One object for the process.

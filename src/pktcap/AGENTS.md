@@ -25,6 +25,7 @@ installed package (`importlib.resources.files("pktcap")`):
 | --- | --- |
 | `pktcap/AGENTS.md` | this file: reading, dissecting, the datagram view, filtering, replaying, live capture, the exceptions |
 | `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
+| `pktcap/_plugins/AGENTS.md` | layers and the filter keys a registry holds for them, and how a filter reads a layer's fields |
 | `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay` and `convert`, every option, what each prints, its statuses |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
@@ -303,10 +304,18 @@ is the keys, as a tuple, in this order:
 | `proto` | a layer the frame has, by name (`udp`, `tcp`, `ipv4`, `ipv6`, `vlan`, `ethernet`; for a registered dissector's layer, its class name in lower case without a trailing `Layer`), or an IP protocol number (`17`) |
 | `vlan` | a VLAN identifier on any tag of the frame |
 | `linktype` | the capture's link-type number |
+| `LAYER.FIELD` | a field of a layer, by the type of its value: `ipv4.ttl=64`, `udp.destination_port=9999`. `LAYER` is a built-in layer's name (`ethernet`, `vlan`, `linuxcooked`, `loopback`, `ipv4`, `ipv6`, `ipv6extension`, `ipv6fragment`, `udp`, `tcp`) or one a registry declares |
 
 A frame without the layer a key asks about fails the clause, so its `!=` form
 holds. A protocol library adds its own keys by wrapping: its `build` answers
 the keys it knows and returns `frame_filter(clause)` for the rest.
+
+A registry also holds **layers and the filter keys over them**:
+`DissectorRegistry.register_layer` declares a layer's class and its keys,
+`frame_filter_for(registry)` is the `build` that knows them (`frame_filter`
+itself reads no registry) and `frame_filter_keys(registry=None)` lists every
+key that compiles. The rule, the bounds and what is refused are in
+`pktcap/_plugins/AGENTS.md`.
 
 **`FilterClause(key, value, negated=False)`** — a named tuple. `key` is as
 written (case kept), `value` the text after the operator with surrounding

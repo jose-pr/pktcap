@@ -10,8 +10,11 @@ registry only because some code put it there.
 from __future__ import annotations
 
 import random
-from typing import Dict, Iterable, Optional, Tuple
+import re
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
 
+from .._filter import FilterClause
+from .._layers import BUILTIN_LAYERS
 from ._contract import Dissected, Dissector, Fragment, Selector
 from ._link import LINK_DISSECTORS
 from ._network import NETWORK_DISSECTORS
@@ -23,6 +26,13 @@ __all__ = [
     "default_registry",
     "register_dissector",
 ]
+
+
+#: Turns one filter clause over a layer's key into a test of one layer record.
+KeyBuilder = Callable[[FilterClause], Callable[[Any], bool]]
+
+_LAYER_NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
+_KEY_NAME = re.compile(r"[a-z][a-z0-9_-]*\Z")
 
 
 def _selector(kind: object, value: object) -> Selector:
@@ -51,6 +61,8 @@ class DissectorRegistry:
 
     def __init__(self, *, builtins: bool = True) -> None:
         self._dissectors: Dict[Selector, Dissector] = {}
+        self._layers: Dict[str, type] = {}
+        self._layer_keys: Dict[str, Dict[str, KeyBuilder]] = {}
         if builtins:
             for table in (LINK_DISSECTORS, NETWORK_DISSECTORS, TRANSPORT_DISSECTORS):
                 self._dissectors.update(table)
@@ -94,10 +106,109 @@ class DissectorRegistry:
         """Every selector with a dissector, sorted."""
         return tuple(sorted(self._dissectors))
 
+    def register_layer(
+        self,
+        layer: type,
+        *,
+        name: Optional[str] = None,
+        keys: Optional[Mapping[str, KeyBuilder]] = None,
+        replace: bool = False,
+    ) -> None:
+        """Declare the class of a layer a dissector returns, so a filter can
+        name it, and optionally the filter keys that read it.
+
+        :param layer: the layer's class. Every field of a named tuple is a
+            filter key ``NAME.FIELD`` with no further code.
+        :param name: how a filter calls the layer: lower case, ``[a-z][a-z0-9_]*``.
+            Omitted: the class name in lower case without a trailing
+            ``Layer``, which is also how ``proto=`` and ``frame_record`` name it.
+        :param keys: key name (``[a-z][a-z0-9_-]*``) to ``build(clause)``,
+            called once per clause when a filter is compiled; it returns the
+            test of one layer record and raises ``ValueError`` for a value
+            that can never match.
+        :param replace: take the place of a layer registered under that name.
+        :raises ValueError: a name that is not valid, is a built-in layer's
+            name, or is taken and ``replace`` is false; a key name that is
+            not valid.
+        :raises TypeError: ``layer`` is not a class, ``keys`` is not a
+            mapping of callables.
+        """
+        if not isinstance(layer, type):
+            raise TypeError("a layer is a class, such as a named tuple")
+        if name is None:
+            base = layer.__name__
+            name = (
+                base[:-5] if base.endswith("Layer") and len(base) > 5 else base
+            ).lower()
+        elif not isinstance(name, str):
+            raise TypeError("a layer's name is text")
+        if not _LAYER_NAME.match(name):
+            raise ValueError(
+                "%r is not a layer name (lower case letters, digits and _, "
+                "starting with a letter): pass name=" % name
+            )
+        if name in BUILTIN_LAYERS:
+            raise ValueError("%r is the name of a built-in layer" % name)
+        if name in self._layers and not replace:
+            raise ValueError(
+                "a layer named %r is already registered; pass replace=True to "
+                "take its place" % name
+            )
+        checked: Dict[str, KeyBuilder] = {}
+        if keys is not None:
+            if not isinstance(keys, Mapping):
+                raise TypeError("keys maps a key name to a function building its test")
+            for key, build in keys.items():
+                if not isinstance(key, str) or not _KEY_NAME.match(key):
+                    raise ValueError(
+                        "%r is not a key name (lower case letters, digits, _ and -, "
+                        "starting with a letter, no dot)" % (key,)
+                    )
+                if not callable(build):
+                    raise TypeError("the builder of key %r cannot be called" % key)
+                checked[key] = build
+        self._layers[name] = layer
+        self._layer_keys[name] = checked
+
+    def unregister_layer(self, name: str) -> None:
+        """Forget a registered layer and its keys. ``ValueError`` when there
+        is none, a built-in layer included."""
+        if not isinstance(name, str) or name not in self._layers:
+            raise ValueError("no layer named %r is registered" % (name,))
+        del self._layers[name]
+        del self._layer_keys[name]
+
+    def layers(self) -> Dict[str, type]:
+        """The registered layers, by name: a copy, built-in layers not in it."""
+        return dict(self._layers)
+
+    def _registered_keys(self, name: str) -> Mapping[str, KeyBuilder]:
+        return self._layer_keys.get(name, {})
+
+    def _snapshot(
+        self,
+    ) -> "Tuple[Dict[Selector, Dissector], Dict[str, type], Dict[str, Dict[str, KeyBuilder]]]":
+        return (
+            dict(self._dissectors),
+            dict(self._layers),
+            {name: dict(keys) for name, keys in self._layer_keys.items()},
+        )
+
+    def _restore(
+        self,
+        snapshot: "Tuple[Dict[Selector, Dissector], Dict[str, type], Dict[str, Dict[str, KeyBuilder]]]",
+    ) -> None:
+        self._dissectors, self._layers, self._layer_keys = (
+            dict(snapshot[0]),
+            dict(snapshot[1]),
+            {name: dict(keys) for name, keys in snapshot[2].items()},
+        )
+
     def copy(self) -> "DissectorRegistry":
-        """A registry with the same dissectors that then changes on its own."""
+        """A registry with the same dissectors, layers and keys that then
+        changes on its own."""
         clone = DissectorRegistry(builtins=False)
-        clone._dissectors.update(self._dissectors)
+        clone._restore(self._snapshot())
         return clone
 
 

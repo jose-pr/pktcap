@@ -7,7 +7,7 @@ record ready for any output format. Re-exported from :mod:`pktcap`.
 
 from __future__ import annotations
 
-from typing import NamedTuple, Optional
+from typing import Dict, NamedTuple, Optional
 
 __all__ = [
     "EthernetLayer",
@@ -234,3 +234,19 @@ class TCPLayer(NamedTuple):
     def rst(self) -> bool:
         """The RST flag: the connection is reset."""
         return bool(self.flags & 0x04)
+
+
+#: The built-in layers by the name a filter calls them: the class name without
+#: ``Layer``, in lower case.
+BUILTIN_LAYERS: Dict[str, type] = {
+    "ethernet": EthernetLayer,
+    "vlan": VLANLayer,
+    "linuxcooked": LinuxCookedLayer,
+    "loopback": LoopbackLayer,
+    "ipv4": IPv4Layer,
+    "ipv6": IPv6Layer,
+    "ipv6extension": IPv6ExtensionLayer,
+    "ipv6fragment": IPv6FragmentLayer,
+    "udp": UDPLayer,
+    "tcp": TCPLayer,
+}

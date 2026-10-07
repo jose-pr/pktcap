@@ -57,6 +57,8 @@ EXPECTED = [
     "default_registry",
     "dumps_record",
     "frame_filter",
+    "frame_filter_for",
+    "frame_filter_keys",
     "frame_record",
     "has_live_capture",
     "has_output_format",

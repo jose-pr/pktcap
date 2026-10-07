@@ -34,6 +34,7 @@ prints the reason for every skip: a skip is not a pass.
 | `test_dissectors.py` | each built-in dissector called on its own: every field of every layer, every header cut short or lying about its length, and `check_dissector` over each with 5,000 damaged inputs |
 | `test_dissect.py` | `FrameDissector`, `read_dissected` and `read_datagrams`: the walk under every link type, what ends it, the 32-dissector ceiling, a registered dissector that refuses its octets or fails outright, the datagram view, a seeded fuzz per link type |
 | `test_writer.py` | `PcapWriter` and `PcapngWriter`: datagrams under synthesised headers with their checksums, frames written back octet for octet, one link type per pcap file and any mix in pcapng, the lazy open, what a bad argument leaves untouched |
+| `test_layer_filter.py` | layers and filter keys in a registry: `LAYER.FIELD` by each type a field holds, a library's own keys, every collision, each refusal at compile and each bound |
 | `test_filter.py` | the filter grammar: the expressions protocol libraries use, what is refused, the round trip of the canonical text, compiling with a caller's builder |
 | `test_frame_filter.py` | `frame_filter`: each built-in key against IPv4, IPv6, TCP, UDP and tagged frames, a frame without the layer, a wrong value, a caller's own keys on top |
 | `test_formats.py` | the record formats: one contract suite over every name in `RECORD_FORMATS` (the text parses back with a parser this library did not write), then each format's dialect and the missing-extra message |
