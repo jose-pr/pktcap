@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   neither `duho` nor the command package, `pktcap.cli`, which is not library
   API. Exit status: 0 done, 1 the operation failed, 2 the invocation was
   wrong.
+- `pktcap convert --input FILE|- [--output TARGET] [--format FMT] [--filter
+  EXPR] [--datagrams] [--per-record] [--max-files N] [--limit N]` copies a
+  pcap or pcapng capture into pcap, pcapng or records (json, yaml, toml,
+  ini), through `copy_frames`. Standard output is the default target and may
+  be the capture; the summary is on standard error.
 - `sniff_frames(interface=None, *, stop=None, dissector=None)` yields every
   frame seen live, dissected, as `read_dissected` does for a file; `sniff` is
   its datagram view, with the behaviour it had.
