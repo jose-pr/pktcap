@@ -27,7 +27,7 @@ class YAMLFormat(RecordFormat):
         try:
             import yaml  # noqa: F401
         except ImportError:
-            raise missing_extra("YAML", "yaml") from None
+            raise missing_extra("yaml", "yaml") from None
 
     def dumps(self, record: Mapping[str, Any]) -> str:
         self.require()

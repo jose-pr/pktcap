@@ -37,6 +37,7 @@ from ._exceptions import (
     CaptureFormatError,
     DissectError,
     LiveCaptureError,
+    MissingExtraError,
     PktcapError,
     UnsupportedFormatError,
 )
@@ -93,6 +94,7 @@ __all__ = [
     "LiveCapture",
     "LiveCaptureError",
     "LoopbackLayer",
+    "MissingExtraError",
     "OUTPUT_FORMATS",
     "PcapWriter",
     "PcapngWriter",

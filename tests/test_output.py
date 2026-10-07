@@ -18,6 +18,7 @@ from pktcap import (
     Dissected,
     DissectorRegistry,
     FrameDissector,
+    MissingExtraError,
     UnsupportedFormatError,
     datagram_record,
     dumps_record,
@@ -218,6 +219,21 @@ def test_a_missing_extra_fails_when_the_writer_is_built_not_per_packet(
     monkeypatch.setitem(sys.modules, module, None)
     with pytest.raises(ImportError, match=r'pip install "pktcap\[%s\]"' % name):
         CaptureWriter("cap_{index}." + name, per_record=True)
+
+
+@pytest.mark.parametrize("name, module", [("yaml", "yaml"), ("toml", "tomli_w")])
+def test_the_missing_extra_of_a_writer_says_which_format_and_extra(
+    name, module, monkeypatch, tmp_path
+):
+    monkeypatch.setitem(sys.modules, module, None)
+    with pytest.raises(MissingExtraError) as caught:
+        CaptureWriter(str(tmp_path / "cap_{index}.out"), name, per_record=True)
+    assert (caught.value.format, caught.value.extra) == (name, name)
+    assert isinstance(caught.value, ImportError)
+    assert str(caught.value) == (
+        '%s output needs the %r extra: pip install "pktcap[%s]"'
+        % (name.upper(), name, name)
+    )
 
 
 # -- combinations that cannot work ----------------------------------------

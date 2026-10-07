@@ -110,8 +110,8 @@ def dumps_record(record: Mapping[str, Any], format: str = "json") -> str:
         ``str``, ``int``, ``float``, ``bool``, ``None``.
     :param format: one of :data:`RECORD_FORMATS`.
     :raises UnsupportedFormatError: no record format of that name.
-    :raises ImportError: the format's extra is not installed; the message
-        names the extra.
+    :raises MissingExtraError: the format's extra is not installed; it is an
+        ``ImportError`` and its message names the extra.
     :raises TypeError: ``record`` is not a mapping, or holds a value the
         format cannot represent.
     :raises ValueError: a value the format must refuse, such as a NaN.

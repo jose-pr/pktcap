@@ -40,7 +40,7 @@ class TOMLFormat(RecordFormat):
         try:
             import tomli_w  # noqa: F401
         except ImportError:
-            raise missing_extra("TOML", "toml") from None
+            raise missing_extra("toml", "toml") from None
 
     def dumps(self, record: Mapping[str, Any]) -> str:
         self.require()

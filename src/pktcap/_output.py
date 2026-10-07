@@ -150,7 +150,7 @@ class CaptureWriter:
         value may come from the network, so a peer would otherwise choose how
         many files land on the disk.
     :raises UnsupportedFormatError: no such format, or none can be told.
-    :raises ImportError: the format's extra is not installed.
+    :raises MissingExtraError: the format's extra is not installed.
     :raises ValueError: a combination that cannot work, or a bad pattern.
     """
 

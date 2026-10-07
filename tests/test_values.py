@@ -25,6 +25,7 @@ from pktcap import (
     LinuxCookedLayer,
     LiveCaptureError,
     LoopbackLayer,
+    MissingExtraError,
     PktcapError,
     ReplayResult,
     TCPLayer,
@@ -105,6 +106,7 @@ BUILTIN = {
     CaptureFormatError: ValueError,
     CaptureFilterError: ValueError,
     UnsupportedFormatError: ValueError,
+    MissingExtraError: ImportError,
     DissectError: ValueError,
     LiveCaptureError: OSError,
 }
@@ -143,3 +145,14 @@ def test_a_format_error_keeps_its_offset_through_a_pickle():
     assert type(clone) is CaptureFormatError and clone.offset == 24
     assert str(clone) == str(error)
     assert CaptureFormatError("no offset known").offset is None
+
+
+def test_a_missing_extra_error_keeps_what_is_missing_through_a_pickle():
+    error = MissingExtraError("TOML needs it", format="toml", extra="toml")
+    assert (error.format, error.extra) == ("toml", "toml")
+    assert str(error) == "TOML needs it"
+    clone = pickle.loads(pickle.dumps(error))
+    assert type(clone) is MissingExtraError and str(clone) == str(error)
+    assert (clone.format, clone.extra) == ("toml", "toml")
+    with pytest.raises(TypeError):
+        MissingExtraError("no data")  # type: ignore[call-arg]

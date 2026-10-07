@@ -162,3 +162,10 @@ assert_type(pktcap.has_live_capture(), bool)
 
 error = pktcap.CaptureFormatError("x", offset=3)
 assert_type(error.offset, Optional[int])
+missing = pktcap.MissingExtraError("x", format="toml", extra="toml")
+assert_type(missing.format, str)
+assert_type(missing.extra, str)
+try:
+    pktcap.dumps_record({}, "toml")
+except ImportError as caught:
+    assert_type(caught, ImportError)

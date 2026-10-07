@@ -1,14 +1,56 @@
 # `pktcap` output formats — public API header
 
-Header-file-style reference for writing in a named format with the `pktcap`
-package: `CaptureWriter`, and what each record format writes, exactly, so the
-output can be read back without reading the source. It ships inside the
+Header-file-style reference for writing captures with the `pktcap` package:
+`PcapWriter` and `PcapngWriter`, `CaptureWriter` in a named format, and what
+each record format writes, exactly, so the output can be read back without
+reading the source. It ships inside the
 package and is self-contained; the top header is `pktcap/AGENTS.md`.
 Development documentation lives with the source at
 <https://github.com/jose-pr/pktcap>.
 
 This directory (`pktcap/_formats/`) is private and not an import path: every
 name below is imported from `pktcap`.
+
+## Writing a capture
+
+**`PcapWriter(target)`** and **`PcapngWriter(target)`** — write a capture that
+tcpdump and Wireshark read. The same three methods; each is a context manager.
+
+- `target` is a path or a binary stream. A stream stays the caller's to
+  close; a path the writer opened is closed by `close()`.
+- **Constructing a writer touches nothing.** A path is opened, an existing
+  file replaced and the file's opening octets written by the first write; a
+  writer that never writes creates no file. Each record is flushed, so a
+  capture can be read while it grows.
+- **`PcapWriter.write_frame(frame) -> None`** — append a `CapturedFrame` as it
+  is: its octets, its link type, its time to the microsecond. A capture read
+  with `read_frames` and written back holds the same frames, octet for octet.
+  A frame is at most 262,144 octets.
+- **`PcapWriter.write(time, source, destination, payload) -> None`** — append
+  one UDP datagram seen at a socket, which has no link or IP header left: it
+  is written as raw IP (link type 101) under synthesised IPv4 or IPv6 and UDP
+  headers with valid checksums. `source` and `destination` are
+  `netimps.SocketAddress` values: `(host, port)` or the four-item IPv6 form,
+  the host as address text with or without a `%zone`. `time` is seconds since
+  the epoch, from 0 up to 2**32. `payload` is at most 65,507 octets for IPv4
+  and 65,527 for IPv6. A v4-mapped address is written as IPv4; a datagram
+  with one IPv4 and one IPv6 end is written as IPv6, the IPv4 end mapped.
+- **`PcapWriter.write_datagram(datagram) -> None`** — `write` for a
+  `CapturedDatagram`. A partial one is written with the payload it has.
+- **`PcapWriter.close() -> None`** — complete on return, harmless when
+  repeated. A closed writer refuses to write.
+- **A pcap file has one link type**, fixed by the first thing written (101 for
+  a datagram, the frame's own for a frame); `PcapWriter` refuses a write of
+  another with `ValueError`. **`PcapngWriter` holds any mix**: it describes
+  one interface per link type, in the order they are first written, so a
+  capture of several link types round-trips through it. A frame's `interface`
+  number is not kept. It writes no option: nothing about the host, the tool
+  or the interfaces beyond their link types.
+- Raises `ValueError` for a host that is not an address (a name is not looked
+  up), a port outside 0-65535, a payload or frame too long, a time out of
+  range, a link type outside 0-65535 or a closed writer, and `TypeError` for
+  an argument of the wrong type; in every case nothing is written. `OSError`
+  when the path cannot be opened.
 
 ## One writer for every format
 
@@ -65,7 +107,7 @@ context manager.
   (`{}`, `{0}`, `{xid.real}`); a pattern field that is neither built in nor in
   `fields`; a `fields` entry that is built in; a stream of `toml` or `ini`;
   `append` with a capture format; `per_record` with a stream; a missing extra
-  (`ImportError`); a text stream (`TypeError`).
+  (`MissingExtraError`); a text stream (`TypeError`).
 - `write` raises `ValueError` for a closed writer or a field with no value,
   `TypeError` for an item of another type, and what `dumps_record` or the
   capture writer raise; nothing is written.
@@ -106,7 +148,8 @@ Raises, the same for every format:
 - `UnsupportedFormatError` for a name that is no record format (`"pcap"`
   and `"pcapng"` included: they write frames and datagrams, through
   `CaptureWriter`, `PcapWriter` or `PcapngWriter`);
-- `ImportError` when the format's extra is not installed, as
+- `MissingExtraError` (an `ImportError`, with `format` and `extra`) when the
+  format's extra is not installed, as
   `YAML output needs the 'yaml' extra: pip install "pktcap[yaml]"`;
 - `TypeError` when `record` is not a mapping or holds a value the format
   cannot represent, `ValueError` for a value it must refuse. **The message

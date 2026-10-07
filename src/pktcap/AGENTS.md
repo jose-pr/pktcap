@@ -22,9 +22,9 @@ installed package (`importlib.resources.files("pktcap")`):
 
 | Header | Covers |
 | --- | --- |
-| `pktcap/AGENTS.md` | this file: reading, dissecting, the datagram view, writing, filtering, replaying, live capture, the exceptions |
+| `pktcap/AGENTS.md` | this file: reading, dissecting, the datagram view, filtering, replaying, live capture, the exceptions |
 | `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
-| `pktcap/_formats/AGENTS.md` | `CaptureWriter` in full, what a record is, and exactly what each record format writes |
+| `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
 **Any valid capture is read.** Every frame of a pcap or pcapng file comes
 back whatever its link type and whatever it carries: a link type, an
@@ -225,44 +225,9 @@ capture from one of a link type nothing dissects.
 
 ## Writing a capture
 
-**`PcapWriter(target)`** and **`PcapngWriter(target)`** — write a capture that
-tcpdump and Wireshark read. The same three methods; each is a context manager.
-
-- `target` is a path or a binary stream. A stream stays the caller's to
-  close; a path the writer opened is closed by `close()`.
-- **Constructing a writer touches nothing.** A path is opened, an existing
-  file replaced and the file's opening octets written by the first write; a
-  writer that never writes creates no file. Each record is flushed, so a
-  capture can be read while it grows.
-- **`PcapWriter.write_frame(frame) -> None`** — append a `CapturedFrame` as it
-  is: its octets, its link type, its time to the microsecond. A capture read
-  with `read_frames` and written back holds the same frames, octet for octet.
-  A frame is at most 262,144 octets.
-- **`PcapWriter.write(time, source, destination, payload) -> None`** — append
-  one UDP datagram seen at a socket, which has no link or IP header left: it
-  is written as raw IP (link type 101) under synthesised IPv4 or IPv6 and UDP
-  headers with valid checksums. `source` and `destination` are
-  `netimps.SocketAddress` values: `(host, port)` or the four-item IPv6 form,
-  the host as address text with or without a `%zone`. `time` is seconds since
-  the epoch, from 0 up to 2**32. `payload` is at most 65,507 octets for IPv4
-  and 65,527 for IPv6. A v4-mapped address is written as IPv4; a datagram
-  with one IPv4 and one IPv6 end is written as IPv6, the IPv4 end mapped.
-- **`PcapWriter.write_datagram(datagram) -> None`** — `write` for a
-  `CapturedDatagram`. A partial one is written with the payload it has.
-- **`PcapWriter.close() -> None`** — complete on return, harmless when
-  repeated. A closed writer refuses to write.
-- **A pcap file has one link type**, fixed by the first thing written (101 for
-  a datagram, the frame's own for a frame); `PcapWriter` refuses a write of
-  another with `ValueError`. **`PcapngWriter` holds any mix**: it describes
-  one interface per link type, in the order they are first written, so a
-  capture of several link types round-trips through it. A frame's `interface`
-  number is not kept. It writes no option: nothing about the host, the tool
-  or the interfaces beyond their link types.
-- Raises `ValueError` for a host that is not an address (a name is not looked
-  up), a port outside 0-65535, a payload or frame too long, a time out of
-  range, a link type outside 0-65535 or a closed writer, and `TypeError` for
-  an argument of the wrong type; in every case nothing is written. `OSError`
-  when the path cannot be opened.
+**`PcapWriter(target)`** and **`PcapngWriter(target)`** write a capture that
+tcpdump and Wireshark read, from frames or from datagrams; the whole contract
+is in `pktcap/_formats/AGENTS.md`, with `CaptureWriter`.
 
 ## Writing in a named format
 
@@ -278,7 +243,7 @@ and **`RECORD_FORMATS`** — the last four. `yaml` needs the `yaml` extra and
 this installation. `UnsupportedFormatError` for a name that is no format.
 
 **`dumps_record(record, format="json") -> str`** — one record as text, ending
-in a newline. `ImportError` naming the extra when it is missing.
+in a newline. `MissingExtraError` when the format's extra is missing.
 
 **`datagram_record(datagram) -> Dict[str, Any]`** — the record of a
 `CapturedDatagram` for a caller with no protocol to decode it: `time`,
@@ -464,13 +429,16 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `CaptureFormatError` | `PktcapError`, `ValueError` | input that is not a pcap or pcapng capture, or is a damaged one |
 | `CaptureFilterError` | `PktcapError`, `ValueError` | a capture-filter expression that cannot be parsed or compiled |
 | `UnsupportedFormatError` | `PktcapError`, `ValueError` | an output format that does not exist, or that a file name does not tell |
+| `MissingExtraError` | `PktcapError`, `ImportError` | a format that exists and whose extra is not installed |
 | `DissectError` | `PktcapError`, `ValueError` | raised **by a dissector** for octets that are not its layer. A caller of `FrameDissector` never sees it: it becomes the frame's `error` |
 | `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
 
-A format that exists and whose extra is not installed raises the builtin
-`ImportError`, naming the extra. A process that may not open a packet socket
-gets the kernel's `PermissionError`. `OSError` from opening, reading or
-writing a file or a socket is let through as it is.
+`MissingExtraError(message, *, format, extra)` has `format` (the format's name,
+`"toml"`) and `extra` (the extra to install, `"toml"`), and its message names
+the extra: a caller that offers the format under its own extra words its own.
+A process that may not open a packet socket gets the kernel's
+`PermissionError`. `OSError` from opening, reading or writing a file or a
+socket is let through as it is.
 
 `CaptureFormatError.offset` is how many octets of the input had been read when
 the problem was found, or `None`; the message ends with it and never quotes the

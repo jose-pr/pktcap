@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `MissingExtraError`, an `ImportError` and a `PktcapError`, is what a format
+  whose optional dependency is not installed raises. `format` is the format's
+  name and `extra` the pktcap extra that installs what it needs (`"toml"`,
+  `"toml"`), so a library that offers the format under its own extra words
+  its own message without reading this one. The message is unchanged, and
+  `except ImportError` still catches it.
 - `FrameDissector.unsupported_linktypes`, a read-only snapshot mapping each
   link type that had no dissector to the number of frames of it (`{105: 3}`),
   so a caller can say which link type a capture it could not read was made

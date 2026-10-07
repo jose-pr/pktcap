@@ -13,13 +13,14 @@ Re-exported from :mod:`pktcap`.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional, Tuple
 
 __all__ = [
     "PktcapError",
     "CaptureFormatError",
     "CaptureFilterError",
     "UnsupportedFormatError",
+    "MissingExtraError",
     "LiveCaptureError",
     "DissectError",
 ]
@@ -60,9 +61,35 @@ class UnsupportedFormatError(PktcapError, ValueError):
     """No output format of that name, or none can be told from a file name.
 
     The message lists the formats there are. A format that exists and whose
-    extra is not installed is not this error: it raises ``ImportError`` naming
-    the extra.
+    extra is not installed is not this error: it raises
+    :class:`MissingExtraError`.
     """
+
+
+def _restore_missing_extra(
+    message: str, format: str, extra: str
+) -> "MissingExtraError":
+    return MissingExtraError(message, format=format, extra=extra)
+
+
+class MissingExtraError(PktcapError, ImportError):
+    """An output format whose optional dependency is not installed.
+
+    An :class:`ImportError`, so ``except ImportError`` still catches it. The
+    message names the extra to install; a caller that offers the format under
+    its own extra words its own message from the attributes.
+
+    :ivar format: the format's name, as in ``OUTPUT_FORMATS`` (``"toml"``).
+    :ivar extra: pktcap's extra that installs what the format needs.
+    """
+
+    def __init__(self, message: str, *, format: str, extra: str) -> None:
+        super().__init__(message)
+        self.format = format
+        self.extra = extra
+
+    def __reduce__(self) -> Tuple[Any, ...]:
+        return (_restore_missing_extra, (self.args[0], self.format, self.extra))
 
 
 class DissectError(PktcapError, ValueError):

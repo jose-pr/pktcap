@@ -36,6 +36,7 @@ EXPECTED = [
     "LiveCapture",
     "LiveCaptureError",
     "LoopbackLayer",
+    "MissingExtraError",
     "OUTPUT_FORMATS",
     "PcapWriter",
     "PcapngWriter",

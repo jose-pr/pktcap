@@ -9,13 +9,18 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Tuple
 
+from .._exceptions import MissingExtraError
+
 __all__ = ["RecordFormat", "missing_extra"]
 
 
-def missing_extra(label: str, extra: str) -> ImportError:
+def missing_extra(format: str, extra: str) -> MissingExtraError:
     """The error for a format whose optional dependency is not installed."""
-    return ImportError(
-        '%s output needs the %r extra: pip install "pktcap[%s]"' % (label, extra, extra)
+    return MissingExtraError(
+        '%s output needs the %r extra: pip install "pktcap[%s]"'
+        % (format.upper(), extra, extra),
+        format=format,
+        extra=extra,
     )
 
 
@@ -40,7 +45,7 @@ class RecordFormat:
     separator: str = ""
 
     def require(self) -> None:
-        """Raise ``ImportError`` naming the extra when the format cannot be
+        """Raise ``MissingExtraError`` when the format cannot be
         used on this installation. The default needs nothing."""
 
     def dumps(self, record: Mapping[str, Any]) -> str:

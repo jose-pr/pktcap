@@ -169,7 +169,7 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `parse_capture_filter`, `compile_capture_filter`, `FilterClause`, `frame_filter`, `FRAME_FILTER_KEYS` | the filter expression, and the keys of the built-in layers |
 | `replay_schedule`, `replay`, `replay_to`, `ReplayResult`, `ReplaySource` | replay a capture |
 | `LiveCapture`, `sniff`, `has_live_capture` | live capture on Linux |
-| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `DissectError`, `LiveCaptureError` | the exceptions |
+| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `MissingExtraError`, `DissectError`, `LiveCaptureError` | the exceptions |
 
 The reference with every signature, bound and gotcha is the API header that
 ships inside the package, `pktcap/AGENTS.md`, also at

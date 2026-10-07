@@ -14,6 +14,7 @@ import pktcap
 from pktcap import (
     OUTPUT_FORMATS,
     RECORD_FORMATS,
+    MissingExtraError,
     PktcapError,
     UnsupportedFormatError,
     dumps_record,
@@ -163,7 +164,9 @@ def test_a_missing_extra_is_named_where_the_format_is_used(name, monkeypatch):
     assert has_output_format(name) is False
     with pytest.raises(ImportError) as caught:
         dumps_record({"a": 1}, name)
-    assert not isinstance(caught.value, PktcapError)
+    assert isinstance(caught.value, MissingExtraError)
+    assert isinstance(caught.value, PktcapError)
+    assert (caught.value.format, caught.value.extra) == (name, name)
     assert str(
         caught.value
     ) == '%s output needs the %r extra: pip install "pktcap[%s]"' % (
