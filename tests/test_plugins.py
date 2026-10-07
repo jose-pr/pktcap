@@ -89,7 +89,7 @@ def test_a_loaded_plugins_keys_and_dissector_work_in_a_filter(plugin_module):
 
 
 def test_an_item_is_a_module_with_a_hook_or_a_callable_in_a_module(plugin_module):
-    body = textwrap.dedent("""
+    source = """
         import pktcap
 
         def register(registry, *, ports=(7000,)):
@@ -98,7 +98,8 @@ def test_an_item_is_a_module_with_a_hook_or_a_callable_in_a_module(plugin_module
 
         def pktcap_plugin(registry):
             registry.register("udp", 7001, lambda data: pktcap.Dissected(None, data))
-        """)
+        """
+    body = textwrap.dedent(source)
     mod = plugin_module(body)
     registry = DissectorRegistry()
     (module_form,) = load_plugins(registry, mod.name)
@@ -272,7 +273,7 @@ def test_a_hook_that_takes_no_single_argument(plugin_module):
 def test_a_hook_that_registers_one_thing_and_raises_leaves_the_registry_as_it_was(
     plugin_module,
 ):
-    body = textwrap.dedent("""
+    source = """
         from typing import NamedTuple
         import pktcap
 
@@ -284,7 +285,8 @@ def test_a_hook_that_registers_one_thing_and_raises_leaves_the_registry_as_it_wa
             registry.register("udp", 7200, lambda data: pktcap.Dissected(None, data))
             registry.register("tcp", 7201, lambda data: pktcap.Dissected(None, data))
             raise ValueError("after two registrations")
-        """)
+        """
+    body = textwrap.dedent(source)
     _, error = failing(plugin_module, body)
     assert "the hook raised (ValueError: after two registrations)" in str(error)
     assert isinstance(error.__cause__, ValueError)
