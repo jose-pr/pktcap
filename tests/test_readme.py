@@ -24,6 +24,7 @@ SECTIONS = [
     "Quick start",
     "Command line",
     "API overview",
+    "Protocol plugins",
     "Differences from tshark",
     "Development",
     "License",
@@ -135,3 +136,31 @@ def test_the_command_lines_run_as_written(tmp_path, monkeypatch, capsys):
     (shown,) = re.findall(r"```bash not-run\n(.*?)```", section, re.DOTALL)
     assert "pktcap capture" in shown and "tcpdump" in shown
     assert "need Linux and root, or another tool" in section
+
+
+def test_the_plugin_section_runs_its_hook_and_marks_what_needs_a_library(
+    tmp_path, monkeypatch
+):
+    import sys
+
+    section = _section("Protocol plugins")
+    (hook,) = re.findall(r"```python\n(.*?)```", section, re.DOTALL)
+    assert len([line for line in hook.splitlines() if line.strip()]) <= 12 + 4
+    (tmp_path / "readme_plugin.py").write_text(hook, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        registry = pktcap.DissectorRegistry()
+        (loaded,) = pktcap.load_plugins(registry, "readme_plugin")
+        assert loaded.selectors == (("udp", 9999),) and loaded.layers == ("demo",)
+        assert "demo.opcode" in pktcap.frame_filter_keys(registry)
+    finally:
+        sys.modules.pop("readme_plugin", None)
+    # Lines that need a protocol library are shown and not run.
+    not_run = re.findall(r"```bash not-run\n(.*?)```", section, re.DOTALL)
+    assert len(not_run) == 2 and all("pktcap " in block for block in not_run)
+    (ini,) = re.findall(r"```ini\n(.*?)```", section, re.DOTALL)
+    path = tmp_path / "pktcap.ini"
+    path.write_text(ini, encoding="utf-8")
+    assert pktcap.load_plugins(pktcap.DissectorRegistry(), "none", config=path) == ()
+    assert "XDG_CONFIG_HOME" in section and "%APPDATA%" in section
+    assert "runs its code" in section and "read as it is" in section

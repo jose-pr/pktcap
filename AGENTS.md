@@ -10,6 +10,7 @@ is the headers below, which do.
 | `src/pktcap/AGENTS.md` | the shipped API header: every public name with its signature and contract, the bounds on untrusted input, the exceptions |
 | `src/pktcap/_dissectors/AGENTS.md` | shipped: the dissector contract, the registry, each built-in dissector and layer |
 | `src/pktcap/_formats/AGENTS.md` | shipped: the capture writers, `CaptureWriter` and `copy_frames`, what each record format writes |
+| `src/pktcap/_plugins/AGENTS.md` | shipped: layers and filter keys in a registry, how a filter reads a layer's fields, loading plugins by name, the file and the trust rule |
 | `src/pktcap/cli/AGENTS.md` | shipped: the `pktcap` command, every option, what it prints, its statuses |
 | `tests/AGENTS.md` | running and writing the tests: the network guard, the capture builders, the conformance cases |
 
@@ -18,7 +19,8 @@ A public API change updates the shipped header in the same commit.
 ## Layout
 
 ```
-src/pktcap/   the package: every module is private but `cli/`, the root re-exports the API
+src/pktcap/   the package: every module is private but `cli/`, the root re-exports the API;
+              `_plugins/` holds layers and filter keys, and loading plugins by name
 tests/        the suite (tests/AGENTS.md)
 docs/         the published site, with mkdocs.yml; built strictly as a release gate
 benchmarks/   run on demand, never in CI; results/ is tracked
@@ -78,7 +80,8 @@ clean run says nothing about the other two.
   counted, and keeps the layers before it.
 - **A protocol is a dissector in a registry.** The built-in ones stop at UDP
   and TCP headers; anything above is registered by whoever needs it, and
-  nothing is registered on import or through an entry point.
+  nothing is registered on import or through an entry point, and a plugin is
+  loaded only when its user names it.
 - **One path.** The UDP datagram view, the readers, the filter keys, replay
   and live capture are all built on `FrameDissector`; there is no second
   decoder.

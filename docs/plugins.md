@@ -1,0 +1,1 @@
+--8<-- "src/pktcap/_plugins/AGENTS.md"

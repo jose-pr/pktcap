@@ -47,6 +47,7 @@ Documentation: <https://jose-pr.github.io/pktcap/>.
   payloads to one destination the caller names; never to the addresses in
   the file, and never as raw frames.
 - **Captures live on Linux** without a capture tool, given `CAP_NET_RAW`.
+- **Protocol plugins** — name a protocol library with `--plugins`, `PKTCAP_PLUGINS` or one configuration file and its dissector and filter keys work in `capture`, `convert` and `replay`; nothing is loaded because it is installed.
 - **A `pktcap` command** — `capture`, `replay`, `convert` and `plugins`, behind the `cli` extra.
 
 ## Installation
@@ -212,6 +213,62 @@ ships inside the package, `pktcap/AGENTS.md`, also at
 <https://github.com/jose-pr/pktcap/blob/main/src/pktcap/AGENTS.md>. The
 dissector contract and each built-in dissector are in the header beside them,
 <https://github.com/jose-pr/pktcap/blob/main/src/pktcap/_dissectors/AGENTS.md>.
+
+## Protocol plugins
+
+A protocol library's dissector and filter keys are loaded by naming it, so
+`pktcap capture`, `convert` and `replay` understand its protocol with no code
+of yours. Three ways to name a plugin, nearest first; the first that names a
+list is the list:
+
+```bash not-run
+pktcap convert -i trace.pcap --plugins pydhcp.capture.register_dhcp_dissector,tftp.capture.register_tftp_dissector -f "proto=dhcp"
+PKTCAP_PLUGINS=pydhcp.capture.register_dhcp_dissector pktcap convert -i trace.pcap -f "proto=dhcp"
+pktcap plugins        # the file, what was loaded, every filter key there is
+```
+
+The third is a file, `pktcap/pktcap.ini` under `$XDG_CONFIG_HOME` (else
+`~/.config`) on Linux, macOS and the BSDs and under `%APPDATA%` on Windows:
+
+```ini
+[pktcap]
+plugins = pydhcp.capture.register_dhcp_dissector, tftp.capture.register_tftp_dissector
+```
+
+An item is a module with a `pktcap_plugin(registry)` function, or
+`MODULE.CALLABLE` for any callable that takes the registry. A library's own
+filter keys, once its plugin registers them, are `LAYER.KEY` or the bare `KEY`
+(`dhcp.msg_type=DHCPDISCOVER`); any field of a layer is `LAYER.FIELD`
+(`ipv4.ttl=64`), and `pktcap plugins` lists them all. A hook is a function:
+
+```python
+from typing import NamedTuple
+
+import pktcap
+
+
+class DemoLayer(NamedTuple):
+    opcode: int
+
+
+def dissect(data: bytes) -> pktcap.Dissected:
+    return pktcap.Dissected(DemoLayer(data[0]), data[1:])
+
+
+def pktcap_plugin(registry: pktcap.DissectorRegistry) -> None:
+    registry.register_layer(DemoLayer, name="demo")
+    registry.register("udp", 9999, dissect)
+```
+
+**Importing a module runs its code**, so a list is read from the option, the
+variable and that one file, and never from the working directory or a capture;
+a tool call cannot name plugins at all. The file found by default must be your
+own and not writable by everyone; a file you name with `--config` or
+`PKTCAP_CONFIG` is read as it is, so as root name yours:
+
+```bash not-run
+sudo pktcap capture --config ~/.config/pktcap/pktcap.ini -f "proto=dhcp" -o dhcp.pcapng
+```
 
 ## Differences from tshark
 
