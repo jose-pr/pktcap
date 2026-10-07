@@ -167,6 +167,20 @@ library never looks inside. Any `Mapping` is accepted at the top level.
 `datagram_record` and `frame_record` make the record of a datagram or of a
 dissected frame for a caller with no protocol of its own.
 
+**`datagram_record(datagram) -> Dict[str, Any]`** — the record of a
+`CapturedDatagram` for a caller with no protocol to decode it: `time`,
+`source` and `destination` as `host:port` text (an IPv6 host in brackets),
+`length`, `payload` as hex, and `fragmented` or `truncated` only when true.
+
+**`frame_record(frame) -> Dict[str, Any]`** — the record of a
+`DissectedFrame`: `time`, `linktype`, `length` (of the captured frame),
+`layers` and `payload` (hex of what no dissector read); `interface`, `error`
+and `reassembled` only when they say something. `layers` is a list, outermost
+first, of one mapping per layer: `layer` is its name (the class name without
+`Layer`, in lower case: `ethernet`, `ipv4`, `udp`) and the rest its fields,
+octets as hex. A registered dissector's layer is written from its `_asdict()`
+or, when it is a mapping, its items.
+
 **`dumps_record(record, format="json") -> str`** — one record as text in the
 named format, ending in a newline. `format` is one of `RECORD_FORMATS`
 (`"json"`, `"yaml"`, `"toml"`, `"ini"`), matched whatever its letter case.

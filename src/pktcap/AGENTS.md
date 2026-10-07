@@ -248,19 +248,9 @@ this installation. `UnsupportedFormatError` for a name that is no format.
 **`dumps_record(record, format="json") -> str`** — one record as text, ending
 in a newline. `MissingExtraError` when the format's extra is missing.
 
-**`datagram_record(datagram) -> Dict[str, Any]`** — the record of a
-`CapturedDatagram` for a caller with no protocol to decode it: `time`,
-`source` and `destination` as `host:port` text (an IPv6 host in brackets),
-`length`, `payload` as hex, and `fragmented` or `truncated` only when true.
-
-**`frame_record(frame) -> Dict[str, Any]`** — the record of a
-`DissectedFrame`: `time`, `linktype`, `length` (of the captured frame),
-`layers` and `payload` (hex of what no dissector read); `interface`, `error`
-and `reassembled` only when they say something. `layers` is a list, outermost
-first, of one mapping per layer: `layer` is its name (the class name without
-`Layer`, in lower case: `ethernet`, `ipv4`, `udp`) and the rest its fields,
-octets as hex. A registered dissector's layer is written from its `_asdict()`
-or, when it is a mapping, its items.
+**`datagram_record(datagram) -> Dict[str, Any]`** and **`frame_record(frame) -> Dict[str, Any]`**
+— the record of a `CapturedDatagram` and of a `DissectedFrame`; what each holds
+is in `pktcap/_formats/AGENTS.md`, under "What a record is".
 
 **`CaptureWriter`** — one writer for all six: a growing file, or one file per
 record under a name pattern. It takes a `CapturedDatagram` or a
