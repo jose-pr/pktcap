@@ -28,15 +28,16 @@ def trace(tmp_path):
     return path
 
 
-def test_the_tools_served_are_convert_alone():
-    assert [tool["name"] for tool in describe_tools(Pktcap)] == ["pktcap.convert"]
+def test_the_tools_served_are_convert_and_plugins_alone():
+    names = [tool["name"] for tool in describe_tools(Pktcap)]
+    assert names == ["pktcap.convert", "pktcap.plugins"]
     for name in ("pktcap.capture", "pktcap.replay"):
         with pytest.raises(UnknownToolError):
             call_tool(Pktcap, name, {})
 
 
 def test_every_field_of_the_tool_says_what_it_is_and_what_omitting_it_means():
-    (tool,) = describe_tools(Pktcap)
+    (tool,) = [t for t in describe_tools(Pktcap) if t["name"] == "pktcap.convert"]
     properties = tool["inputSchema"]["properties"]
     assert tool["inputSchema"]["required"] == ["input"]
     own = set(properties) - {"loglevels", "verbose", "quiet", "--"}
@@ -49,6 +50,8 @@ def test_every_field_of_the_tool_says_what_it_is_and_what_omitting_it_means():
         "datagrams",
         "input",
         "limit",
+        "plugins",
+        "config",
     }
     for name in own:
         assert properties[name]["description"], name
@@ -131,6 +134,9 @@ def test_the_server_over_a_pipe_lists_convert_and_converts(trace):
         timeout=120,
     )
     replies = {r["id"]: r for r in map(json.loads, done.stdout.splitlines())}
-    assert [t["name"] for t in replies[2]["result"]["tools"]] == ["pktcap.convert"]
+    assert [t["name"] for t in replies[2]["result"]["tools"]] == [
+        "pktcap.convert",
+        "pktcap.plugins",
+    ]
     text = replies[3]["result"]["content"][0]["text"]
     assert json.loads(text)["linktype"] == 1

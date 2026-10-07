@@ -26,7 +26,7 @@ installed package (`importlib.resources.files("pktcap")`):
 | `pktcap/AGENTS.md` | this file: reading, dissecting, the datagram view, filtering, replaying, live capture, the exceptions |
 | `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
 | `pktcap/_plugins/AGENTS.md` | layers and the filter keys a registry holds for them, how a filter reads a layer's fields, and loading plugins by name |
-| `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay` and `convert`, every option, what each prints, its statuses |
+| `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay`, `convert` and `plugins`, every option, what each prints, its statuses |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
 **Any valid capture is read.** Every frame of a pcap or pcapng file comes
@@ -432,10 +432,10 @@ is a `CapturePluginError` and leaves the registry as it was. More:
 ## Command line
 
 `pip install "pktcap[cli]"` installs the `pktcap` command (also
-`python -m pktcap`) with `capture`, `replay` and `convert`, each a call into
-this API (`sniff_frames`, `replay_to`, `copy_frames`). `pktcap.cli` is not
-library API and is in no export. `PKTCAP_MCP=stdio` serves `convert` alone as
-a tool. Every option, output and exit status is in `pktcap/cli/AGENTS.md`.
+`python -m pktcap`) with `capture`, `replay`, `convert` and `plugins`, each a
+call into this API (`sniff_frames`, `replay_to`, `copy_frames`, `load_plugins`).
+`pktcap.cli` is not library API and is in no export. `PKTCAP_MCP=stdio` serves
+`convert` and `plugins` as tools. Every option and status: `pktcap/cli/AGENTS.md`.
 
 ## Exceptions
 

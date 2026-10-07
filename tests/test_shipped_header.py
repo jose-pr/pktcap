@@ -240,11 +240,12 @@ def _declared_options():
     pytest.importorskip("duho")
     from pktcap.cli.capture import Capture
     from pktcap.cli.convert import Convert
+    from pktcap.cli.plugins import Plugins
     from pktcap.cli.replay import Replay
     from pktcap.cli._root import Pktcap
 
     found = {}
-    for command in (Convert, Replay, Capture, Pktcap):
+    for command in (Convert, Replay, Capture, Plugins, Pktcap):
         parser = command._parser_()
         found[command.__name__] = sorted(
             option
@@ -281,8 +282,12 @@ def test_the_command_header_names_each_command_the_environment_and_the_tool():
         "pktcap convert",
         "pktcap replay",
         "pktcap capture",
+        "pktcap plugins",
         "PKTCAP_MCP=stdio",
         "pktcap.convert",
+        "pktcap.plugins",
+        "PKTCAP_PLUGINS",
+        "PKTCAP_CONFIG",
     ):
         assert needle in text, needle
     assert "PKTCAP_MCP" in _HEADER.read_text(encoding="utf-8")

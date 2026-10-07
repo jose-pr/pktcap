@@ -47,7 +47,7 @@ Documentation: <https://jose-pr.github.io/pktcap/>.
   payloads to one destination the caller names; never to the addresses in
   the file, and never as raw frames.
 - **Captures live on Linux** without a capture tool, given `CAP_NET_RAW`.
-- **A `pktcap` command** — `capture`, `replay` and `convert`, behind the `cli` extra.
+- **A `pktcap` command** — `capture`, `replay`, `convert` and `plugins`, behind the `cli` extra.
 
 ## Installation
 
@@ -154,7 +154,7 @@ print(len(seen), "frames handed to a callable")
 ## Command line
 
 `pip install "pktcap[cli]"` installs the `pktcap` command, also
-`python -m pktcap`, with three subcommands. Each is a call into the library
+`python -m pktcap`, with four subcommands. Each is a call into the library
 above. Records and capture octets go to `--output` (default `-`, standard
 output); the one-line summary goes to standard error. Exit status: 0 done, 1
 the operation failed, 2 the invocation was wrong.
@@ -164,11 +164,13 @@ pktcap convert -i trace.pcap -o trace.jsonl
 pktcap convert -i trace.pcap -f "proto=udp and port=69" --datagrams --format json
 pktcap convert -i trace.pcap -o by-frame/{index}.toml --per-record
 pktcap replay -i trace.pcap --to 127.0.0.1:9 --no-delay
+pktcap plugins --plugins none
 ```
 
 `convert` copies a capture, filtered, into pcap, pcapng or records. `replay`
 sends the UDP payloads to the one destination `--to` names, never to the
-addresses in the file. `capture` records live on Linux with `CAP_NET_RAW`;
+addresses in the file. `plugins` shows the protocol plugins that are loaded and
+every filter key there is. `capture` records live on Linux with `CAP_NET_RAW`;
 anything else is piped in. These two need Linux and root, or another tool,
 so the tests do not run them:
 

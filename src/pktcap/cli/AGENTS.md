@@ -9,7 +9,7 @@ with the source at <https://github.com/jose-pr/pktcap>.
 `pktcap.cli` is the command line's package and is **not library API**: it is
 absent from `pktcap.__all__`, nothing here is importable by contract, and
 every command is a call into the library that a program can make itself
-(`copy_frames`, `replay_to`, `sniff_frames`).
+(`copy_frames`, `replay_to`, `sniff_frames`, `load_plugins`).
 
 ```bash
 pip install "pktcap[cli]"        # installs duho; the command is `pktcap` or `python -m pktcap`
@@ -30,10 +30,28 @@ returns the status and does not call `sys.exit`.
   `-q`/`--quiet` (repeatable), `--loglevel [NAME:]LEVEL[,...]`. Each command
   accepts the same three after its own name. Logging is on stderr, under the
   logger `pktcap`.
-- **`--filter`/`-f EXPR`** (all three commands): the library's capture filter,
-  `key=value and key!=value` over `src`, `dst`, `host`, `sport`, `dport`,
-  `port`, `proto`, `vlan`, `linktype`. Omitted: every frame. A bad expression
-  is status 2, before anything is read.
+- **`--filter`/`-f EXPR`** (`capture`, `replay`, `convert`): the library's
+  capture filter, `key=value and key!=value` over `src`, `dst`, `host`,
+  `sport`, `dport`, `port`, `proto`, `vlan`, `linktype`, any field of a layer
+  as `LAYER.FIELD` (`ipv4.ttl=64`) and the keys of the plugins loaded;
+  `pktcap plugins` lists them all. Omitted: every frame. A bad expression is
+  status 2, before anything is read.
+- **`--plugins NAME`** (every command; repeat it, or separate names by `,` `;`
+  `:` or space; `none` for none) and **`--config`/`-c FILE`** (`none` for no
+  file): the plugins to load, each a dotted module name with a
+  `pktcap_plugin(registry)` function or `MODULE.CALLABLE`. They are loaded
+  into a registry of the command's own, before the filter is compiled and
+  before anything is opened. The first of the option, the variable
+  `PKTCAP_PLUGINS` and the plugins key of the configuration file
+  (`pktcap/pktcap.ini` under `$XDG_CONFIG_HOME` or `~/.config`, `%APPDATA%` on
+  Windows, or the file `--config` and `PKTCAP_CONFIG` name) is the list. The
+  default file must be the user's own and not writable by everyone; a file you
+  name is read as it is, so a capture run as root names the user's file:
+  `sudo pktcap capture --config ~/.config/pktcap/pktcap.ini`. A plugin that
+  cannot be loaded, or a malformed file, is status 2 and one line naming it;
+  a named file that does not exist is status 1. **A tool call cannot name
+  either option**: they are refused, since a program serving the tool may have
+  just read a capture's text, and the server's own variable and file decide.
 - **Output and statuses.** What a command produces goes to standard output or
   to `--output`; its one-line summary and every diagnostic go to standard
   error, because standard output may be a capture. Every failure is one line,
@@ -121,7 +139,7 @@ Captures live and writes what it sees, never sending anything. **Linux only**
 `setcap cap_net_raw+ep` on the interpreter).
 
 - `--interface NAME`: a name, an address or a MAC. Omitted: every interface.
-- `--count N`/`-c`: stop once N records are written. Omitted: until stopped.
+- `--count N`: stop once N records are written. Omitted: until stopped.
 - `--duration SECONDS`/`-d`: stop after that long, within a second of it. Omitted:
   until stopped.
 - Ctrl-C ends the capture with status 0 and the summary.
@@ -130,16 +148,51 @@ Captures live and writes what it sees, never sending anything. **Linux only**
   and the status 1. Without the capability the line names `CAP_NET_RAW`,
   status 1. An interface that matches nothing is status 2.
 
+## `pktcap plugins`
+
+`pktcap plugins [--plugins LIST] [--config FILE] [--layer NAME] [--json]`
+
+Loads the plugins exactly as the other commands do and shows them. Standard
+output is:
+
+```text
+configuration: PATH (absent)
+plugins: 2 from SOURCE
+  NAME: udp 67, udp 68; layer dhcp
+keys: dport, dst, host, linktype, ...
+layers: dhcp, ethernet, ipv4, ...
+```
+
+- `configuration` is the file that applies, `none` when there is none, and
+  ` (absent)` when it does not exist. `plugins` says how many were loaded and
+  where the list came from (`argument`, `PKTCAP_PLUGINS`, the file's path), or
+  `plugins: none`; each plugin has a line with the selectors it registered a
+  dissector under and the layers it declared. `keys` are the bare filter
+  keys: the nine built-in ones and each registered key that one layer has.
+  `layers` are the names a filter may put before a dot.
+- `--layer NAME`: print only that layer's keys, one per line
+  (`ipv4.ttl`, `demo.opcode`), which are `LAYER.FIELD` and `LAYER.KEY` of a
+  filter. A name that is no layer is status 2 listing the layers.
+- `--json`: one object, `{"configuration": PATH-or-null, "plugins": [{"name",
+  "source", "selectors", "layers"}], "keys": [every filter key that compiles]}`.
+
 ## Environment
 
+- **`PKTCAP_PLUGINS`** and **`PKTCAP_CONFIG`** are what `--plugins` and
+  `--config` fall back to, in that order and then the user's own file: the
+  plugins to load, and the configuration file (an absolute path, or `none`).
+  `XDG_CONFIG_HOME` (POSIX) and `APPDATA` (Windows) say where the user's own
+  file is.
 - **`PKTCAP_MCP=stdio`** serves the command line as tools over standard input
-  and output (JSON-RPC, the MCP protocol) instead of running a command. Only
-  **`convert`** is served, as the tool `pktcap.convert` with the options above
-  as its input (`input` is required; the rest have the defaults above). The
-  records come back as the tool's result; a capture format cannot be returned
-  as text, so `format` `pcap` or `pcapng` needs an `output` file, and an
-  `input` of `-` is refused. `capture` runs until stopped and needs a
-  privilege, and `replay` puts datagrams on a network: neither is served.
+  and output (JSON-RPC, the MCP protocol) instead of running a command.
+  **`convert`** is served as the tool `pktcap.convert` with the options above
+  as its input (`input` is required; the rest have the defaults above), and
+  **`plugins`** as `pktcap.plugins`, which only reads. The records come back as
+  the tool's result; a capture format cannot be returned as text, so `format`
+  `pcap` or `pcapng` needs an `output` file, and an `input` of `-` is refused.
+  A tool call that names `plugins` or `config` is refused (status 2, naming
+  `PKTCAP_PLUGINS`). `capture` runs until stopped and needs a privilege, and
+  `replay` puts datagrams on a network: neither is served.
 - `AGENT_HELP=1` makes `--help` print one JSON document describing every
   command; `NO_COLOR` and `FORCE_COLOR` decide the colour of the help and the
-  log. No option reads an environment variable of its own.
+  log.

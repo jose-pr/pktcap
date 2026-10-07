@@ -9,7 +9,8 @@ from .._copy import CopyResult, copy_frames
 from .._dissect import FrameDissector
 from .._exceptions import LiveCaptureError
 from .._live import has_live_capture, sniff_frames
-from ._common import Writing, counted
+from ._common import counted
+from ._writing import Writing
 
 __all__ = ["Capture"]
 
@@ -36,7 +37,7 @@ class Capture(Writing):
 
     count: Optional[int] = None
     "Stop once this many records are written. Omitted: run until stopped"
-    ("--count", "-c")
+    ("--count",)
 
     duration: Optional[float] = None
     "Stop after this many seconds, within a second of it. Omitted: run until stopped"
@@ -50,11 +51,12 @@ class Capture(Writing):
         return time.monotonic() + self.duration
 
     def __call__(self) -> Optional[int]:
+        registry = self._registry()
         if not has_live_capture():
             raise LiveCaptureError(_NOT_LINUX)
-        select = self._select()
+        select = self._select(registry)
         deadline = self._deadline()
-        dissector = FrameDissector()
+        dissector = FrameDissector(registry)
         tally: List[int] = [0]
         frames = counted(
             sniff_frames(

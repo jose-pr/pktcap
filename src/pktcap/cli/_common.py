@@ -1,23 +1,19 @@
-"""What the commands share: the filter, the output options and the summary line."""
+"""What the commands share: the plugins, the filter and the diagnostic line."""
 
 from __future__ import annotations
 
 import sys
-from typing import Annotated, Callable, Generator, Iterable, List, Optional
+from typing import Callable, Generator, Iterable, List, Optional, Tuple
 
-from duho import Choice, Cmd, LoggingArgs
+from duho import Cmd, LoggingArgs
 
-from .._copy import CopyResult
-from .._dissect import DissectedFrame, DissectStats, FrameDissector
+from .._dissect import DissectedFrame
+from .._dissectors import DissectorRegistry
 from .._filter import compile_capture_filter
-from .._formats import CAPTURE_FORMATS, OUTPUT_FORMATS
-from .._frame_filter import frame_filter
-from .._output import CaptureWriter
+from .._frame_filter import frame_filter_for
+from .._plugins._load import LoadedPlugin, load_plugins
 
-__all__ = ["Base", "Writing", "counted", "error"]
-
-#: Link-type numbers named in the summary before it says "and more".
-_LISTED_LINKTYPES = 8
+__all__ = ["Base", "Loading", "counted", "error"]
 
 
 def error(text: str) -> None:
@@ -41,110 +37,51 @@ def counted(
             close()
 
 
-class _TextSink:
-    """A binary stream over the text stdout, for records, which are ASCII."""
-
-    def write(self, data: bytes) -> int:
-        sys.stdout.write(data.decode("utf-8"))
-        return len(data)
-
-    def flush(self) -> None:
-        sys.stdout.flush()
-
-
-class Base(LoggingArgs, Cmd):
-    """The options every command has."""
+class Loading(LoggingArgs, Cmd):
+    """The options of a command that loads plugins into a registry of its own."""
 
     _logger_name_ = "pktcap"
 
+    plugins: Optional[List[str]] = None
+    "Plugins to load, each a dotted module name or MODULE.CALLABLE; repeat the option, or separate by , ; : or space; none for no plugin. Omitted: PKTCAP_PLUGINS, then the configuration file, then none. A tool call cannot name it"
+    ("--plugins",)
+
+    config: Optional[str] = None
+    "The configuration file whose plugins key lists the plugins, read as it is; none for no file. Omitted: PKTCAP_CONFIG, then the user's own pktcap/pktcap.ini if there is one. A tool call cannot name it"
+    ("--config", "-c")
+
+    def served(self) -> bool:
+        """Whether this is a tool call: duho runs one with standard output
+        replaced by a text stream, which has no ``buffer``."""
+        return getattr(sys.stdout, "buffer", None) is None
+
+    def _registry(self) -> DissectorRegistry:
+        """A registry of this run's own, with the plugins loaded into it.
+
+        A tool call's arguments may come from text a capture held, so a tool
+        call names no plugin and no file: the server's own variable and the
+        user's own file decide.
+        """
+        if self.served() and (self.plugins is not None or self.config is not None):
+            raise ValueError(
+                "a tool call cannot name plugins or a configuration file: the "
+                "server's PKTCAP_PLUGINS and the user's own file decide"
+            )
+        registry = DissectorRegistry()
+        self.loaded: Tuple[LoadedPlugin, ...] = load_plugins(
+            registry, self.plugins, config=self.config
+        )
+        return registry
+
+
+class Base(Loading):
+    """The options every command has."""
+
     filter: Optional[str] = None
-    "Keep only frames matching `key=value and key!=value` clauses over src, dst, host, sport, dport, port, proto, vlan, linktype. Omitted: every frame"
+    "Keep only frames matching `key=value and key!=value` clauses over src, dst, host, sport, dport, port, proto, vlan, linktype and LAYER.FIELD; the plugins command lists every key. Omitted: every frame"
     ("--filter", "-f")
 
-    def _select(self) -> Callable[[DissectedFrame], bool]:
-        """The compiled ``--filter``; a bad expression is a usage error."""
-        return compile_capture_filter(self.filter, frame_filter)
-
-
-class Writing(Base):
-    """The options of a command that writes what it reads."""
-
-    output: str = "-"
-    "Where to write: a file, a file-name pattern with --per-record, or - for standard output, which a tool call returns as its result"
-    ("--output", "-o")
-
-    format: Annotated[Optional[str], Choice(*OUTPUT_FORMATS)] = None
-    "How to write it. Omitted: from the ending of --output, json for -"
-    ("--format",)
-
-    per_record: bool = False
-    "Write one file per record, --output being the name pattern ({index}, {timestamp}, {format}). Omitted: one growing file"
-    ("--per-record",)
-
-    max_files: int = 1000
-    "With --per-record, the most files created; further records are counted and not written"
-    ("--max-files",)
-
-    datagrams: bool = False
-    "Write each frame's UDP datagram, IP fragments reassembled, and pass over frames with none. Omitted: write the frames"
-    ("--datagrams",)
-
-    def _writer(self) -> CaptureWriter:
-        """The writer ``--output`` and ``--format`` name; nothing is opened
-        until the first record. Capture octets are never sent to a terminal."""
-        name = self.format or ("json" if self.output == "-" else None)
-        if self.output != "-":
-            return self._built(self.output, name)
-        if name in CAPTURE_FORMATS and sys.stdout.isatty():
-            raise ValueError(
-                "refusing to write a %s capture to a terminal: name a file with "
-                "--output" % name
-            )
-        buffer = getattr(sys.stdout, "buffer", None)
-        if buffer is not None:
-            return self._built(buffer, name)
-        # A tool call replaces stdout with a text stream and returns what was
-        # written to it as the result: records are ASCII text, a capture is not.
-        if name in CAPTURE_FORMATS:
-            raise ValueError(
-                "a %s capture cannot be returned as text: name a file with --output"
-                % name
-            )
-        return self._built(_TextSink(), name)
-
-    def _built(self, target: object, name: Optional[str]) -> CaptureWriter:
-        return CaptureWriter(
-            target,  # type: ignore[arg-type]
-            name,
-            per_record=self.per_record,
-            max_files=self.max_files,
-        )
-
-    def _report(
-        self, result: CopyResult, stats: DissectStats, dissector: FrameDissector
-    ) -> int:
-        """The summary on stderr, because stdout may be the capture; status 1
-        when the file budget turned records away."""
-        parts = ["%d frames read" % result.read, "%d written" % result.written]
-        if result.skipped:
-            parts.append("%d skipped" % result.skipped)
-        if result.refused:
-            parts.append(
-                "%d refused, %d files already (--max-files)"
-                % (result.refused, self.max_files)
-            )
-        if stats.malformed:
-            parts.append("%d malformed" % stats.malformed)
-        if stats.unsupported:
-            numbers = sorted(dissector.unsupported_linktypes)
-            parts.append(
-                "%d of an unsupported link type (%s%s)"
-                % (
-                    stats.unsupported,
-                    ", ".join(str(n) for n in numbers[:_LISTED_LINKTYPES]),
-                    ", ..." if len(numbers) > _LISTED_LINKTYPES else "",
-                )
-            )
-        if self.quiet <= 0 or result.refused:
-            print(", ".join(parts), file=sys.stderr)
-        return 1 if result.refused else 0
+    def _select(self, registry: DissectorRegistry) -> Callable[[DissectedFrame], bool]:
+        """The compiled ``--filter`` over the registry's layers and keys; a bad
+        expression is a usage error."""
+        return compile_capture_filter(self.filter, frame_filter_for(registry))

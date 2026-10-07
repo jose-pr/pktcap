@@ -118,11 +118,12 @@ def test_the_command_lines_run_as_written(tmp_path, monkeypatch, capsys):
     section = _section("Command line")
     runnable = re.findall(r"```bash\n(.*?)```", section, re.DOTALL)
     lines = [l for block in runnable for l in block.splitlines() if l.strip()]
-    assert len(lines) == 4 and all(l.startswith("pktcap ") for l in lines)
+    assert len(lines) == 5 and all(l.startswith("pktcap ") for l in lines)
     for line in lines:
         assert main(shlex.split(line)[1:]) == 0, line
     out, err = capsys.readouterr()
     assert "sent 3, partial 0" in out
+    assert "plugins: none\n" in out
     assert out.count('"destination": "192.0.2.1:69"') == 1
     assert len((tmp_path / "trace.jsonl").read_text("ascii").splitlines()) == 3
     assert sorted(p.name for p in (tmp_path / "by-frame").iterdir()) == [

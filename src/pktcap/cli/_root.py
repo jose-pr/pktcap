@@ -13,20 +13,21 @@ from .._exceptions import MissingExtraError
 from ._common import error
 from .capture import Capture
 from .convert import Convert
+from .plugins import Plugins
 from .replay import Replay
 
 __all__ = ["Pktcap", "execute"]
 
 
 class Pktcap(LoggingArgs, Cli):
-    """Capture, replay and convert packet captures (pcap and pcapng)."""
+    """Capture, replay and convert packet captures (pcap and pcapng), with the protocol plugins you name."""
 
     _parsername_ = "pktcap"
     _logger_name_ = "pktcap"
     _version_ = AUTO
     _distribution_ = "pktcap"
     _help_formatter_ = DefaultsFormatter
-    _subcommands_ = [Capture, Replay, Convert]
+    _subcommands_ = [Capture, Replay, Convert, Plugins]
 
 
 def _silence_stdout() -> None:

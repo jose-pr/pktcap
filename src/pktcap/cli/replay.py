@@ -11,6 +11,7 @@ from netimps import Host, UDPEndpoint, bind, split_host
 
 from .._captured import CapturedDatagram
 from .._dissect import FrameDissector, read_dissected
+from .._dissectors import DissectorRegistry
 from .._exceptions import CaptureFormatError
 from .._replay import replay_to
 from ._common import Base
@@ -72,10 +73,10 @@ class Replay(Base):
     def _source(self) -> Union[str, BinaryIO]:
         return sys.stdin.buffer if self.input == "-" else self.input
 
-    def _datagrams(self) -> Iterator[CapturedDatagram]:
+    def _datagrams(self, registry: DissectorRegistry) -> Iterator[CapturedDatagram]:
         """The datagrams of the frames the filter keeps, in capture order."""
-        wanted = self._select()
-        for frame in read_dissected(self._source(), dissector=FrameDissector()):
+        wanted = self._select(registry)
+        for frame in read_dissected(self._source(), dissector=FrameDissector(registry)):
             datagram = frame.datagram() if wanted(frame) else None
             if datagram is not None:
                 yield datagram
@@ -90,11 +91,12 @@ class Replay(Base):
         return UDPEndpoint(sock, pktinfo=False)
 
     def __call__(self) -> Optional[int]:
+        registry = self._registry()
         host, port = self._destination()
         endpoint = self._endpoint(host)
         try:
             result = replay_to(
-                self._datagrams(),
+                self._datagrams(registry),
                 host,
                 port,
                 endpoint=endpoint,

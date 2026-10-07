@@ -23,7 +23,12 @@ MAX_COMMAND_LINES = 200
 
 #: ``pktcap.cli`` is the one public subpackage, and each subcommand is a module
 #: named for it. Everything else is private.
-COMMAND_MODULES = {"cli/capture.py", "cli/convert.py", "cli/replay.py"}
+COMMAND_MODULES = {
+    "cli/capture.py",
+    "cli/convert.py",
+    "cli/plugins.py",
+    "cli/replay.py",
+}
 
 
 def _modules():

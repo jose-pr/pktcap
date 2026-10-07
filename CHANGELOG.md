@@ -69,6 +69,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   [--duration SECONDS]` captures live through `sniff_frames` and `copy_frames`
   (Linux, `CAP_NET_RAW`). Ctrl-C ends it with status 0 and the summary; off
   Linux the one line says to pipe a capture tool into `pktcap convert`.
+- Every command takes `--plugins NAME` (repeatable; `none` for none) and
+  `--config`/`-c FILE` (`none` for no file), loading into a registry of its
+  own before the filter is compiled, so `pktcap capture -f "proto=dhcp"` and a
+  library's own keys work with no code written; `--count` of `capture` has no
+  short form, `-c` being the configuration file on every command.
+  `pktcap plugins [--layer NAME] [--json]` shows the file, what was loaded and
+  every filter key, and is served as the tool `pktcap.plugins`. A tool call
+  cannot name `plugins` or `config`: it is refused, and the server's own
+  `PKTCAP_PLUGINS` and file decide.
 - `PKTCAP_MCP=stdio pktcap` serves `convert` as a tool (`pktcap.convert`):
   the records come back as the tool's result, and a capture format is refused
   for standard output, which a tool call has no octets for. `capture` and

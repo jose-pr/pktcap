@@ -8,7 +8,7 @@ from typing import BinaryIO, Optional, Union
 from .._copy import copy_frames
 from .._dissect import FrameDissector, read_dissected
 from .._exceptions import CaptureFormatError
-from ._common import Writing
+from ._writing import Writing
 
 __all__ = ["Convert"]
 
@@ -38,8 +38,9 @@ class Convert(Writing):
         return "standard input" if self.input == "-" else self.input
 
     def __call__(self) -> Optional[int]:
-        select = self._select()
-        dissector = FrameDissector()
+        registry = self._registry()
+        select = self._select(registry)
+        dissector = FrameDissector(registry)
         with self._writer() as writer:
             try:
                 result = copy_frames(
