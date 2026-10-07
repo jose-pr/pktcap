@@ -27,7 +27,12 @@ class Convert(Writing):
     ("--limit",)
 
     def _source(self) -> Union[str, BinaryIO]:
-        return sys.stdin.buffer if self.input == "-" else self.input
+        if self.input != "-":
+            return self.input
+        buffer = getattr(sys.stdin, "buffer", None)
+        if buffer is None:
+            raise ValueError("--input - needs a standard input: name a file")
+        return buffer  # type: ignore[no-any-return]
 
     def _name(self) -> str:
         return "standard input" if self.input == "-" else self.input

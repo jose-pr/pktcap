@@ -27,6 +27,8 @@ class Capture(Writing):
     """Capture frames live from an interface (Linux, needs CAP_NET_RAW) and write them; Ctrl-C ends it with status 0. It sends nothing."""
 
     _parsername_ = "capture"
+    # Runs until stopped and needs a privilege: not a call a program makes by accident.
+    _mcp_ = False
 
     interface: Optional[str] = None
     "The interface to capture on, by name, address or MAC. Omitted: every interface"

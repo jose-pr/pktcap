@@ -32,6 +32,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   pcap or pcapng capture into pcap, pcapng or records (json, yaml, toml,
   ini), through `copy_frames`. Standard output is the default target and may
   be the capture; the summary is on standard error.
+- `pktcap replay --input FILE|- --to HOST:PORT [--filter EXPR] [--speed X |
+  --no-delay] [--max-delay SECONDS] [--limit N] [--source-port N]
+  [--broadcast] [--json]` sends the UDP payloads of a capture, in order and in
+  time, through `replay_to`. `--to` is the only destination there is: the
+  addresses in the file are never sent to. The result is the one line
+  `sent 12, partial 0`, or an object with `--json`.
+- `PKTCAP_MCP=stdio pktcap` serves `convert` as a tool (`pktcap.convert`):
+  the records come back as the tool's result, and a capture format is refused
+  for standard output, which a tool call has no octets for. `capture` and
+  `replay` are not served: one runs until stopped and needs a privilege, the
+  other puts datagrams on a network.
 - `sniff_frames(interface=None, *, stop=None, dissector=None)` yields every
   frame seen live, dissected, as `read_dissected` does for a file; `sniff` is
   its datagram view, with the behaviour it had.

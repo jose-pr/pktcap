@@ -41,6 +41,17 @@ def counted(
             close()
 
 
+class _TextSink:
+    """A binary stream over the text stdout, for records, which are ASCII."""
+
+    def write(self, data: bytes) -> int:
+        sys.stdout.write(data.decode("utf-8"))
+        return len(data)
+
+    def flush(self) -> None:
+        sys.stdout.flush()
+
+
 class Base(LoggingArgs, Cmd):
     """The options every command has."""
 
@@ -59,7 +70,7 @@ class Writing(Base):
     """The options of a command that writes what it reads."""
 
     output: str = "-"
-    "Where to write: a file, a file-name pattern with --per-record, or - for standard output"
+    "Where to write: a file, a file-name pattern with --per-record, or - for standard output, which a tool call returns as its result"
     ("--output", "-o")
 
     format: Annotated[Optional[str], Choice(*OUTPUT_FORMATS)] = None
@@ -89,7 +100,17 @@ class Writing(Base):
                 "refusing to write a %s capture to a terminal: name a file with "
                 "--output" % name
             )
-        return self._built(sys.stdout.buffer, name)
+        buffer = getattr(sys.stdout, "buffer", None)
+        if buffer is not None:
+            return self._built(buffer, name)
+        # A tool call replaces stdout with a text stream and returns what was
+        # written to it as the result: records are ASCII text, a capture is not.
+        if name in CAPTURE_FORMATS:
+            raise ValueError(
+                "a %s capture cannot be returned as text: name a file with --output"
+                % name
+            )
+        return self._built(_TextSink(), name)
 
     def _built(self, target: object, name: Optional[str]) -> CaptureWriter:
         return CaptureWriter(

@@ -22,6 +22,8 @@ class Replay(Base):
     """Send the payload of each UDP datagram of a capture, in order and in time, to the one destination --to names, never to the addresses in the file."""
 
     _parsername_ = "replay"
+    # Puts datagrams on a network: not a call a program makes by accident.
+    _mcp_ = False
 
     input: str
     "The pcap or pcapng capture to read, or - for standard input"

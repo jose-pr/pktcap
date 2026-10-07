@@ -25,9 +25,6 @@ class Pktcap(LoggingArgs, Cli):
     _logger_name_ = "pktcap"
     _version_ = AUTO
     _distribution_ = "pktcap"
-    # capture runs until stopped and needs a privilege, and replay puts
-    # datagrams on a network: neither is a call a program makes by accident.
-    _mcp_ = False
     _help_formatter_ = DefaultsFormatter
     _subcommands_ = [Capture, Replay, Convert]
 
