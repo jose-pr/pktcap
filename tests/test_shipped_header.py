@@ -310,4 +310,5 @@ def test_a_built_wheel_holds_the_command_header_and_the_console_script(tmp_path)
         points = archive.read(entries[0]).decode("utf-8")
     assert "pktcap/cli/AGENTS.md" in names and "pktcap/cli/convert.py" in names
     assert "pktcap = pktcap.cli:main" in points
-    assert not [n for n in names if ".agents" in n or n.endswith("tests/AGENTS.md")]
+    hidden = [n for n in names if any(part.startswith(".") for part in n.split("/"))]
+    assert hidden == [] and not [n for n in names if n.endswith("tests/AGENTS.md")]
