@@ -50,16 +50,20 @@ def _error(item: str, source: str, problem: str) -> CapturePluginError:
     )
 
 
-def _names_item(name: Optional[str], item: str) -> bool:
-    return name is not None and (name == item or item.startswith(name + "."))
+class _NoSuchModule(Exception):
+    """``name`` is not a module: nothing of that name is there to import."""
 
 
 def _import(name: str, item: str, source: str) -> Any:
+    """The module ``name``. :class:`_NoSuchModule` when there is none;
+    the plugin's error when there is one and importing it fails."""
     try:
         return import_module(name)
     except ModuleNotFoundError as exc:
-        if _names_item(exc.name, name):
-            raise
+        # Only the plain error about this very name says "no such module". A
+        # subclass, or another name, is a module that exists failing to import.
+        if type(exc) is ModuleNotFoundError and exc.name == name:
+            raise _NoSuchModule(name) from exc
         raise _error(
             item, source, "importing it failed (%s: %s)" % (type(exc).__name__, exc)
         ) from exc
@@ -70,29 +74,33 @@ def _import(name: str, item: str, source: str) -> Any:
 
 
 def _find_hook(item: str, source: str) -> Callable[[DissectorRegistry], Any]:
-    """The module named ``item`` and its ``pktcap_plugin``, or, when no such
-    module exists, the callable the last part names in the module before it."""
-    try:
-        module = _import(item, item, source)
-    except ModuleNotFoundError as exc:
-        module_name, _, attribute = item.rpartition(".")
-        if not module_name:
-            raise _error(item, source, "no module of that name") from exc
+    """The module named ``item`` and its ``pktcap_plugin``, or, when the last
+    part is not a module, the callable of that name in the module before it.
+
+    Imported from the top down, one package at a time: a package that fails to
+    import ends the search, so a submodule its failed import left in
+    ``sys.modules`` is never taken for a plugin.
+    """
+    parts = item.split(".")
+    module: Any = None
+    for depth in range(1, len(parts) + 1):
+        name = ".".join(parts[:depth])
         try:
-            owner = _import(module_name, item, source)
-        except ModuleNotFoundError as missing:
-            raise _error(item, source, "no module of that name") from missing
-        hook = getattr(owner, attribute, None)
-        if hook is None:
-            raise _error(
-                item,
-                source,
-                "no module of that name, and %r has no attribute %r"
-                % (module_name, attribute),
-            ) from exc
-        if not callable(hook):
-            raise _error(item, source, "%s is not callable" % item) from exc
-        return hook  # type: ignore[no-any-return]
+            module = _import(name, item, source)
+        except _NoSuchModule as exc:
+            if module is None or depth != len(parts):
+                raise _error(item, source, "no module of that name") from exc
+            hook = getattr(module, parts[-1], None)
+            if hook is None:
+                raise _error(
+                    item,
+                    source,
+                    "no module of that name, and %r has no attribute %r"
+                    % (".".join(parts[:-1]), parts[-1]),
+                ) from exc
+            if not callable(hook):
+                raise _error(item, source, "%s is not callable" % item) from exc
+            return hook  # type: ignore[no-any-return]
     hook = getattr(module, _HOOK, None)
     if not callable(hook):
         raise _error(

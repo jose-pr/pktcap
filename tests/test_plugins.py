@@ -125,6 +125,51 @@ def test_a_dotted_module_inside_a_package_is_found(plugin_module, tmp_path):
     assert again.selectors == (("udp", 7002),)
 
 
+@pytest.mark.parametrize(
+    "failure, kind",
+    [
+        ("import nosuch_dependency_xyz", "ModuleNotFoundError"),
+        (
+            "import importlib.metadata as m\nraise m.PackageNotFoundError(__name__)",
+            "PackageNotFoundError",
+        ),
+        ("raise RuntimeError('boom')", "RuntimeError"),
+    ],
+)
+@pytest.mark.parametrize("tail", [".inner", ".inner.pktcap_plugin", ""])
+def test_a_package_whose_own_import_fails_gives_none_of_its_modules(
+    plugin_module, failure, kind, tail
+):
+    """The package imports its submodule and then fails. The submodule stays
+    in ``sys.modules``, and it must not be taken from there: the package did
+    not import, so nothing inside it is a plugin."""
+    package = plugin_module("", name="pktcap_half_%s" % os.urandom(3).hex())
+    inner = package.directory / package.name
+    inner.mkdir()
+    (inner / "__init__.py").write_text(
+        "from . import inner\n%s\n" % failure, encoding="utf-8"
+    )
+    (inner / "inner.py").write_text(
+        "CALLED = []\n"
+        "def pktcap_plugin(registry):\n"
+        "    CALLED.append(1)\n"
+        "    registry.register('udp', 7003, print)\n",
+        encoding="utf-8",
+    )
+    os.remove(package.path)
+    registry = DissectorRegistry()
+    before = state(registry)
+
+    with pytest.raises(CapturePluginError) as caught:
+        load_plugins(registry, package.name + tail)
+
+    assert "importing it failed (%s" % kind in str(caught.value)
+    assert caught.value.plugin == package.name + tail
+    assert state(registry) == before
+    left = sys.modules.get(package.name + ".inner")
+    assert left is None or left.CALLED == []
+
+
 def test_the_plugins_come_back_in_the_order_given(plugin_module):
     mods = [
         plugin_module(
