@@ -200,3 +200,14 @@ jobs:
               raise SystemExit("yaml was written without the yaml extra")
           print("ok:", pktcap.__version__)
           PY
+      - name: The command line without its extra names the extra
+        # The console script is installed either way: with no duho it prints
+        # the one line naming the extra and exits 1, never a traceback.
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          status=0
+          python -m pktcap --help 2> stderr.txt || status=$?
+          cat stderr.txt
+          test "$status" = 1
+          test "$(cat stderr.txt)" = "pktcap: error: the command line needs the 'cli' extra: pip install \"pktcap[cli]\""

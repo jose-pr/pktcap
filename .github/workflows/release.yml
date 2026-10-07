@@ -146,10 +146,17 @@ jobs:
           import pktcap
 
           root = files("pktcap")
-          for name in ("py.typed", "AGENTS.md"):
+          for name in ("py.typed", "AGENTS.md", "cli/AGENTS.md"):
               assert (root / name).is_file(), "the wheel does not ship %s" % name
           print("ok:", pktcap.__name__)
           PY
+      - name: The console script without the cli extra names the extra
+        run: |
+          status=0
+          "$RUNNER_TEMP/smoke/bin/pktcap" --help 2> "$RUNNER_TEMP/stderr.txt" || status=$?
+          cat "$RUNNER_TEMP/stderr.txt"
+          test "$status" = 1
+          grep -q "pip install \"pktcap\[cli\]\"" "$RUNNER_TEMP/stderr.txt"
 
   # Docs are DEPLOYED by docs.yml. This job only GATES the release on a strict
   # docs BUILD: a release must never ship if the docs site is broken, but the
