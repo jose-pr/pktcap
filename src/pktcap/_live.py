@@ -16,15 +16,15 @@ import socket
 import struct
 import time
 from types import TracebackType
-from typing import Callable, Dict, Iterator, Optional, Tuple, Type
+from typing import Callable, Dict, Generator, Iterator, Optional, Tuple, Type
 
 from netimps import Interface, InterfaceLike, get_interface
 
 from ._captured import CapturedDatagram, CapturedFrame
-from ._dissect import FrameDissector
+from ._dissect import DissectedFrame, FrameDissector
 from ._exceptions import LiveCaptureError
 
-__all__ = ["LiveCapture", "has_live_capture", "sniff"]
+__all__ = ["LiveCapture", "has_live_capture", "sniff", "sniff_frames"]
 
 #: Absent from the ``socket`` module on every platform but Linux.
 _AF_PACKET: Optional[int] = getattr(socket, "AF_PACKET", None)
@@ -231,6 +231,44 @@ class LiveCapture:
         self.close()
 
 
+def _checked(
+    stop: Optional[Callable[[], bool]], dissector: Optional[FrameDissector]
+) -> FrameDissector:
+    if stop is not None and not callable(stop):
+        raise TypeError("stop must be callable")
+    if dissector is None:
+        return FrameDissector()
+    if not isinstance(dissector, FrameDissector):
+        raise TypeError("dissector must be a FrameDissector")
+    return dissector
+
+
+def sniff_frames(
+    interface: InterfaceLike = None,
+    *,
+    stop: Optional[Callable[[], bool]] = None,
+    dissector: Optional[FrameDissector] = None,
+) -> Iterator[DissectedFrame]:
+    """Every frame seen on ``interface``, dissected, as they arrive. Linux only.
+
+    :class:`LiveCapture` and a :class:`FrameDissector` in one call: what
+    :func:`read_dissected` is for a file. The socket is opened when the first
+    frame is asked for and closed when the iterator ends or is closed.
+
+    :param interface: as for :class:`LiveCapture`; ``None`` is every one.
+    :param stop: called between packets, and at least once a second on a
+        quiet interface; returning true ends the iteration.
+    :param dissector: the frame dissector to use; a new ``FrameDissector()``
+        by default.
+    :raises LiveCaptureError: when the first frame is asked for, where the
+        platform cannot capture; ask :func:`has_live_capture` beforehand.
+    :raises PermissionError: at the same point, without ``CAP_NET_RAW``.
+    :raises TypeError: ``stop`` is not callable or ``dissector`` is not a
+        :class:`FrameDissector`, at the call.
+    """
+    return _sniff(LiveCapture(interface), stop, _checked(stop, dissector))
+
+
 def sniff(
     interface: InterfaceLike = None,
     *,
@@ -239,10 +277,10 @@ def sniff(
 ) -> Iterator[CapturedDatagram]:
     """UDP datagrams seen on ``interface``, as they arrive. Linux only.
 
-    :class:`LiveCapture`, :class:`FrameDissector` and the datagram view in one
-    call, for a UDP protocol library; for every packet, iterate a
-    :class:`LiveCapture`. The socket is opened when the first datagram is
-    asked for and closed when the iterator ends or is closed.
+    :func:`sniff_frames` through the datagram view, for a UDP protocol
+    library; for every packet, use that or iterate a :class:`LiveCapture`. The
+    socket is opened when the first datagram is asked for and closed when the
+    iterator ends or is closed.
 
     :param interface: as for :class:`LiveCapture`; ``None`` is every one.
     :param stop: called between packets, and at least once a second on a
@@ -253,22 +291,27 @@ def sniff(
         platform cannot capture; ask :func:`has_live_capture` beforehand.
     :raises PermissionError: at the same point, without ``CAP_NET_RAW``.
     """
-    if stop is not None and not callable(stop):
-        raise TypeError("stop must be callable")
-    if dissector is None:
-        dissector = FrameDissector()
-    elif not isinstance(dissector, FrameDissector):
-        raise TypeError("dissector must be a FrameDissector")
-    return _sniff(LiveCapture(interface), stop, dissector)
+    frames = _sniff(LiveCapture(interface), stop, _checked(stop, dissector))
+    return _datagrams(frames)
 
 
 def _sniff(
     capture: LiveCapture, stop: Optional[Callable[[], bool]], dissector: FrameDissector
-) -> Iterator[CapturedDatagram]:
+) -> Generator[DissectedFrame, None, None]:
     with capture:
         while stop is None or not stop():
             frame = capture.read()
             if frame is not None:
-                datagram = dissector.dissect(frame).datagram()
-                if datagram is not None:
-                    yield datagram
+                yield dissector.dissect(frame)
+
+
+def _datagrams(
+    frames: Generator[DissectedFrame, None, None],
+) -> Iterator[CapturedDatagram]:
+    try:
+        for frame in frames:
+            datagram = frame.datagram()
+            if datagram is not None:
+                yield datagram
+    finally:
+        frames.close()

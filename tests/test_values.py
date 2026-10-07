@@ -11,6 +11,7 @@ from pktcap import (
     CapturedFrame,
     CaptureFilterError,
     CaptureFormatError,
+    CopyResult,
     Dissected,
     DissectedFrame,
     DissectError,
@@ -58,6 +59,7 @@ VALUES = [
     TCPLayer(50000, 80, 1, 2, 0x18, 512, 0, 0, b"\x01\x01"),
     FilterClause("op", "RRQ,WRQ", True),
     ReplayResult(3, 1),
+    CopyResult(4, 2, 1, 1),
 ]
 
 

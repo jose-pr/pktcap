@@ -17,6 +17,7 @@ from importlib.metadata import version as _version
 
 from ._captured import CapturedDatagram, CapturedFrame
 from ._container import CaptureSource, read_frames
+from ._copy import CopyResult, copy_frames
 from ._dissect import (
     LINKTYPES,
     DissectedFrame,
@@ -61,7 +62,7 @@ from ._layers import (
     UDPLayer,
     VLANLayer,
 )
-from ._live import LiveCapture, has_live_capture, sniff
+from ._live import LiveCapture, has_live_capture, sniff, sniff_frames
 from ._output import CaptureWriter
 from ._records import datagram_record, frame_record
 from ._replay import ReplayResult, ReplaySource, replay, replay_schedule, replay_to
@@ -72,6 +73,7 @@ __all__ = [
     "CaptureFormatError",
     "CaptureSource",
     "CaptureWriter",
+    "CopyResult",
     "CapturedDatagram",
     "CapturedFrame",
     "DissectError",
@@ -109,6 +111,7 @@ __all__ = [
     "VLANLayer",
     "check_dissector",
     "compile_capture_filter",
+    "copy_frames",
     "datagram_record",
     "default_registry",
     "dumps_record",
@@ -125,6 +128,7 @@ __all__ = [
     "replay_schedule",
     "replay_to",
     "sniff",
+    "sniff_frames",
 ]
 
 __version__ = _version("pktcap")

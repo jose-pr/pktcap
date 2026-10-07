@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `sniff_frames(interface=None, *, stop=None, dissector=None)` yields every
+  frame seen live, dissected, as `read_dissected` does for a file; `sniff` is
+  its datagram view, with the behaviour it had.
+- `copy_frames(frames, writer, *, select=None, datagrams=False, limit=None)`
+  writes the frames a predicate accepts into a `CaptureWriter` the caller
+  owns, optionally as the UDP datagram of each, and stops reading at `limit`;
+  it returns `CopyResult(read, written, skipped, refused)`.
 - `MissingExtraError`, an `ImportError` and a `PktcapError`, is what a format
   whose optional dependency is not installed raises. `format` is the format's
   name and `extra` the pktcap extra that installs what it needs (`"toml"`,

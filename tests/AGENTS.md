@@ -38,8 +38,9 @@ prints the reason for every skip: a skip is not a pass.
 | `test_frame_filter.py` | `frame_filter`: each built-in key against IPv4, IPv6, TCP, UDP and tagged frames, a frame without the layer, a wrong value, a caller's own keys on top |
 | `test_formats.py` | the record formats: one contract suite over every name in `RECORD_FORMATS` (the text parses back with a parser this library did not write), then each format's dialect and the missing-extra message |
 | `test_output.py` | `CaptureWriter`: every format as a growing file and as one file per record, datagrams and dissected frames, choosing the format, the name pattern, the file budget, values that try to leave the directory |
+| `test_copy.py` | `copy_frames`: a capture of UDP, TCP and ARP frames copied whole and as datagrams, the filter, the limit that leaves the source unread, the file budget's refusals, and what is refused at the call |
 | `test_replay.py` | `replay_schedule`, `replay` and `replay_to`: the waits and their cap, the limit, sends to loopback sockets the test owns over IPv4 and IPv6, partial datagrams, frames replayed to a callable and never sent, and that the guard sees a replay that would leave the host |
-| `test_live.py` | `LiveCapture` and `sniff` with the privileged socket replaced: the lifecycle, every packet as a cooked frame, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
+| `test_live.py` | `LiveCapture`, `sniff_frames` and `sniff` with the privileged socket replaced: the lifecycle, every packet as a cooked frame, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
 | `test_reassembly.py` | IP reassembly through `FrameDissector`: any order, both families, any protocol, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
 ## Conformance

@@ -16,6 +16,7 @@ EXPECTED = [
     "CaptureWriter",
     "CapturedDatagram",
     "CapturedFrame",
+    "CopyResult",
     "DissectError",
     "DissectStats",
     "Dissected",
@@ -51,6 +52,7 @@ EXPECTED = [
     "VLANLayer",
     "check_dissector",
     "compile_capture_filter",
+    "copy_frames",
     "datagram_record",
     "default_registry",
     "dumps_record",
@@ -67,6 +69,7 @@ EXPECTED = [
     "replay_schedule",
     "replay_to",
     "sniff",
+    "sniff_frames",
 ]
 
 #: Positional parameters a callable may take: the thing it acts on, and one
@@ -77,6 +80,8 @@ POSITIONAL = {
     "PcapngWriter.write": 4,
     # The expression and what turns a clause into a test: both are operands.
     "compile_capture_filter": 2,
+    # The frames to copy and the writer that takes them.
+    "copy_frames": 2,
     # What to write and the format to write it in, as `json.dump(obj, fp)`.
     "dumps_record": 2,
     "CaptureWriter": 2,
@@ -99,6 +104,7 @@ POSITIONAL = {
 NAMED_TUPLES = (
     "CapturedDatagram",
     "CapturedFrame",
+    "CopyResult",
     "DissectStats",
     "Dissected",
     "DissectedFrame",

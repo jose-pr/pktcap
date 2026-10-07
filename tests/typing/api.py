@@ -153,11 +153,29 @@ assert_type(
     pktcap.ReplayResult,
 )
 
+# -- copying --------------------------------------------------------------
+
+with pktcap.CaptureWriter("out.json") as copy_target:
+    copied = pktcap.copy_frames(
+        pktcap.read_dissected("x.pcap"),
+        copy_target,
+        select=pktcap.compile_capture_filter("proto=udp", pktcap.frame_filter),
+        datagrams=True,
+        limit=10,
+    )
+assert_type(copied, pktcap.CopyResult)
+assert_type(copied.read, int)
+assert_type(copied.refused, int)
+
 # -- capturing live -------------------------------------------------------
 
 with pktcap.LiveCapture("eth0", timeout=0.5) as capture:
     assert_type(capture.read(), Optional[pktcap.CapturedFrame])
 assert_type(pktcap.sniff(stop=lambda: True), Iterator[pktcap.CapturedDatagram])
+assert_type(
+    pktcap.sniff_frames("lo", stop=lambda: True, dissector=dissector),
+    Iterator[pktcap.DissectedFrame],
+)
 assert_type(pktcap.has_live_capture(), bool)
 
 error = pktcap.CaptureFormatError("x", offset=3)

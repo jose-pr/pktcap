@@ -264,7 +264,9 @@ record under a name pattern. It takes a `CapturedDatagram` or a
 `DissectedFrame`; a capture format writes the item itself and a record format
 the record given, or `datagram_record` or `frame_record` of the item. Its
 signature, the name pattern, the file budget and every check are in
-`pktcap/_formats/AGENTS.md`.
+`pktcap/_formats/AGENTS.md`, with **`copy_frames`** and its result
+`CopyResult`: a source of dissected frames, filtered, into one of these
+writers.
 
 ## Filtering
 
@@ -408,13 +410,19 @@ constructing one opens nothing.
   arriving copy is returned. Loopback is told by the device type the kernel
   reports, not by the name `lo`.
 
+**`sniff_frames(interface=None, *, stop=None, dissector=None) -> Iterator[DissectedFrame]`**
+— `LiveCapture` and a `FrameDissector` in one call, what `read_dissected` is
+for a file: every frame as it arrives, dissected, whatever it carries. The
+socket is opened when the first frame is asked for (which is when
+`LiveCaptureError` or `PermissionError` is raised) and closed when the
+iterator ends or is closed. `stop()` is called between packets, and at least
+once a second on a quiet interface; returning true ends the iteration.
+`TypeError` at the call for a `stop` that is not callable or a `dissector`
+that is not a `FrameDissector`.
+
 **`sniff(interface=None, *, stop=None, dissector=None) -> Iterator[CapturedDatagram]`**
-— `LiveCapture`, a `FrameDissector` and the datagram view in one call: UDP
-datagrams as they arrive. The socket is opened when the first datagram is
-asked for (which is when `LiveCaptureError` or `PermissionError` is raised)
-and closed when the iterator ends or is closed. `stop()` is called between
-packets, and at least once a second on a quiet interface; returning true ends
-the iteration.
+— `sniff_frames` through the datagram view: UDP datagrams as they arrive, the
+rest passed over. The same opening, closing, `stop` and errors.
 
 ## Exceptions
 

@@ -17,6 +17,7 @@ import captures as build
 from pktcap import (
     CapturedDatagram,
     CapturedFrame,
+    DissectedFrame,
     EthernetLayer,
     FrameDissector,
     IPv4Layer,
@@ -30,6 +31,7 @@ from pktcap import (
     has_live_capture,
     read_dissected,
     sniff,
+    sniff_frames,
 )
 
 V4 = build.ipv4("10.0.0.5", "10.0.0.1", build.udp(50000, 69, b"request"))
@@ -102,6 +104,8 @@ def test_a_platform_without_packet_sockets_says_what_to_do_instead(monkeypatch):
     assert isinstance(caught.value, PktcapError) and isinstance(caught.value, OSError)
     with pytest.raises(LiveCaptureError):
         next(sniff())
+    with pytest.raises(LiveCaptureError, match="pipe a capture tool"):
+        next(sniff_frames())
 
 
 @pytest.mark.parametrize("interface", ["eth0", "no-such-interface-0", "127.0.0.1"])
@@ -115,6 +119,8 @@ def test_a_platform_without_packet_sockets_is_refused_before_the_interface_is_lo
         LiveCapture(interface).open()
     with pytest.raises(LiveCaptureError):
         next(sniff(interface))
+    with pytest.raises(LiveCaptureError):
+        next(sniff_frames(interface))
     with pytest.raises(LiveCaptureError):
         with LiveCapture(interface):
             pass
@@ -363,6 +369,54 @@ def test_sniff_checks_its_arguments_at_the_call(packet_socket):
         sniff(stop=5)
     with pytest.raises(TypeError, match="FrameDissector"):
         sniff(dissector=object())
+    assert packet_socket.opened == []
+
+
+# -- every frame, not only the datagrams ---------------------------------
+
+
+def test_sniff_frames_yields_every_frame_dissected_and_closes_the_socket(packet_socket):
+    fake = packet_socket(_read(V4, 0x0800), _read(bytes(28), 0x0806), _read(V6, 0x86DD))
+    calls = []
+
+    def stop():
+        calls.append(None)
+        return len(calls) > 4
+
+    frames = list(sniff_frames(stop=stop))
+    assert all(isinstance(f, DissectedFrame) for f in frames) and len(frames) == 3
+    assert [f.datagram() is not None for f in frames] == [True, False, True]
+    assert [f.layer(LinuxCookedLayer).ethertype for f in frames] == [
+        0x0800,
+        0x0806,
+        0x86DD,
+    ]
+    assert fake.closed
+
+
+def test_sniff_frames_opens_at_the_first_frame_and_closes_when_abandoned(packet_socket):
+    fake = packet_socket(_read(V4, 0x0800), _read(V4, 0x0800))
+    stream = sniff_frames()
+    assert packet_socket.opened == []
+    assert next(stream).payload_of(UDPLayer) == b"request"
+    assert packet_socket.opened == [None] and not fake.closed
+    stream.close()
+    assert fake.closed
+
+
+def test_sniff_frames_keeps_the_counts_of_the_dissector_passed_in(packet_socket):
+    packet_socket(_read(bytes(28), 0x0806), _read(V4, 0x0800))
+    dissector = FrameDissector()
+    stops = iter([False, False, True])
+    assert len(list(sniff_frames(stop=lambda: next(stops), dissector=dissector))) == 2
+    assert dissector.stats.frames == 2
+
+
+def test_sniff_frames_checks_its_arguments_at_the_call(packet_socket):
+    with pytest.raises(TypeError, match="callable"):
+        sniff_frames(stop=5)
+    with pytest.raises(TypeError, match="FrameDissector"):
+        sniff_frames(dissector=object())
     assert packet_socket.opened == []
 
 
