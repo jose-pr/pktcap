@@ -18,6 +18,7 @@ Requires Python 3.9 or newer.
 | --- | --- | --- |
 | `yaml` | `PyYAML` | writing records as YAML |
 | `toml` | `tomli-w` | writing records as TOML |
+| `cli` | `duho` | the `pktcap` command |
 
 ## 30-second tour
 
@@ -52,5 +53,7 @@ pktcap.register_dissector("udp", 7, dissect_echo)
   built-in dissector reads and leaves alone.
 - [Output formats](formats.md): `CaptureWriter`, and what each record format
   writes.
+- [Command line](cli.md): the `pktcap` command, `capture`, `replay` and
+  `convert`, with every option and exit status.
 - [API Reference](api/reference.md): every export, generated from the source.
 - [Changelog](changelog.md)

@@ -11,19 +11,21 @@ Everything is imported from `pktcap` directly. Every module under `pktcap`
 
 Install with `pip install pktcap`, which brings `netimps`. The `yaml` extra
 (`pip install "pktcap[yaml]"`) adds `PyYAML` and the `toml` extra adds
-`tomli-w`, each for the output format of that name. Importing `pktcap` needs
-neither. Python 3.9 or newer.
+`tomli-w`, each for the output format of that name, and the `cli` extra
+(`pip install "pktcap[cli]"`) adds `duho` for the `pktcap` command. Importing
+`pktcap` needs none of them. Python 3.9 or newer.
 
 `pktcap.__version__` — the package version string, the same value the
 installed distribution's metadata carries.
 
-Two topics keep their detail in a header beside their code, also inside the
+Three topics keep their detail in a header beside their code, also inside the
 installed package (`importlib.resources.files("pktcap")`):
 
 | Header | Covers |
 | --- | --- |
 | `pktcap/AGENTS.md` | this file: reading, dissecting, the datagram view, filtering, replaying, live capture, the exceptions |
 | `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
+| `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay` and `convert`, every option, what each prints, its statuses |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
 **Any valid capture is read.** Every frame of a pcap or pcapng file comes
@@ -423,6 +425,14 @@ that is not a `FrameDissector`.
 **`sniff(interface=None, *, stop=None, dissector=None) -> Iterator[CapturedDatagram]`**
 — `sniff_frames` through the datagram view: UDP datagrams as they arrive, the
 rest passed over. The same opening, closing, `stop` and errors.
+
+## Command line
+
+`pip install "pktcap[cli]"` installs the `pktcap` command (also
+`python -m pktcap`) with `capture`, `replay` and `convert`, each a call into
+this API (`sniff_frames`, `replay_to`, `copy_frames`). `pktcap.cli` is not
+library API and is in no export. `PKTCAP_MCP=stdio` serves `convert` alone as
+a tool. Every option, output and exit status is in `pktcap/cli/AGENTS.md`.
 
 ## Exceptions
 

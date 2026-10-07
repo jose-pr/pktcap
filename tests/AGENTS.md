@@ -21,10 +21,10 @@ prints the reason for every skip: a skip is not a pass.
 | `conftest.py` | the network guard: a test that sends anywhere but loopback fails at the call |
 | `test_network_guard.py` | the guard itself refuses an off-host destination and a name lookup |
 | `test_surface.py` | exactly what `pktcap.__all__` exports, and that options are keyword-only |
-| `test_shipped_header.py` | the shipped `AGENTS.md`: every export is in it, every printed signature is the live one |
+| `test_shipped_header.py` | the shipped `AGENTS.md` headers: every export is in the top one, every printed signature is the live one, every option a command declares is in `cli/AGENTS.md`, and a built wheel holds it and the console script |
 | `test_import_structure.py` | no module takes a name from the root, none is over 400 lines, nothing imports a private netimps module |
 | `test_comments.py` | the source and the shipped header describe the code as it is |
-| `test_readme.py` | the README's sections, badges and links, and every Python block of "Quick start" executed in an empty directory |
+| `test_readme.py` | the README's sections, badges and links, every Python block of "Quick start" executed in an empty directory, and every `pktcap` line of "Command line" run as written |
 | `test_examples.py` | each script under `examples/` run as its own process, with no argument and with a capture and a filter |
 | `test_values.py` | the named tuples as values (immutable, hashable, copy, pickle, repr) and the exception hierarchy |
 | `typing/api.py` | the static-typing contract of a caller; never executed, checked by `mypy tests/typing/api.py` |

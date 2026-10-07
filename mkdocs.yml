@@ -32,6 +32,7 @@ nav:
       - The API header: header.md
       - Dissectors: dissectors.md
       - Output formats: formats.md
+      - Command line: cli.md
   - API Reference:
       - Overview: api/reference.md
   - Changelog: changelog.md

@@ -9,7 +9,8 @@ is the headers below, which do.
 | --- | --- |
 | `src/pktcap/AGENTS.md` | the shipped API header: every public name with its signature and contract, the bounds on untrusted input, the exceptions |
 | `src/pktcap/_dissectors/AGENTS.md` | shipped: the dissector contract, the registry, each built-in dissector and layer |
-| `src/pktcap/_formats/AGENTS.md` | shipped: what each record format writes |
+| `src/pktcap/_formats/AGENTS.md` | shipped: the capture writers, `CaptureWriter` and `copy_frames`, what each record format writes |
+| `src/pktcap/cli/AGENTS.md` | shipped: the `pktcap` command, every option, what it prints, its statuses |
 | `tests/AGENTS.md` | running and writing the tests: the network guard, the capture builders, the conformance cases |
 
 A public API change updates the shipped header in the same commit.
@@ -17,7 +18,7 @@ A public API change updates the shipped header in the same commit.
 ## Layout
 
 ```
-src/pktcap/   the package: every module is private, the root re-exports the API
+src/pktcap/   the package: every module is private but `cli/`, the root re-exports the API
 tests/        the suite (tests/AGENTS.md)
 docs/         the published site, with mkdocs.yml; built strictly as a release gate
 benchmarks/   run on demand, never in CI; results/ is tracked
@@ -39,7 +40,7 @@ py -3.9-arm64  -m venv .venv/3.9-nt-arm64
 ```
 
 On POSIX the scripts are in `bin/` and the name is e.g.
-`.venv/3.14-posix-x86_64`. The `dev` extra installs every format extra, so
+`.venv/3.14-posix-x86_64`. The `dev` extra installs every format extra and `cli`, so
 their tests run and do not skip.
 
 ## Checks
@@ -62,7 +63,13 @@ clean run says nothing about the other two.
 ## Conventions
 
 - **Root-only surface.** Every module is private; `pktcap.__all__` is the API,
-  and `tests/test_surface.py` pins it name by name.
+  and `tests/test_surface.py` pins it name by name. `pktcap.cli` is the one
+  public subpackage and is not library API.
+- **Only `cli/` imports `duho`**, and `cli.main()` imports it inside the
+  function, so a no-extra install gets one line naming the extra. A command
+  is a class whose methods call the library's public API; what a command does
+  beyond parsing and printing is a library function. A command module stays
+  under 200 lines.
 - **A capture is untrusted input.** Every length, count and offset a file or a
   frame controls is checked against a ceiling before anything is allocated or
   looped over, and each ceiling has a test that fails without it.

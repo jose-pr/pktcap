@@ -19,7 +19,10 @@ import pktcap
 _ROOT = Path(__file__).resolve().parent.parent
 _PACKAGE = _ROOT / "src" / "pktcap"
 _HEADER = _PACKAGE / "AGENTS.md"
+_COMMAND_HEADER = _PACKAGE / "cli" / "AGENTS.md"
 _SUBHEADERS = sorted(p for p in _PACKAGE.rglob("AGENTS.md") if p != _HEADER)
+#: The headers of private directories, which print signatures of the library.
+_LIBRARY_SUBHEADERS = [p for p in _SUBHEADERS if p != _COMMAND_HEADER]
 
 #: The most lines each file may have. Past these, detail moves to a header
 #: beside the code it describes and the parent points to it.
@@ -51,8 +54,12 @@ def test_a_header_below_the_top_is_listed_there_and_says_what_it_is(path):
     rows = [line for line in _lines(_HEADER) if line.startswith("|")]
     assert any("`%s`" % _inside_package(path) in row for row in rows)
     head = "\n".join(_lines(path)[:12])
-    assert head.startswith("# `pktcap`") and "public API header" in head
-    assert "private and not an import path" in " ".join(head.split())
+    assert head.startswith("# `pktcap`")
+    if path == _COMMAND_HEADER:
+        assert "not library API" in " ".join(head.split())
+    else:
+        assert "public API header" in head
+        assert "private and not an import path" in " ".join(head.split())
     links = re.findall(r"\]\(([^)]+)\)", path.read_text(encoding="utf-8"))
     assert [link for link in links if not link.startswith("http")] == []
 
@@ -189,7 +196,7 @@ def _probe(path):
 
 def test_every_printed_signature_is_the_live_one():
     checked, bad = _probe(_HEADER)
-    for path in _SUBHEADERS:
+    for path in _LIBRARY_SUBHEADERS:
         names, mismatches = _probe(path)
         assert names, "%s prints no signature to check" % _inside_package(path)
         checked += names
@@ -224,3 +231,83 @@ def test_the_probe_sees_a_changed_signature(tmp_path, monkeypatch):
     checked, bad = _probe(header)
     assert checked == ["sample"] * 3
     assert len(bad) == 2
+
+
+# -- the header of the command line -----------------------------------------
+
+
+def _declared_options():
+    pytest.importorskip("duho")
+    from pktcap.cli.capture import Capture
+    from pktcap.cli.convert import Convert
+    from pktcap.cli.replay import Replay
+    from pktcap.cli._root import Pktcap
+
+    found = {}
+    for command in (Convert, Replay, Capture, Pktcap):
+        parser = command._parser_()
+        found[command.__name__] = sorted(
+            option
+            for action in parser._actions
+            for option in action.option_strings
+            if option not in ("-h", "--help")
+        )
+    return found
+
+
+def test_the_command_header_is_listed_and_inside_the_package():
+    assert _COMMAND_HEADER.is_file()
+    rows = [line for line in _lines(_HEADER) if line.startswith("|")]
+    assert any("`pktcap/cli/AGENTS.md`" in row for row in rows)
+    assert "pip install" in _HEADER.read_text(encoding="utf-8")
+    assert "`cli` extra" in _HEADER.read_text(encoding="utf-8")
+
+
+def test_every_option_a_command_declares_is_named_in_its_header():
+    text = _COMMAND_HEADER.read_text(encoding="utf-8")
+    missing = [
+        "%s %s" % (command, option)
+        for command, options in _declared_options().items()
+        for option in options
+        if not re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(option), text)
+    ]
+    assert missing == [], "cli/AGENTS.md does not name: %s" % ", ".join(missing)
+
+
+def test_the_command_header_names_each_command_the_environment_and_the_tool():
+    pytest.importorskip("duho")
+    text = _COMMAND_HEADER.read_text(encoding="utf-8")
+    for needle in (
+        "pktcap convert",
+        "pktcap replay",
+        "pktcap capture",
+        "PKTCAP_MCP=stdio",
+        "pktcap.convert",
+    ):
+        assert needle in text, needle
+    assert "PKTCAP_MCP" in _HEADER.read_text(encoding="utf-8")
+
+
+def test_a_built_wheel_holds_the_command_header_and_the_console_script(tmp_path):
+    pytest.importorskip("build")
+    pytest.importorskip("hatchling")
+    import subprocess
+    import sys
+    import zipfile
+
+    done = subprocess.run(
+        [sys.executable, "-m", "build", "--wheel", "--no-isolation"]
+        + ["--outdir", str(tmp_path), str(_ROOT)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    (wheel,) = tmp_path.glob("pktcap-*.whl")
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        entries = [n for n in names if n.endswith("entry_points.txt")]
+        points = archive.read(entries[0]).decode("utf-8")
+    assert "pktcap/cli/AGENTS.md" in names and "pktcap/cli/convert.py" in names
+    assert "pktcap = pktcap.cli:main" in points
+    assert not [n for n in names if ".agents" in n or n.endswith("tests/AGENTS.md")]

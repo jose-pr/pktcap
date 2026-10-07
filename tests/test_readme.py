@@ -11,6 +11,8 @@ import pathlib
 import re
 import socket
 
+import pytest
+
 import pktcap
 
 README = pathlib.Path(__file__).resolve().parent.parent / "README.md"
@@ -20,6 +22,7 @@ SECTIONS = [
     "Features",
     "Installation",
     "Quick start",
+    "Command line",
     "API overview",
     "Differences from tshark",
     "Development",
@@ -97,3 +100,37 @@ def test_the_installation_table_names_the_declared_extras():
     extras = set(manifest["project"]["optional-dependencies"]) - {"dev", "docs"}
     rows = set(re.findall(r"^\| `([a-z]+)` \|", _section("Installation"), re.MULTILINE))
     assert rows == extras == {"yaml", "toml", "cli"}
+
+
+def test_the_command_lines_run_as_written(tmp_path, monkeypatch, capsys):
+    """Each ``pktcap`` line of "Command line" is run, from an empty directory
+    holding the capture the quick start writes, through the real parser."""
+    pytest.importorskip("duho")
+    import shlex
+
+    from pktcap.cli import main
+
+    monkeypatch.chdir(tmp_path)
+    with pktcap.PcapWriter("trace.pcap") as writer:
+        writer.write(1.0, ("192.0.2.5", 50000), ("192.0.2.1", 69), b"\x00\x01a\x00")
+        writer.write(2.0, ("192.0.2.1", 40000), ("192.0.2.5", 50000), b"\x00\x03")
+        writer.write(3.0, ("192.0.2.5", 50001), ("192.0.2.9", 53), b"query")
+    section = _section("Command line")
+    runnable = re.findall(r"```bash\n(.*?)```", section, re.DOTALL)
+    lines = [l for block in runnable for l in block.splitlines() if l.strip()]
+    assert len(lines) == 4 and all(l.startswith("pktcap ") for l in lines)
+    for line in lines:
+        assert main(shlex.split(line)[1:]) == 0, line
+    out, err = capsys.readouterr()
+    assert "sent 3, partial 0" in out
+    assert out.count('"destination": "192.0.2.1:69"') == 1
+    assert len((tmp_path / "trace.jsonl").read_text("ascii").splitlines()) == 3
+    assert sorted(p.name for p in (tmp_path / "by-frame").iterdir()) == [
+        "0.toml",
+        "1.toml",
+        "2.toml",
+    ]
+    # What is shown and not run is marked, with the reason beside it.
+    (shown,) = re.findall(r"```bash not-run\n(.*?)```", section, re.DOTALL)
+    assert "pktcap capture" in shown and "tcpdump" in shown
+    assert "need Linux and root, or another tool" in section
