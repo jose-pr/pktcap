@@ -32,6 +32,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `frame_filter_keys(registry=None)` lists every key that compiles.
   `frame_filter` reads no registry; it answers `LAYER.FIELD` of the built-in
   layers.
+- `load_plugins(registry, plugins=None, *, config=None)` imports the modules
+  a list names and calls each one's hook, `pktcap_plugin(registry)` (or any
+  `MODULE.CALLABLE` taking the registry), so a protocol library's dissector and
+  filter keys are registered with no code of the user's. The list is the first
+  of the argument, the variable `PKTCAP_PLUGINS` and the `plugins` key of one
+  configuration file that names one; it is read from those places and never
+  from the working directory or a capture. The file is `pktcap/pktcap.ini`
+  under `$XDG_CONFIG_HOME` (else `~/.config`), or `%APPDATA%` on Windows;
+  `PKTCAP_CONFIG` or `config` names another, read as it is, while the one found
+  by default must be the user's own and not writable by everyone (POSIX).
+  `capture_config_path(config=None)` says which file applies and
+  `LoadedPlugin` is one result. A plugin that cannot be loaded raises
+  `CapturePluginError` and leaves the registry as it was; a malformed file
+  raises `CaptureConfigError` with its path and line, never a line of the file.
+  `import pktcap` reads no variable and imports no plugin.
 - The `pktcap` command, also `python -m pktcap`, behind the new `cli` extra
   (`pip install "pktcap[cli]"`, which brings `duho`). Without the extra the
   command prints the one line naming it and exits 1. `import pktcap` imports

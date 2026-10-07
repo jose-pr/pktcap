@@ -166,6 +166,21 @@ def test_the_tftp_dissector_keeps_the_contract():
     pktcap.check_dissector(dissect_tftp, [b"\x00\x01boot.efi\x00octet\x00"])
 ```
 
+## What a frame dissector counts
+
+**`DissectStats(frames, malformed, failed, unsupported, fragments, dropped, pending)`**
+— a named tuple of counts.
+
+| Field | Counts |
+| --- | --- |
+| `frames` | frames given to `dissect` |
+| `malformed` | frames in which a dissector could not read its layer (it raised `ValueError`: cut short, a length that lies), or that needed more than 32 dissectors |
+| `failed` | frames in which a dissector raised anything else or returned something that is not a `Dissected`: a defect in that dissector. Logged at `WARNING` on the logger `pktcap._dissect`, once per selector, for the first eight |
+| `unsupported` | frames whose link type has no dissector: they come back with no layer. `FrameDissector.unsupported_linktypes` is a read-only snapshot mapping each such `LINKTYPE_` number to its frame count (`{105: 3}`), telling the first 64 distinct ones apart |
+| `fragments` | frames that were a piece of a fragmented IP datagram |
+| `dropped` | reassemblies discarded: an overlap, a ceiling, old age |
+| `pending` | reassemblies still waiting for a fragment |
+
 ## The built-in dissectors
 
 | Selector | Reads | Layer | Names next |

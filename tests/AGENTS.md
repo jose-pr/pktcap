@@ -18,11 +18,11 @@ prints the reason for every skip: a skip is not a pass.
 
 | File | Covers |
 | --- | --- |
-| `conftest.py` | the network guard: a test that sends anywhere but loopback fails at the call |
+| `conftest.py` | the network guard: a test that sends anywhere but loopback fails at the call; every test runs with no `PKTCAP_PLUGINS` and `PKTCAP_CONFIG=none`; `plugin_module` writes a plugin module under a unique name into a temporary directory on `sys.path` |
 | `test_network_guard.py` | the guard itself refuses an off-host destination and a name lookup |
 | `test_surface.py` | exactly what `pktcap.__all__` exports, and that options are keyword-only |
 | `test_shipped_header.py` | the shipped `AGENTS.md` headers: every export is in the top one, every printed signature is the live one, every option a command declares is in `cli/AGENTS.md`, and a built wheel holds it and the console script |
-| `test_import_structure.py` | no module takes a name from the root, none is over 400 lines, nothing imports a private netimps module |
+| `test_import_structure.py` | no module takes a name from the root, none is over 400 lines, nothing imports a private netimps module; the trust boundary of plugin loading: which module may import by name, read the environment, import the loader |
 | `test_comments.py` | the source and the shipped header describe the code as it is |
 | `test_readme.py` | the README's sections, badges and links, every Python block of "Quick start" executed in an empty directory, and every `pktcap` line of "Command line" run as written |
 | `test_examples.py` | each script under `examples/` run as its own process, with no argument and with a capture and a filter |
@@ -34,6 +34,8 @@ prints the reason for every skip: a skip is not a pass.
 | `test_dissectors.py` | each built-in dissector called on its own: every field of every layer, every header cut short or lying about its length, and `check_dissector` over each with 5,000 damaged inputs |
 | `test_dissect.py` | `FrameDissector`, `read_dissected` and `read_datagrams`: the walk under every link type, what ends it, the 32-dissector ceiling, a registered dissector that refuses its octets or fails outright, the datagram view, a seeded fuzz per link type |
 | `test_writer.py` | `PcapWriter` and `PcapngWriter`: datagrams under synthesised headers with their checksums, frames written back octet for octet, one link type per pcap file and any mix in pcapng, the lazy open, what a bad argument leaves untouched |
+| `test_plugin_config.py` | where a plugin list comes from: the order argument, variable, file; the file's location and dialect, each malformed file, the trust of the default file against a named one, the bounds |
+| `test_plugins.py` | `load_plugins`: both forms of an item, every way a plugin fails with the registry left as it was, and fresh-interpreter tests that `import pktcap` reads no variable and imports no plugin |
 | `test_layer_filter.py` | layers and filter keys in a registry: `LAYER.FIELD` by each type a field holds, a library's own keys, every collision, each refusal at compile and each bound |
 | `test_filter.py` | the filter grammar: the expressions protocol libraries use, what is refused, the round trip of the canonical text, compiling with a caller's builder |
 | `test_frame_filter.py` | `frame_filter`: each built-in key against IPv4, IPv6, TCP, UDP and tagged frames, a frame without the layer, a wrong value, a caller's own keys on top |

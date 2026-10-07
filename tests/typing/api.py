@@ -7,6 +7,7 @@ stating the result a caller gets, so a public annotation that degrades to
 """
 
 import io
+import pathlib
 from typing import Any, Callable, Dict, Iterator, Mapping, NamedTuple, Optional, Tuple
 
 from netimps import UDPEndpoint
@@ -131,6 +132,36 @@ assert_type(
 )
 assert_type(pktcap.frame_filter_keys(registry), Tuple[str, ...])
 assert_type(pktcap.frame_filter_keys(), Tuple[str, ...])
+
+# -- plugins --------------------------------------------------------------
+
+loaded = pktcap.load_plugins(registry, "a.b", config="none")
+assert_type(loaded, Tuple[pktcap.LoadedPlugin, ...])
+assert_type(pktcap.load_plugins(registry), Tuple[pktcap.LoadedPlugin, ...])
+assert_type(
+    pktcap.load_plugins(registry, ["a.b", "c"]), Tuple[pktcap.LoadedPlugin, ...]
+)
+for plugin in loaded:
+    assert_type(plugin.name, str)
+    assert_type(plugin.source, str)
+    assert_type(plugin.selectors, Tuple[pktcap.Selector, ...])
+    assert_type(plugin.layers, Tuple[str, ...])
+assert_type(pktcap.capture_config_path(), Optional[pathlib.Path])
+assert_type(pktcap.capture_config_path(pathlib.Path("x.ini")), Optional[pathlib.Path])
+
+
+def hook(registry: pktcap.DissectorRegistry) -> None:
+    """A plugin's hook is a function of this shape."""
+
+
+try:
+    pktcap.load_plugins(registry, "x")
+except pktcap.CapturePluginError as problem:
+    assert_type(problem.plugin, str)
+    assert_type(problem.source, str)
+except pktcap.CaptureConfigError as bad:
+    assert_type(bad.path, Optional[str])
+    assert_type(bad.lineno, Optional[int])
 
 
 class DemoLayer(NamedTuple):

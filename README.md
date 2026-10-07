@@ -199,10 +199,11 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
 | `CaptureWriter`, `dumps_record`, `datagram_record`, `frame_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format |
 | `copy_frames`, `CopyResult` | copy a source of dissected frames, filtered, into a writer |
+| `load_plugins`, `LoadedPlugin`, `capture_config_path` | load the plugins a user names into a registry |
 | `parse_capture_filter`, `compile_capture_filter`, `FilterClause`, `frame_filter`, `frame_filter_for`, `frame_filter_keys`, `FRAME_FILTER_KEYS` | the filter expression, the keys of the built-in layers, and the layers and keys a registry declares |
 | `replay_schedule`, `replay`, `replay_to`, `ReplayResult`, `ReplaySource` | replay a capture |
 | `LiveCapture`, `sniff_frames`, `sniff`, `has_live_capture` | live capture on Linux |
-| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `MissingExtraError`, `DissectError`, `LiveCaptureError` | the exceptions |
+| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `MissingExtraError`, `DissectError`, `LiveCaptureError`, `CapturePluginError`, `CaptureConfigError` | the exceptions |
 
 The reference with every signature, bound and gotcha is the API header that
 ships inside the package, `pktcap/AGENTS.md`, also at

@@ -25,7 +25,7 @@ installed package (`importlib.resources.files("pktcap")`):
 | --- | --- |
 | `pktcap/AGENTS.md` | this file: reading, dissecting, the datagram view, filtering, replaying, live capture, the exceptions |
 | `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
-| `pktcap/_plugins/AGENTS.md` | layers and the filter keys a registry holds for them, and how a filter reads a layer's fields |
+| `pktcap/_plugins/AGENTS.md` | layers and the filter keys a registry holds for them, how a filter reads a layer's fields, and loading plugins by name |
 | `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay` and `convert`, every option, what each prints, its statuses |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
@@ -156,17 +156,10 @@ a named tuple: a captured frame and what was read from it.
   are kept and its octets are the payload.
 
 **`DissectStats(frames, malformed, failed, unsupported, fragments, dropped, pending)`**
-— a named tuple of counts.
-
-| Field | Counts |
-| --- | --- |
-| `frames` | frames given to `dissect` |
-| `malformed` | frames in which a dissector could not read its layer (it raised `ValueError`: cut short, a length that lies), or that needed more than 32 dissectors |
-| `failed` | frames in which a dissector raised anything else or returned something that is not a `Dissected`: a defect in that dissector. Logged at `WARNING` on the logger `pktcap._dissect`, once per selector, for the first eight |
-| `unsupported` | frames whose link type has no dissector: they come back with no layer. `FrameDissector.unsupported_linktypes` is a read-only snapshot mapping each such `LINKTYPE_` number to its frame count (`{105: 3}`), telling the first 64 distinct ones apart |
-| `fragments` | frames that were a piece of a fragmented IP datagram |
-| `dropped` | reassemblies discarded: an overlap, a ceiling, old age |
-| `pending` | reassemblies still waiting for a fragment |
+— a named tuple of counts, one per `FrameDissector.stats`: `frames` is the frames
+given to `dissect`, `malformed` those a dissector could not read, `failed` those
+a dissector broke on, `unsupported` those of a link type nothing dissects. Each
+counter is in `pktcap/_dissectors/AGENTS.md`.
 
 **`LINKTYPES`** — a read-only mapping from the `LINKTYPE_` numbers with a
 built-in dissector to a name: `0` NULL, `1` ETHERNET, `12`, `14` and `101`
@@ -425,6 +418,17 @@ that is not a `FrameDissector`.
 — `sniff_frames` through the datagram view: UDP datagrams as they arrive, the
 rest passed over. The same opening, closing, `stop` and errors.
 
+## Plugins
+
+**`load_plugins(registry, plugins=None, *, config=None) -> Tuple[LoadedPlugin, ...]`**
+imports the modules a list names and calls each one's hook,
+`pktcap_plugin(registry)`, into `registry`. The list is the first of the
+argument, `PKTCAP_PLUGINS` and the user's configuration file that names one,
+read from those places alone, never from the working directory or a capture.
+`capture_config_path(config=None)` is the file that applies. A plugin that fails
+is a `CapturePluginError` and leaves the registry as it was. More:
+`pktcap/_plugins/AGENTS.md`.
+
 ## Command line
 
 `pip install "pktcap[cli]"` installs the `pktcap` command (also
@@ -449,6 +453,8 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `MissingExtraError` | `PktcapError`, `ImportError` | a format that exists and whose extra is not installed |
 | `DissectError` | `PktcapError`, `ValueError` | raised **by a dissector** for octets that are not its layer. A caller of `FrameDissector` never sees it: it becomes the frame's `error` |
 | `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
+| `CapturePluginError` | `PktcapError`, `ValueError` | a plugin the user named that cannot be loaded: `plugin` and `source` say which, and from where |
+| `CaptureConfigError` | `PktcapError`, `ValueError` | a configuration file, or `PKTCAP_CONFIG`, that is malformed or not trusted: `path` and `lineno` |
 
 `MissingExtraError(message, *, format, extra)` has `format` (the format's name,
 `"toml"`) and `extra` (the extra to install, `"toml"`), and its message names
@@ -460,6 +466,14 @@ socket is let through as it is.
 `CaptureFormatError.offset` is how many octets of the input had been read when
 the problem was found, or `None`; the message ends with it and never quotes the
 file.
+
+## Environment variables
+
+Read when a list of plugins is asked for, never at import.
+
+- `PKTCAP_PLUGINS` — the plugins to load; `,` `;` `:` or space between items, `none` for none.
+- `PKTCAP_CONFIG` — the configuration file: an absolute path, or `none`; read as it is.
+- `XDG_CONFIG_HOME` (POSIX), `APPDATA` (Windows) — where `pktcap/pktcap.ini` is looked for.
 
 ## Gotchas
 
@@ -473,7 +487,8 @@ file.
   without a registry sees it. A library that must not affect its host builds
   its own `DissectorRegistry` and passes it.
 - **Installing a package registers nothing.** Entry points are not read: a
-  dissector is in a registry because some code put it there.
+  dissector is in a registry because some code put it there, or because a
+  plugin the user named (`load_plugins`) did.
 - **A `CapturedDatagram` is not `netimps.Datagram`.** One is read from a
   capture (time, both addresses, payload); the other is received on a socket.
 - **A writer replaces an existing file at the first write**, not when it is

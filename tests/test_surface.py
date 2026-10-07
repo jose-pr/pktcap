@@ -10,8 +10,10 @@ from importlib.metadata import version
 import pktcap
 
 EXPECTED = [
+    "CaptureConfigError",
     "CaptureFilterError",
     "CaptureFormatError",
+    "CapturePluginError",
     "CaptureSource",
     "CaptureWriter",
     "CapturedDatagram",
@@ -36,6 +38,7 @@ EXPECTED = [
     "LinuxCookedLayer",
     "LiveCapture",
     "LiveCaptureError",
+    "LoadedPlugin",
     "LoopbackLayer",
     "MissingExtraError",
     "OUTPUT_FORMATS",
@@ -60,6 +63,8 @@ EXPECTED = [
     "frame_filter_for",
     "frame_filter_keys",
     "frame_record",
+    "load_plugins",
+    "capture_config_path",
     "has_live_capture",
     "has_output_format",
     "parse_capture_filter",
@@ -98,6 +103,8 @@ POSITIONAL = {
     "DissectorRegistry.unregister": 2,
     "DissectorRegistry.get": 2,
     "register_dissector": 3,
+    # The registry that receives the hooks, and the list that names them.
+    "load_plugins": 2,
     # The dissector under test and the octets to try it on.
     "check_dissector": 2,
 }
@@ -118,6 +125,7 @@ NAMED_TUPLES = (
     "IPv6FragmentLayer",
     "IPv6Layer",
     "LinuxCookedLayer",
+    "LoadedPlugin",
     "LoopbackLayer",
     "ReplayResult",
     "TCPLayer",
