@@ -52,4 +52,4 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: benchmark-${{ runner.os }}
-          path: benchmarks/results/*-py3.14.json
+          path: benchmarks/results/${{ inputs.name }}-*.json
