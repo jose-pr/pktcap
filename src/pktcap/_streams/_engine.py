@@ -139,16 +139,14 @@ class Engine:
         """An acknowledgment proves receipt of the octets it covers: the holes
         before it are given up. One beyond everything seen from the sender
         changes nothing."""
-        if direction is None or not direction.started:
+        if direction is None:
             return
         ahead = (number - direction.sequence()) & MASK
-        if ahead == 0 or ahead >= 0x80000000:
-            return
+        if ahead >= 0x80000000:
+            return  # behind the next expected octet
         target = direction.next + ahead
         if direction.fin is not None and target == direction.fin + 1:
             target = direction.fin  # the FIN takes a sequence number
-        if target <= direction.next:
-            return
         if target > direction.top:
             self._ignored += 1
             return
@@ -164,10 +162,8 @@ class Engine:
         out: List[TCPStreamData],
     ) -> None:
         syn, fin = tcp.syn, tcp.fin
-        if not direction.started:
-            direction.start(tcp.sequence, syn)
-        elif syn and direction.syn is None:
-            direction.syn = tcp.sequence
+        if syn and direction.syn is None:
+            direction.syn = tcp.sequence  # the SYN of a direction seen without it
         offset = direction.offset_of((tcp.sequence + syn) & MASK)
         position = offset + len(data)  # where a FIN sits
         if offset < 0 and data:

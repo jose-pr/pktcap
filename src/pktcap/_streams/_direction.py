@@ -51,7 +51,6 @@ class Direction:
         "destination",
         "stream",
         "shared",
-        "started",
         "base",
         "syn",
         "next",
@@ -70,14 +69,16 @@ class Direction:
         destination: Tuple[str, int],
         stream: int,
         shared: Shared,
+        sequence: int,
+        syn: bool,
     ) -> None:
         self.source = source
         self.destination = destination
         self.stream = stream
         self.shared = shared
-        self.started = False
-        self.base = 0  # the sequence number of offset 0
-        self.syn: Optional[int] = None  # the sequence number of its SYN
+        # Offset 0 is the octet after a SYN, else the first octet seen.
+        self.syn: Optional[int] = sequence if syn else None  # its SYN's number
+        self.base = (sequence + 1) & MASK if syn else sequence  # offset 0's number
         self.next = 0  # the offset of the next octet to deliver
         self.top = 0  # the furthest offset any accepted segment reached
         self.lost = 0  # octets given up on and not yet reported
@@ -87,18 +88,10 @@ class Direction:
         self.fin: Optional[int] = None  # the offset a FIN sits at
         self.ended = False
 
-    def start(self, sequence: int, syn: bool) -> None:
-        """Offset 0 is the octet after a SYN, else the first octet seen."""
-        self.started = True
-        if syn:
-            self.syn = sequence
-            self.base = (sequence + 1) & MASK
-        else:
-            self.base = sequence
-
     def sequence(self) -> int:
-        """The sequence number of the next octet to deliver."""
-        return (self.base + self.next) & MASK
+        """The sequence number of the next octet to deliver, not reduced:
+        callers subtract it modulo 2**32."""
+        return self.base + self.next
 
     def offset_of(self, sequence: int) -> int:
         """The offset a sequence number stands for; negative before the start

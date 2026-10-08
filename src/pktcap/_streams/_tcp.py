@@ -30,9 +30,9 @@ class _Connection:
 
     __slots__ = ("stream", "last", "directions")
 
-    def __init__(self, stream: int, last: float) -> None:
+    def __init__(self, stream: int) -> None:
         self.stream = stream
-        self.last = last
+        self.last = 0.0  # the time of the last segment that had one
         self.directions: Dict[_Endpoint, Direction] = {}
 
 
@@ -137,7 +137,7 @@ class TCPReassembler(Engine):
             return ()
         if conn is not None and tcp.rst:
             sender = conn.directions.get(source)
-            if sender is not None and sender.started and sender.behind(tcp.sequence):
+            if sender is not None and sender.behind(tcp.sequence):
                 self._ignored += 1
                 self._touch(key, conn, time)
                 return ()
@@ -154,7 +154,7 @@ class TCPReassembler(Engine):
                 self._close(conn, time, out)
                 conn = None
         if conn is None:
-            conn = self._create(key, time)
+            conn = self._create(key)
         self._touch(key, conn, time)
         if tcp.ack:
             self._acknowledge(
@@ -163,7 +163,14 @@ class TCPReassembler(Engine):
         if data or tcp.syn or tcp.fin:
             direction = conn.directions.get(source)
             if direction is None:
-                direction = Direction(source, destination, conn.stream, self._shared)
+                direction = Direction(
+                    source,
+                    destination,
+                    conn.stream,
+                    self._shared,
+                    tcp.sequence,
+                    tcp.syn,
+                )
                 conn.directions[source] = direction
             self._segment(direction, tcp, data, time, out)
         self._enforce(time, out)
@@ -177,7 +184,7 @@ class TCPReassembler(Engine):
         out: List[TCPStreamData] = []
         for conn in sorted(self._table.values(), key=lambda item: item.stream):
             for direction in conn.directions.values():
-                if direction.started and not direction.ended:
+                if not direction.ended:
                     self._give_up(direction, self._now, out)
         self._table.clear()
         self._waiting.clear()
@@ -200,11 +207,11 @@ class TCPReassembler(Engine):
         if time != 0.0:
             conn.last = time
 
-    def _create(self, key: _Key, time: float) -> _Connection:
+    def _create(self, key: _Key) -> _Connection:
         while len(self._table) >= self._max_streams:
             oldest = next(iter(self._table))
             self._forget(oldest, self._table[oldest])
-        conn = self._table[key] = _Connection(self._streams, time)
+        conn = self._table[key] = _Connection(self._streams)
         self._streams += 1
         return conn
 
@@ -218,7 +225,7 @@ class TCPReassembler(Engine):
     def _close(self, conn: _Connection, time: float, out: List[TCPStreamData]) -> None:
         """The connection is over: every direction delivers and ends."""
         for direction in conn.directions.values():
-            if direction.started and not direction.ended:
+            if not direction.ended:
                 self._emit(direction, direction.release_all(), time, out)
                 self._finish(direction, time, out)
             self._track(direction)
@@ -234,13 +241,13 @@ class TCPReassembler(Engine):
         addresses, or contradicts it and is ignored."""
         mine = conn.directions.get(source)
         theirs = conn.directions.get(destination)
-        if mine is not None and mine.started:
+        if mine is not None:
             if mine.syn is not None:
                 own = mine.syn == tcp.sequence
             else:
                 own = ((tcp.sequence + 1) & MASK) == mine.base
             return _JOIN if own else _NEW
-        if theirs is not None and theirs.started:
+        if theirs is not None:
             if tcp.ack and theirs.syn is not None:
                 answers = tcp.acknowledgment == (theirs.syn + 1) & MASK
                 return _JOIN if answers else _IGNORE

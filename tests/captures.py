@@ -26,6 +26,7 @@ def tcp(
     sequence=1000,
     acknowledgment=2000,
     window=4096,
+    urgent=0,
     options=b"",
     offset=None,
 ):
@@ -43,7 +44,7 @@ def tcp(
             flags,
             window,
             0,
-            0,
+            urgent,
         )
         + options
         + payload
@@ -60,6 +61,7 @@ def tcp_frame(
     *,
     flags=0x18,
     acknowledgment=0,
+    urgent=0,
     ident=1,
 ):
     """An Ethernet frame holding one TCP segment over IPv4, or over IPv6 when
@@ -71,6 +73,7 @@ def tcp_frame(
         flags=flags,
         sequence=sequence,
         acknowledgment=acknowledgment,
+        urgent=urgent,
     )
     if ":" in src:
         return ethernet(ipv6(src, dst, segment, next_header=6), v6=True)

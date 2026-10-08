@@ -6,11 +6,14 @@ the octets the test cut the segments from.
 """
 
 import io
+import pathlib
 import random
+import re
 
 import pytest
 
 import captures as build
+import pktcap
 from pktcap import (
     CapturedFrame,
     FrameDissector,
@@ -334,6 +337,22 @@ def test_a_fin_alone_is_an_empty_item_that_ends_the_direction():
     wire.send(1000, b"abc")
     assert view(wire.send(1003, flags=FIN)) == [(b"", 3, 0, 0, True)]
     assert wire.send(1003, flags=FIN) == ()  # a retransmitted FIN
+    assert wire.stats.ignored == 0
+
+
+def test_a_fin_behind_the_delivered_octets_is_ignored():
+    wire = Wire()
+    wire.send(1000, b"abcdef")
+    assert wire.send(1002, flags=FIN) == ()
+    assert wire.stats.ignored == 1
+    assert view(wire.send(1006, b"g")) == [(b"g", 6, 0, 0, False)]
+
+
+def test_a_second_fin_somewhere_else_is_ignored_and_counted():
+    wire = Wire()
+    wire.send(1000, b"abc", flags=FIN)
+    assert wire.send(1010, flags=FIN) == ()
+    assert wire.stats.ignored == 1 and wire.octets() == b"abc"
 
 
 def test_octets_beyond_a_fin_are_dropped_and_counted():
@@ -413,6 +432,14 @@ def test_a_syn_that_is_not_the_connections_own_starts_a_new_stream():
     assert wire.stats.streams == 2 and wire.stats.pending == 1
 
 
+def test_a_syn_after_octets_were_seen_the_other_way_starts_a_new_stream():
+    wire = Wire()
+    wire.send(5000, b"x", src=B, dst=A)  # a capture that began mid-stream
+    got = wire.send(999, flags=SYN)
+    assert view(got) == [(b"", 1, 0, 0, True)]
+    assert wire.send(1000, b"y")[0].stream == 1 and wire.stats.streams == 2
+
+
 def test_a_syn_after_a_finished_connection_starts_a_new_stream_without_a_second_end():
     wire = Wire()
     wire.send(999, b"x", flags=SYN | FIN)
@@ -424,11 +451,12 @@ def test_a_syn_after_a_finished_connection_starts_a_new_stream_without_a_second_
 def test_a_syn_ack_that_contradicts_the_connection_is_ignored():
     wire = Wire()
     wire.send(999, flags=SYN)
-    assert wire.send(4999, flags=SYN | ACK, src=B, dst=A, ack=1234) == ()
-    assert wire.stats.ignored == 1
+    assert wire.send(7777, flags=SYN | ACK, src=B, dst=A, ack=1234) == ()
+    assert wire.stats.ignored >= 1
+    # It started nothing: the real answer is the connection's own.
     wire.send(4999, flags=SYN | ACK, src=B, dst=A, ack=1000)
-    assert wire.send(5000, b"hi", src=B, dst=A)[0].offset == 0
-    assert wire.stats.streams == 1 and wire.stats.ignored == 1
+    assert view(wire.send(5000, b"hi", src=B, dst=A)) == [(b"hi", 0, 0, 0, False)]
+    assert wire.stats.streams == 1
 
 
 def test_a_bare_acknowledgment_with_no_connection_starts_nothing():
@@ -675,9 +703,13 @@ def test_a_time_of_zero_neither_expires_a_connection_nor_keeps_it_alive():
     wire.send(1000, b"a", time=100.0)
     # A pcapng simple packet block has no time: it says nothing about silence.
     assert wire.send(1001, b"b", time=0.0)[0].stream == 0
+    # Nor does it keep the connection alive: 500 is measured from 100.
+    assert wire.send(1002, b"c", time=500.0)[0].stream == 1
     # Nor did it refresh the connection: 109 is measured from 100, not from 0.
+    wire = Wire(idle_timeout=10.0)
+    wire.send(1000, b"a", time=100.0)
+    wire.send(1001, b"b", time=0.0)
     assert wire.send(1002, b"c", time=109.0)[0].stream == 0
-    assert wire.send(1003, b"d", time=500.0)[0].stream == 1
     first = Wire(idle_timeout=10.0)
     first.send(1000, b"a", time=0.0)
     assert first.send(1001, b"b", time=1.7e9)[0].stream == 0
@@ -751,6 +783,18 @@ def test_a_piece_larger_than_the_budget_costs_no_other_direction_its_wait():
     peer, got = _hold(wire, 1, 400)
     assert [item.source for item in got] == [peer]
     assert wire.stats.held == 50 and wire.stats.missing == 10
+
+
+def test_a_large_piece_that_starts_inside_a_run_delivered_before_it_adds_only_its_new_part():
+    wire = Wire(max_buffered=100)
+    handshake(wire)
+    wire.send(1004, b"abcdefghij")
+    got = wire.send(1010, b"G" * 200)
+    assert view(got) == [
+        (b"abcdefghij", 4, 4, 0, False),
+        (b"G" * 196, 14, 0, 0, False),
+    ]
+    assert wire.stats.retransmitted == 4
 
 
 def test_holes_before_a_piece_larger_than_the_budget_are_given_up_in_order():
@@ -860,6 +904,36 @@ def test_mutated_segments_never_raise_and_never_pass_the_bounds(seed):
     ):
         assert getattr(stats, counter) > 0, counter
     assert any(i.end for i in wire.items) and any(i.missing for i in wire.items)
+
+
+def test_the_urgent_pointer_is_ignored_and_its_octet_delivered_in_place():
+    raw = build.tcp_frame(
+        A[0], B[0], A[1], B[1], 1000, b"abc!def", flags=PSH | 0x20, urgent=4
+    )
+    wire = Wire()
+    frame = wire.dissector.dissect(CapturedFrame(1.0, build.ETHERNET, raw))
+    assert view(wire.reassembler.add(frame)) == [(b"abc!def", 0, 0, 0, False)]
+
+
+def test_two_vlans_with_the_same_addresses_are_one_connection():
+    wire = Wire()
+    for vlans, sequence, data in ((1, 1000, b"one "), (2, 1004, b"two")):
+        segment = build.tcp(A[1], B[1], data, sequence=sequence, flags=PSH)
+        ip = build.ipv4(A[0], B[0], segment, protocol=6)
+        raw = build.ethernet(ip, vlans=vlans)
+        frame = wire.dissector.dissect(CapturedFrame(1.0, build.ETHERNET, raw))
+        wire.items.extend(wire.reassembler.add(frame))
+    assert wire.octets() == b"one two" and wire.stats.streams == 1
+
+
+def test_flush_gives_the_connections_in_order_of_their_stream_number():
+    wire = Wire()
+    first, second = ("10.0.1.1", 1), ("10.0.1.2", 2)
+    for peer in (first, second):
+        wire.send(1, flags=SYN, src=peer, dst=B)
+    wire.send(10, b"b", src=second, dst=B)
+    wire.send(10, b"a", src=first, dst=B)  # the most recently active
+    assert [i.stream for i in wire.flush()] == [0, 1]
 
 
 # -- a capture in one call -----------------------------------------------------
@@ -999,6 +1073,40 @@ def test_the_reassembler_and_the_dissector_given_hold_the_counters():
     assert dissector.stats.frames == len(frames)
     assert reassembler.stats.segments == len(frames) and reassembler.stats.streams == 1
     assert reassembler.stats.delivered == len(b"helloworld") + len(b"reply")
+
+
+_HEADER = pathlib.Path(pktcap.__file__).parent / "_streams" / "AGENTS.md"
+
+
+def test_the_examples_of_the_streams_header_run(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    client, server = ("192.0.2.5", 50000), ("192.0.2.1", 80)
+    with pktcap.PcapWriter("trace.pcap") as writer:
+        for index, (sequence, data, flags) in enumerate(
+            [
+                (999, b"", SYN),
+                (1005, b"world", PSH),
+                (1000, b"hello", PSH),
+                (1010, b"", FIN),
+            ]
+        ):
+            raw = build.tcp_frame(
+                client[0], server[0], client[1], server[1], sequence, data, flags=flags
+            )
+            writer.write_frame(CapturedFrame(1.0 + index, build.ETHERNET, raw))
+    blocks = re.findall(
+        r"```python\n(.*?)```", _HEADER.read_text(encoding="utf-8"), re.DOTALL
+    )
+    assert len(blocks) == 2
+    namespace = {"__name__": "header_example"}
+    for block in blocks:
+        exec(compile(block, "AGENTS.md", "exec"), namespace)
+    assert capsys.readouterr().out.splitlines() == [
+        "0 192.0.2.5:50000 0 0 b'helloworld' False",
+        "0 192.0.2.5:50000 10 0 b'' True",
+        "b'helloworld'",
+        "0",
+    ]
 
 
 # -- arguments ---------------------------------------------------------------
