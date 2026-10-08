@@ -207,9 +207,8 @@ file name (`TypeError` unless a `str`), and is untrusted: nothing but these
 is raised.
 
 - `UnsupportedFormatError` and `MissingExtraError` as for `dumps_record`; to
-  *read*, `yaml` needs PyYAML and `toml` needs `tomli` before Python 3.11,
-  nothing from 3.11 (`tomllib`). The `toml` extra holds `tomli-w` and, before
-  3.11, `tomli`.
+  *read*, `yaml` needs PyYAML and `toml` needs nothing from Python 3.11
+  (`tomllib`) and `tomli`, in the `toml` extra, before it.
 - **`RecordFormatError(message, *, format, lineno=None)`** for text that is
   not one record; `lineno` is the 1-based line, when known. **The message
   never quotes the text**; nothing is chained.
@@ -233,9 +232,12 @@ its text** (`op = BOOTREQUEST`, `NaN`). No section, or text before the first,
 is an error.
 
 **The law** `loads_record(dumps_record(r, f), f) == r` holds except: a non-text
-key comes back as text in `json` and `ini`; in `ini` the empty name is
-unreadable and `{"record": {...}}` alone reads as its contents; in `toml` a
-lone surrogate is U+FFFD; a NaN is not equal to itself; a tuple is a list.
+key comes back as text in `json` and `ini`; `ini` cannot read the empty name
+and reads `{"record": {...}}` alone as its contents; `toml` writes a lone
+surrogate as U+FFFD, so two names that differ only in those collide; `json` and
+`ini` read a high surrogate followed by a low one as the character they spell;
+a NaN is not equal to itself; a tuple is a list. `toml` and `ini` list mappings
+after the other values.
 
 ## The formats
 

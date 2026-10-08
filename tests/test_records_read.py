@@ -196,6 +196,8 @@ HOSTILE = {
         "d = 2020-01-01 # %s\n" % MARKER,
         "%s\n" % MARKER,
         'a = "\\uD800%s"\n' % MARKER,
+        "%s = [1]\n[[%s]]\n" % (MARKER, MARKER),
+        "a = {%s = 1, %s = 2}\n" % (MARKER, MARKER),
     ],
     "ini": [
         "%s = 1\n" % MARKER,
@@ -417,10 +419,25 @@ def test_toml_dates_and_times_are_refused():
         refused(text, "toml")
 
 
-def test_json_nesting_past_the_recursion_limit_is_an_error_not_a_crash():
-    depth = sys.getrecursionlimit() * 20
-    text = '{"a": ' + "[" * depth + "]" * depth + "}"
-    assert "nested too deeply" in str(refused(text, "json"))
+def deeply(text, name):
+    """The record read from nesting no parser can recurse through, or the error
+    that says so: the interpreter decides which, never a RecursionError."""
+    try:
+        return loads_record(text, name)
+    except RecordFormatError as error:
+        assert "nested too deeply" in str(error)
+        return None
+
+
+def test_nesting_past_what_the_interpreter_can_parse_is_an_error_not_a_crash():
+    depth = 100_000
+    brackets = "[" * depth + "]" * depth
+    deeply('{"a": %s}' % brackets, "json")
+    deeply("a = %s\n" % brackets, "toml")
+    deeply("[x]\na = %s\n" % brackets, "ini")
+    # Where the parser recurses in Python, as every parser does on 3.9 and
+    # PyYAML does everywhere, the error is certain.
+    assert deeply("a: %s\n" % brackets, "yaml") is None
 
 
 # -- INI -------------------------------------------------------------------------
@@ -606,3 +623,85 @@ def test_the_example_in_the_formats_header_runs():
     )
     assert len(blocks) == 1
     exec(compile(blocks[0], "AGENTS.md", "exec"), {"pktcap": pktcap})
+
+
+# -- what each refusal says ----------------------------------------------------
+
+#: (format, text, what the message holds, the line it names or None)
+SAYS = [
+    ("json", "", "is empty", None),
+    ("json", "[1]", "not a mapping", None),
+    ("json", '{"a": 1} {"b": 2}', "more than one value", 1),
+    ("json", '{"a": 1, "a": 2}', "written twice", None),
+    ("json", '{"a": NaN}', "NaN or an infinity", None),
+    ("json", '{"a": 1e999}', "NaN or an infinity", None),
+    ("json", '{\n"a": }', "not valid JSON", 2),
+    ("yaml", "", "no document", None),
+    ("yaml", "- 1\n", "not a mapping", None),
+    ("yaml", "a: 1\n---\nb: 2\n", "more than one document", None),
+    ("yaml", "a: 1\nb: 1\nb: 2\n", "written twice", 3),
+    ("yaml", "a: 1\nb:\n  <<: {c: 1}\n", "merge key", 3),
+    ("yaml", "a: 1\nb: !!python/name:os.getcwd\n", "not plain data", 2),
+    ("yaml", "a: 1\nb: 2020-01-01\n", "not plain data", None),
+    ("yaml", "2020-01-01: x\n", "not plain data", None),
+    ("yaml", "a: 1\nb: \x00\n", "forbids", 2),
+    ("yaml", "a: &x [*x]\n", "contains itself", None),
+    ("yaml", "a: [\n", "not valid YAML", 2),
+    ("toml", "", "is empty", None),
+    ("toml", "a = 1\na = 2\n", "written twice", 2),
+    ("toml", "a = 2020-01-01\n", "not plain data", None),
+    ("toml", "a = 1\nb = \n", "not valid TOML", 2),
+    ("ini", "", "is empty", None),
+    ("ini", "# nothing\n", "no section", None),
+    ("ini", "a = 1\n[x]\n", "before its first section", 1),
+    ("ini", "[x]\nb = 1\nnot an option\n", "no section, option or comment", 3),
+    ("ini", "[x]\nb = 1\nb = 2\n", "option is written twice", 3),
+    ("ini", "[x]\n[x]\n", "section is written twice", 2),
+    ("ini", "[x]\nk%20x = 1\nk x = 2\n", "option is written twice", None),
+    ("ini", "[record]\nx = 1\n[x]\n", "top-level key is written twice", None),
+    ("ini", "[x]\nk%FF = 1\n", "not UTF-8", None),
+]
+
+
+@pytest.mark.parametrize("name, text, says, lineno", SAYS)
+def test_each_refusal_says_what_is_wrong_and_where(name, text, says, lineno):
+    error = refused(text, name)
+    assert says in str(error)
+    assert error.lineno == lineno
+
+
+def test_a_number_too_long_is_said_so():
+    if hasattr(sys, "set_int_max_str_digits"):
+        text = "9" * (sys.get_int_max_str_digits() + 1)
+        for name, line in (
+            ("json", '{"a": %s}' % text),
+            ("yaml", "a: %s\n" % text),
+            ("toml", "a = %s\n" % text),
+            ("ini", "[x]\na = %s\n" % text),
+        ):
+            assert "number too long to convert" in str(refused(line, name))
+
+
+def test_running_out_of_memory_is_not_dressed_as_a_record_error(monkeypatch):
+    import configparser
+    import json
+
+    def boom(*args, **kwargs):
+        raise MemoryError
+
+    monkeypatch.setattr(json, "loads", boom)
+    monkeypatch.setattr(configparser.RawConfigParser, "read_string", boom)
+    for name in ("json", "ini"):
+        with pytest.raises(MemoryError):
+            loads_record("{}", name)
+    yaml = pytest.importorskip("yaml")
+    monkeypatch.setattr(yaml.SafeLoader, "check_data", boom)
+    with pytest.raises(MemoryError):
+        loads_record("a: 1", "yaml")
+    try:
+        import tomllib
+    except ImportError:
+        tomllib = pytest.importorskip("tomli")
+    monkeypatch.setattr(tomllib, "loads", boom)
+    with pytest.raises(MemoryError):
+        loads_record("a = 1", "toml")
