@@ -152,6 +152,9 @@ loaded = pktcap.load_plugins(registry, "a.b", config="none")
 assert_type(loaded, Tuple[pktcap.LoadedPlugin, ...])
 assert_type(pktcap.load_plugins(registry), Tuple[pktcap.LoadedPlugin, ...])
 assert_type(
+    pktcap.load_plugins(registry, always=["a.b"]), Tuple[pktcap.LoadedPlugin, ...]
+)
+assert_type(
     pktcap.load_plugins(registry, ["a.b", "c"]), Tuple[pktcap.LoadedPlugin, ...]
 )
 for plugin in loaded:

@@ -489,3 +489,142 @@ def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(
     )
     assert done.returncode == 0, done.stderr[-2000:]
     assert json.loads(done.stdout)["seen"] == ["PKTCAP_LOAD"] and mod.imported
+
+
+# -- always: what a command loads without being asked ---------------------------
+
+OTHER = """
+import pktcap
+
+def pktcap_plugin(registry):
+    registry.register("udp", 9998, lambda data: pktcap.Dissected(None, data))
+"""
+
+CLAIMS_9999 = """
+import pktcap
+
+def pktcap_plugin(registry):
+    registry.register("udp", 9999, lambda data: pktcap.Dissected(None, data))
+"""
+
+
+def test_the_items_of_always_load_first_and_then_the_users_list(plugin_module):
+    first, second = plugin_module(), plugin_module(OTHER)
+    registry = DissectorRegistry()
+    result = load_plugins(registry, second.name, always=[first.name])
+    assert [(p.name, p.source) for p in result] == [
+        (first.name, "always"),
+        (second.name, "argument"),
+    ]
+    assert result[0].selectors == (("udp", 9999),) and result[0].layers == ("demo",)
+    assert registry.get("udp", 9999) is not None
+    assert registry.get("udp", 9998) is not None
+
+
+def test_always_loads_when_the_user_asks_for_no_plugin_at_all(
+    plugin_module, monkeypatch
+):
+    mod = plugin_module()
+    monkeypatch.setenv("PKTCAP_LOAD", "none")
+    registry = DissectorRegistry()
+    assert [p.name for p in load_plugins(registry, always=[mod.name])] == [mod.name]
+    assert registry.get("udp", 9999) is not None
+    assert [
+        p.name for p in load_plugins(DissectorRegistry(), "none", always=[mod.name])
+    ] == [mod.name]
+
+
+def test_always_is_code_and_never_read_from_the_variable_or_the_file(
+    plugin_module, monkeypatch, tmp_path
+):
+    named, from_variable, from_file = (
+        plugin_module(),
+        plugin_module(OTHER),
+        plugin_module(CLAIMS_9999.replace("9999", "9997")),
+    )
+    ini = tmp_path / "named.ini"
+    ini.write_text("[pktcap]\nload = %s\n" % from_file.name, encoding="utf-8")
+    monkeypatch.setenv("PKTCAP_LOAD", from_variable.name)
+    result = load_plugins(DissectorRegistry(), always=[named.name])
+    assert [(p.name, p.source) for p in result] == [
+        (named.name, "always"),
+        (from_variable.name, "PKTCAP_LOAD"),
+    ]
+    monkeypatch.delenv("PKTCAP_LOAD")
+    result = load_plugins(DissectorRegistry(), config=ini, always=[named.name])
+    assert [(p.name, p.source) for p in result] == [
+        (named.name, "always"),
+        (from_file.name, str(ini)),
+    ]
+
+
+def test_an_item_of_the_users_list_that_is_the_same_hook_is_skipped(plugin_module):
+    mod = plugin_module()
+    registry = DissectorRegistry()
+    # The module form and the callable form name one function; so does a repeat.
+    for named in (mod.name, mod.name + ".pktcap_plugin"):
+        registry = DissectorRegistry()
+        result = load_plugins(registry, named, always=[mod.name])
+        assert [(p.name, p.source) for p in result] == [(mod.name, "always")]
+        assert registry.get("udp", 9999) is not None
+    registry = DissectorRegistry()
+    result = load_plugins(registry, mod.name, always=[mod.name + ".pktcap_plugin"])
+    assert len(result) == 1
+
+
+def test_the_users_other_items_still_load_beside_a_skipped_one(plugin_module):
+    mod, other = plugin_module(), plugin_module(OTHER)
+    registry = DissectorRegistry()
+    result = load_plugins(registry, [mod.name, other.name], always=[mod.name])
+    assert [p.name for p in result] == [mod.name, other.name]
+    assert [p.source for p in result] == ["always", "argument"]
+
+
+def test_a_different_hook_claiming_a_taken_selector_is_still_the_plugin_error(
+    plugin_module,
+):
+    mine, theirs = plugin_module(), plugin_module(CLAIMS_9999)
+    registry = DissectorRegistry()
+    before = state(registry)
+    with pytest.raises(CapturePluginError) as caught:
+        load_plugins(registry, theirs.name, always=[mine.name])
+    assert caught.value.plugin == theirs.name and caught.value.source == "argument"
+    assert state(registry) == before  # what always registered is undone as well
+
+
+def test_a_failing_item_of_always_is_the_plugin_error_and_leaves_the_registry(
+    plugin_module,
+):
+    good = plugin_module()
+    registry = DissectorRegistry()
+    before = state(registry)
+    with pytest.raises(CapturePluginError, match="always") as caught:
+        load_plugins(registry, always=[good.name, "pktcap_no_such_module_anywhere"])
+    assert caught.value.source == "always"
+    assert state(registry) == before
+
+
+def test_always_is_checked_before_anything_is_imported(plugin_module):
+    mod = plugin_module()
+    for bad in (["../x"], ["a b/c"], [mod.name, mod.name], ["x" * 300], [".x"]):
+        with pytest.raises(ValueError):
+            load_plugins(DissectorRegistry(), always=bad)
+    assert not mod.imported
+    with pytest.raises(ValueError, match="more than 64"):
+        load_plugins(DissectorRegistry(), always=["m%d" % n for n in range(65)])
+    with pytest.raises(TypeError):
+        load_plugins(DissectorRegistry(), always=[1])  # type: ignore[list-item]
+
+
+def test_always_is_an_empty_iterable_by_default_and_a_text_is_a_list(plugin_module):
+    first, second = plugin_module(), plugin_module(OTHER)
+    assert load_plugins(DissectorRegistry(), None) == ()
+    both = load_plugins(
+        DissectorRegistry(), always="%s, %s" % (first.name, second.name)
+    )
+    assert [p.name for p in both] == [first.name, second.name]
+
+
+def test_always_is_keyword_only():
+    with pytest.raises(TypeError):
+        load_plugins(DissectorRegistry(), None, None, ())  # type: ignore[misc]

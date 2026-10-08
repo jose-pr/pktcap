@@ -10,12 +10,18 @@ from __future__ import annotations
 import inspect
 import logging
 from importlib import import_module
-from typing import Any, Callable, Iterable, NamedTuple, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 from .._dissectors import DissectorRegistry
 from .._dissectors._contract import Selector
 from .._exceptions import CapturePluginError
-from ._config import ConfigArgument, describe, plugin_list
+from ._config import (
+    ALWAYS_ARGUMENT,
+    ConfigArgument,
+    always_list,
+    describe,
+    plugin_list,
+)
 
 __all__ = ["LoadedPlugin", "load_plugins"]
 
@@ -30,7 +36,8 @@ class LoadedPlugin(NamedTuple):
 
     :ivar name: the item as written.
     :ivar source: where the list came from: ``"argument"``,
-        ``"PKTCAP_LOAD"`` or the configuration file's path.
+        ``"PKTCAP_LOAD"``, the configuration file's path, or ``"always"`` for
+        a plugin the caller's code loads whatever the user listed.
     :ivar selectors: the selectors its hook registered a dissector under.
     :ivar layers: the names of the layers its hook declared.
     """
@@ -111,8 +118,12 @@ def _find_hook(item: str, source: str) -> Callable[[DissectorRegistry], Any]:
     return hook  # type: ignore[no-any-return]
 
 
-def _load_one(registry: DissectorRegistry, item: str, source: str) -> LoadedPlugin:
-    hook = _find_hook(item, source)
+def _load_one(
+    registry: DissectorRegistry,
+    item: str,
+    source: str,
+    hook: Callable[[DissectorRegistry], Any],
+) -> LoadedPlugin:
     try:
         inspect.signature(hook).bind(registry)
     except TypeError as exc:
@@ -142,6 +153,7 @@ def load_plugins(
     plugins: Union[None, str, Iterable[str]] = None,
     *,
     config: Optional[ConfigArgument] = None,
+    always: Union[str, Iterable[str]] = (),
 ) -> Tuple[LoadedPlugin, ...]:
     """Import the plugins a list names and call each one's hook with ``registry``.
 
@@ -158,23 +170,38 @@ def load_plugins(
     :param plugins: ``None`` (as configured), one text, or an iterable of texts.
     :param config: ``None``, the path of a configuration file, or ``none``. A
         file named here is read, and checked, even when ``plugins`` is given.
-    :returns: one :class:`LoadedPlugin` per item, in order.
+    :param always: items a caller's code loads whatever the user listed, as
+        dotted names written as for ``plugins``. They load first, with the
+        source ``"always"``, and are never read from the variable or the file.
+        An item of the user's list that resolves to the same hook callable is
+        skipped, not loaded twice and not an error; a different callable that
+        claims a selector already taken is the plugin error.
+    :returns: one :class:`LoadedPlugin` per item loaded, in order.
     :raises CapturePluginError: an item cannot be loaded. The registry is left
         as it was before the call; modules already imported stay imported.
     :raises CaptureConfigError: the configuration file is malformed, or not
         trusted.
-    :raises ValueError: a malformed item given as ``plugins``.
+    :raises ValueError: a malformed item given as ``plugins`` or ``always``.
     :raises TypeError: ``registry`` is not a :class:`DissectorRegistry`.
     :raises OSError: a named configuration file that cannot be read.
     """
     if not isinstance(registry, DissectorRegistry):
         raise TypeError("load_plugins takes a DissectorRegistry to register into")
     items, source = plugin_list(plugins, config)
+    fixed = always_list(always)
     snapshot = registry._snapshot()
     loaded = []
+    taken: List[Callable[[DissectorRegistry], Any]] = []
     try:
+        for item in fixed:
+            hook = _find_hook(item, ALWAYS_ARGUMENT)
+            taken.append(hook)
+            loaded.append(_load_one(registry, item, ALWAYS_ARGUMENT, hook))
         for item in items:
-            loaded.append(_load_one(registry, item, source))
+            hook = _find_hook(item, source)
+            if any(hook is known or hook == known for known in taken):
+                continue
+            loaded.append(_load_one(registry, item, source, hook))
     except BaseException:
         registry._restore(snapshot)
         raise

@@ -21,7 +21,9 @@ from .._exceptions import CaptureConfigError, CapturePluginError
 
 __all__ = [
     "ConfigArgument",
+    "ALWAYS_ARGUMENT",
     "PLUGINS_ARGUMENT",
+    "always_list",
     "capture_config_path",
     "describe",
     "plugin_list",
@@ -32,6 +34,8 @@ PLUGINS_VARIABLE = "PKTCAP_LOAD"
 CONFIG_VARIABLE = "PKTCAP_CONFIG"
 #: The source of a list given as an argument.
 PLUGINS_ARGUMENT = "argument"
+#: The source of the plugins a caller's code always loads.
+ALWAYS_ARGUMENT = "always"
 
 ConfigArgument = Union[str, "os.PathLike[str]"]
 
@@ -58,6 +62,8 @@ def describe(source: str) -> str:
     """How an error names the source of a list."""
     if source == PLUGINS_ARGUMENT:
         return "the plugins argument"
+    if source == ALWAYS_ARGUMENT:
+        return "the always argument"
     return source
 
 
@@ -285,7 +291,7 @@ def _checked(items: List[str], source: str) -> List[str]:
             seen.add(item)
             continue
         error = _problem(item, source, problem)
-        if source == PLUGINS_ARGUMENT:
+        if source in (PLUGINS_ARGUMENT, ALWAYS_ARGUMENT):
             raise ValueError(str(error))
         raise error
     return items
@@ -298,6 +304,13 @@ def _argument_items(plugins: Union[str, Iterable[str]]) -> List[str]:
     if not all(isinstance(text, str) for text in texts):
         raise TypeError("plugins is a text or an iterable of texts")
     return _items(texts)
+
+
+def always_list(always: Union[str, Iterable[str]]) -> List[str]:
+    """The items a caller's code always loads, checked as an argument is: a
+    mistake is a plain ``ValueError`` or ``TypeError``. Never read from the
+    variable or the file."""
+    return _checked(_argument_items(always), ALWAYS_ARGUMENT)
 
 
 def plugin_list(

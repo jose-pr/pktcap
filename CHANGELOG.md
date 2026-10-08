@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   socket closed when it stops, and `import pktcap` still imports no `asyncio`.
   The IP header of such a frame is made up, and a socket never sees other
   hosts' traffic, the link layer or fragments.
+- `load_plugins(..., always=())` loads the plugins a caller's own code names
+  before the user's list, with the source `"always"`. They are never read from
+  `PKTCAP_LOAD` or the configuration file, which still decide the user's list.
+  An item of the user's list that is the same hook is skipped; a different
+  hook claiming a selector that is taken is still a `CapturePluginError`, and
+  a failure anywhere leaves the registry as it was.
 - `command_hook(command, *, format="json", timeout=10.0, fail_fast=False,
   names=None, datagrams=False)` is a hook for a copy that runs a program for
   each frame written: the record of the frame on standard input, the values

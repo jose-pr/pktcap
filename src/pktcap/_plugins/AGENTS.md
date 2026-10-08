@@ -114,12 +114,12 @@ library's dissector and its layer's filter keys into a registry the caller
 owns. A user names the plugins to load; nothing is loaded because it is
 installed.
 
-**`load_plugins(registry, plugins=None, *, config=None) -> Tuple[LoadedPlugin, ...]`**
+**`load_plugins(registry, plugins=None, *, config=None, always=()) -> Tuple[LoadedPlugin, ...]`**
 — import the modules a list names and call each one's hook with `registry`.
 There is no default registry, so a run changes nothing outside the one it is
 given. Each result is a **`LoadedPlugin(name, source, selectors, layers)`**: the
-item as written, where the list came from (`"argument"`, `"PKTCAP_LOAD"` or
-the file's path), the selectors its hook registered a dissector under and the
+item as written, where the list came from (`"argument"`, `"PKTCAP_LOAD"`, the
+file's path, or `"always"`), the selectors its hook registered a dissector under and the
 names of the layers it declared. Each plugin loaded is logged at `INFO`.
 
 - `plugins` is `None` (the list as configured, below), one text, or an
@@ -127,6 +127,17 @@ names of the layers it declared. Each plugin loaded is logged at `INFO`.
   default file is read.
 - `config` is `None`, the path of a configuration file, or `none`. A file named
   here is read and checked even when `plugins` names the list.
+- `always` is a text or an iterable of texts, written as `plugins`, for a
+  command that needs its own protocol's plugin whatever the user listed. Its
+  items load **first**, source `"always"`, and are checked as an argument is (a
+  mistake is a `ValueError`). **They come from the caller's code and never
+  from the variable or the file**, which still decide the user's list: with
+  `PKTCAP_LOAD=none` the `always` items load and nothing else does. An item of
+  the user's list that resolves to the same hook callable as one of `always`
+  (the module and `MODULE.pktcap_plugin` are one callable) is **skipped**, not
+  loaded twice and not an error, and is not in the result; a different callable
+  that claims a selector already taken is the `CapturePluginError` as ever. A
+  failure anywhere, `always` included, leaves the registry as it was.
 - **An item is a dotted Python name**: ASCII identifiers joined by `.`, at
   most 255 characters, at most 64 items, none twice. Items are separated by
   `,` `;` `:` or white space, the same on every platform; `none` alone is the

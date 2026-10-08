@@ -388,11 +388,12 @@ passive, and the detail is in `pktcap/_sources/AGENTS.md`.
 
 ## Plugins
 
-**`load_plugins(registry, plugins=None, *, config=None) -> Tuple[LoadedPlugin, ...]`**
+**`load_plugins(registry, plugins=None, *, config=None, always=()) -> Tuple[LoadedPlugin, ...]`**
 imports the modules a list names and calls each one's hook,
 `pktcap_plugin(registry)`, into `registry`. The list is the first of the
 argument, `PKTCAP_LOAD` and the user's configuration file that names one,
 read from those places alone, never from the working directory or a capture.
+`always` names plugins the caller's own code loads whatever the user listed.
 `capture_config_path(config=None)` is the file that applies. A plugin that fails
 is a `CapturePluginError` and leaves the registry as it was. More:
 `pktcap/_plugins/AGENTS.md`.
