@@ -13,7 +13,7 @@ from typing import (
     Tuple,
 )
 
-from duho import Cmd, LoggingArgs
+from duho import Cmd, LoggingArgs, value_sources
 
 from .._dissect import DissectedFrame
 from .._dissectors import DissectorRegistry
@@ -79,14 +79,32 @@ class Loading(LoggingArgs, Cmd):
         replaced by a text stream, which has no ``buffer``."""
         return getattr(sys.stdout, "buffer", None) is None
 
+    def _origin(self, field: str) -> str:
+        """Where the value of a field came from, by duho's record of the
+        layers: ``"environment"`` (a variable a root reads), ``"file"`` (a
+        settings file a root reads) or ``"argument"``, which also covers a
+        value the class or the code that built the command gave."""
+        layer = value_sources(self).get(field)
+        return {"env": "environment", "config": "file"}.get(layer or "", "argument")
+
     def _registry(self) -> DissectorRegistry:
         """A registry of this run's own, with the plugins loaded into it:
         ``_plugins_`` first, then the user's list.
 
         A tool call's arguments may come from text a capture held, so a tool
         call names no plugin and no file: the server's own variable and the
-        user's own file decide.
+        user's own file decide. A root's own settings file or variable is no
+        more the user's than a tool call is, so a list that reached the field
+        from one is refused too.
         """
+        for field in ("plugins", "plugin_config"):
+            layer = self._origin(field)
+            if getattr(self, field) is not None and layer != "argument":
+                raise ValueError(
+                    "%s was set from the %s layer of a root's configuration: the "
+                    "plugin list comes from --load, PKTCAP_LOAD or pktcap's own "
+                    "file" % (field, layer)
+                )
         if self.served() and (
             self.plugins is not None or self.plugin_config is not None
         ):

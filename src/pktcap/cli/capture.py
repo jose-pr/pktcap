@@ -53,6 +53,10 @@ class Capture(Writing):
     #: The port ``--listen`` gives a value that names none: an ``int``, a tuple
     #: of them, or ``None`` for no default (such a value is then refused).
     _default_port_: ClassVar[Union[None, int, Tuple[int, ...]]] = None
+    #: The layers ``--hook`` may come from: ``"argument"``, ``"environment"``
+    #: (a variable a root reads) and ``"file"`` (a settings file a root reads).
+    #: A hook runs code, so by default the command line is the only one.
+    _hook_from_: ClassVar[Tuple[str, ...]] = ("argument",)
 
     interface: Annotated[Optional[str], Meta(conflicts="source")] = None
     "The interface to capture on, by name, address or MAC. Omitted: every interface. Excludes --listen"
@@ -116,6 +120,12 @@ class Capture(Writing):
             return None
         if self.served():
             raise ValueError("a tool call cannot name a hook")
+        layer = self._origin("hook")
+        if layer not in self._hook_from_:
+            raise ValueError(
+                "--hook was set from the %s layer of a root's configuration; this "
+                "command takes a hook from: %s" % (layer, ", ".join(self._hook_from_))
+            )
         name = self._chosen() or "json"
         self._hooked = make_hook(
             self.hook,

@@ -174,7 +174,9 @@ list is read from exactly three places**: the argument, the variable
 `PKTCAP_LOAD`, and one configuration file. It is never read from the working
 directory, from a file found by walking up from it, or from a capture or
 anything a capture holds. The first of the three that names a list is the list:
-lists never add up, and a source below it is not opened.
+lists never add up, and a source below it is not opened. A command line adds
+no fourth: a list a program's own settings file or variable put in the
+`plugins` field of a command is refused (status 2), not read as the argument.
 
 **The configuration file** is `pktcap/pktcap.ini` under the user's
 configuration directory: `$XDG_CONFIG_HOME` (else `~/.config`) on Linux, macOS

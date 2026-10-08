@@ -45,14 +45,16 @@ def _listening(records):
     return found
 
 
-def listen_and_send(argv, caplog, payloads, *, to=None, wanted=1, targets=None):
+def listen_and_send(
+    argv, caplog, payloads, *, to=None, wanted=1, targets=None, runner=main
+):
     """Run ``capture`` with ``argv`` (which binds port 0) in a thread, send each
     payload to the address it reports, and return its status once it ends."""
     caplog.set_level(logging.INFO)
     outcome = {}
 
     def run():
-        outcome["status"] = main(argv + ["-v"])
+        outcome["status"] = runner(argv + ["-v"])
 
     thread = threading.Thread(target=run)
     thread.start()

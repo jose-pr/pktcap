@@ -121,6 +121,8 @@ class Writing(Selecting):
         """The writer ``--output`` and ``--format`` name; nothing is opened
         until the first record. Capture octets are never sent to a terminal."""
         name = self._chosen()
+        if self.append and self.served():
+            raise ValueError("a tool call cannot name append: it adds to a file")
         if self.output != "-":
             return self._built(self.output, name)
         if name in CAPTURE_FORMATS and sys.stdout.isatty():

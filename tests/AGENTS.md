@@ -51,6 +51,7 @@ prints the reason for every skip: a skip is not a pass.
 | `test_cli_tools.py` | `convert` and `plugins` served as tools and nothing else: the tool list, a call that returns the records as its result, capture octets refused as text, and the real server driven over pipes with `PKTCAP_MCP=stdio` |
 | `test_cli_listen.py` | `pktcap capture --listen`: a datagram as a line of text, IPv6 in brackets, each kind of value, a wrong one refused before a socket binds, a taken port, a subclass's default port, and the real command line |
 | `test_cli_hook.py` | `--hook`: a program given the record, a failure counted or ending the capture, the time limit, `MODULE:FUNCTION` found where the interpreter finds it, a tool call refused |
+| `test_cli_origin.py` | where a hook and a plugin list may come from: a root's settings file or variable is refused, `_hook_from_` widens the hook alone, a tool call cannot name `append` |
 | `test_cli_subclass.py` | the contract: a demonstration subclass of each command using every override point, mixed with a foreign base that has its own `config` and `listen` |
 | `test_cli_capture.py` | `pktcap capture`: the refusal off Linux, every option with `test_live.py`'s stand-in socket (count, filter, datagram view, duration, Ctrl-C, no capability), and one test of the real socket on loopback |
 | `test_copy.py` | `copy_frames`: a capture of UDP, TCP and ARP frames copied whole and as datagrams, the filter, the limit that leaves the source unread, the file budget's refusals, what is refused at the call, and `names` and `each` |

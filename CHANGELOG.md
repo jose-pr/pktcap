@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `netimps.bind_listen`. `--hook`, `--hook-fail-fast` and `--hook-timeout`
   run a program (or a Python `MODULE:FUNCTION`) for each record written.
   `--append` on `convert` and `capture` adds to a record file.
+- A hook and a plugin list come from the command line, not from a settings
+  file or a variable a library's root applies to every field: such a value is
+  status 2 naming the layer. `Capture._hook_from_` (default `("argument",)`)
+  lists the layers a subclass takes a hook from, of `"argument"`,
+  `"environment"` and `"file"`; the plugin list never comes from a root's
+  layers. A tool call cannot name `append`.
 - `UDPCapture` asks each endpoint whether it admits a datagram
   (`UDPEndpoint.admits`): one it does not is counted in the new
   `not_admitted` and gives no frame, in `sniff_udp` and `asniff_udp` as well.

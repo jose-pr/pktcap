@@ -44,16 +44,17 @@ returns the status and does not call `sys.exit`.
   `pktcap_plugin(registry)` function or `MODULE.CALLABLE`. They are loaded
   into a registry of the command's own, before the filter is compiled and
   before anything is opened. The first of the option, the variable
-  `PKTCAP_LOAD` and the `load` key of the configuration file
-  (`pktcap/pktcap.ini` under `$XDG_CONFIG_HOME` or `~/.config`, `%APPDATA%` on
-  Windows, or the file `--config` and `PKTCAP_CONFIG` name) is the list. The
-  default file must be the user's own and not writable by everyone; a file you
-  name is read as it is, so a capture run as root names the user's file:
+  `PKTCAP_LOAD` and the `load` key of the configuration file is the list; where
+  the file is and what it must be are in `_plugins/AGENTS.md`. A file you name
+  is read as it is, so a capture run as root names the user's file:
   `sudo pktcap capture --config ~/.config/pktcap/pktcap.ini`. A plugin that
   cannot be loaded, or a malformed file, is status 2 and one line naming it;
   a named file that does not exist is status 1. **A tool call cannot name
   either option**: they are refused, since a program serving the tool may have
   just read a capture's text, and the server's own variable and file decide.
+  **A root's own settings file or variable cannot supply them either**: such a
+  value is status 2 naming the layer (`--load`, `PKTCAP_LOAD` or pktcap's own
+  file are the sources).
 - **Output and statuses.** What a command produces goes to standard output or
   to `--output`; its one-line summary and every diagnostic go to standard
   error, because standard output may be a capture. Every failure is one line,
@@ -150,23 +151,21 @@ with no privilege.
   value with no port gets the command's `_default_port_`, and with none is
   refused (status 2, netimps' message). A taken port is status 1, one line
   `cannot listen on SPEC: ...`. `-v` logs `listening on HOST:PORT` for each
-  socket, the way to learn a port 0. **What it sees:** datagrams delivered to
-  those ports on this host. **What it does not:** other hosts' unicast
-  traffic, anything this host sends, the link layer, the real IP header
-  (**made up**: TTL 64, no fragmentation, valid checksums) and fragments.
-  **It holds the port** (bound exclusively): a server already on it makes the
-  bind fail; capture on the interface to watch a port a server holds. A
-  datagram that arrives on an interface a limited socket does not serve (an
-  adapter name) is dropped and counted in the summary as `N not admitted`;
-  one over 65,535 octets as `N over the size limit`.
+  socket, the way to learn a port 0. What it sees and does not (a made-up IP
+  header, no other host's traffic) and that it holds the port are in
+  `_sources/AGENTS.md`. A datagram that arrives on an interface a limited
+  socket does not serve is counted in the summary as `N not admitted`; one
+  over 65,535 octets as `N over the size limit`.
 - `--hook COMMAND`: run a program for each record written, with the record on
   standard input (JSON when the output is a capture or `text`) and the values
   the command names (`_names`) as `PKTCAP_HOOK_<FIELD>`, passed as
   `command_hook` passes them. `COMMAND` is a program name on `PATH` or a path,
   found once; **or `MODULE:FUNCTION`**, imported as written with nothing added
   to `sys.path` and called with each `DissectedFrame`. The command comes from
-  this option alone (never a file, the environment, a tool call or a capture),
-  with no argument and no shell; a `.bat`/`.cmd` is refused on Windows.
+  the command line alone (never a tool call or a capture); a value a root's
+  settings file or variable put in the field is status 2 naming the layer,
+  unless the class lists it in `Capture._hook_from_`. No argument, no shell; a
+  `.bat`/`.cmd` is refused on Windows.
   `--hook-timeout SECONDS` (default 10) kills the program and what it started;
   a failure is counted (`N hook failures` in the summary) and logged, and
   `--hook-fail-fast` ends the capture at the first one with status 1. A hook
@@ -222,8 +221,8 @@ layers: dhcp, ethernet, ipv4, ...
   **`plugins`** as `pktcap.plugins`, which only reads. The records come back as
   the tool's result; a capture format cannot be returned as text, so `format`
   `pcap` or `pcapng` needs an `output` file, and an `input` of `-` is refused.
-  A tool call that names `plugins` or `plugin_config` is refused (status 2,
-  naming `PKTCAP_LOAD`); `convert` also takes `append`. `capture` runs until stopped and binds ports or needs a privilege, and
+  A tool call that names `plugins`, `plugin_config` or `append` is refused
+  (status 2, naming `PKTCAP_LOAD` for the first two). `capture` runs until stopped and binds ports or needs a privilege, and
   `replay` puts datagrams on a network: neither is served, and a subclass that
   serves `capture` is refused a `hook` in a tool call.
 - `AGENT_HELP=1` makes `--help` print one JSON document describing every
@@ -246,7 +245,7 @@ beginning with `_` is promised.
 | `Selecting(Loading)` | `--filter`/`-f` | `_filter_ = None`: own clauses, ANDed with `--filter` |
 | `Writing(Selecting)` | `--output`, `--format`, `--per-record`, `--max-files`, `--datagrams`, `--append` | `_fields_ = ()` file-name fields beyond `timestamp`, `index`, `format`; `_interruptible_ = False`; `_format_ = None` |
 | `Convert(Writing)` | `--input`/`-i`, `--limit` | |
-| `Capture(Writing)` | `--interface`, `--listen`, `--count`, `--duration`/`-d`, `--hook`, `--hook-fail-fast`, `--hook-timeout`; `_interruptible_ = True` | `_default_port_ = None` (`None`, an `int` or a tuple of them) |
+| `Capture(Writing)` | `--interface`, `--listen`, `--count`, `--duration`/`-d`, `--hook`, `--hook-fail-fast`, `--hook-timeout`; `_interruptible_ = True` | `_default_port_ = None` (`None`, an `int` or a tuple of them); `_hook_from_ = ("argument",)`: the layers `--hook` may come from, of `"argument"`, `"environment"`, `"file"` |
 | `Replay(Selecting)` | `--input`/`-i`, `--to`, `--speed`, `--no-delay`, `--max-delay`, `--limit`, `--source-port`, `--broadcast`, `--json` | `_default_port_ = None` (an `int` or `None`) |
 | `Plugins(Loading)` | `--layer`, `--json` | |
 
@@ -281,7 +280,10 @@ wants a listing sets `"text"`. Methods, with when each is called:
 - A root that serves the subclass maps `MissingExtraError` (an `ImportError`)
   and `CaptureHookError` (an `OSError`) to status 1; `main`'s does.
 - A subclass that serves `Capture` as a tool (`_mcp_ = True`) is refused a
-  `hook` in a tool call by the class; do not remove that.
+  `hook` in a tool call by the class; do not remove that. A root that has a
+  settings file or a variable for a field applies it to the inherited ones too;
+  `_hook_from_` is how a class says which of those it takes a hook from, and
+  the plugin list never comes from them.
 - `_names` runs for hooks as well as file names, so it must not raise on a
   frame the filter let through; `_filter_` is how it is guaranteed its layer.
 
