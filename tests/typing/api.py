@@ -233,6 +233,7 @@ for dissected in pktcap.read_dissected(source):
 assert_type(reassembler.flush(), Tuple[pktcap.TCPStreamData, ...])
 assert_type(reassembler.stats, pktcap.TCPStreamStats)
 assert_type(reassembler.stats.held, int)
+assert_type(reassembler.stats.dropped, int)
 assert_type(pktcap.read_tcp_streams(source), Iterator[pktcap.TCPStreamData])
 assert_type(
     pktcap.read_tcp_streams(

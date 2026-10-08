@@ -37,15 +37,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   it up at once; one beyond everything seen changes nothing. Connections
   (`max_streams`), capture time of silence (`idle_timeout`), octets held out of
   order over all connections (`max_buffered`, each held piece charged its
-  length plus 64) and pieces held in one direction (1,024) are bounded; reaching
-  one gives up the longest wait and never drops octets, except that a forgotten
-  connection drops what it held. A SYN-ACK may acknowledge the octets a TCP
-  Fast Open SYN carried; a FIN cuts the octets held beyond it before the
-  octets of its own segment are placed; a frame time that is not a number
-  says nothing, as a time of 0.0 does. A segment is as long as its IP header
-  says: the octets a snap length cut are given up at once, reported in
-  `missing`, and place a FIN and an acknowledgment as the whole segment would. The checksum is not verified and a segment in
-  an IP fragment that was not reassembled is ignored.
+  length plus 64) and pieces held in one direction (1,024; a piece is a run of
+  held octets, so segments that follow one another are one) are bounded;
+  reaching one gives up the longest wait and never drops octets, except that a
+  forgotten connection drops what it held, counted in `TCPStreamStats.dropped`;
+  a connection every direction of which has ended gives up its place first.
+  A SYN-ACK may acknowledge the octets a TCP Fast Open SYN carried; a FIN cuts
+  the octets held beyond it before the octets of its own segment are placed; a
+  frame time that is not a number says nothing, as a time of 0.0 does. A
+  segment is as long as its IP header says: the octets a snap length cut are
+  given up at once, reported in `missing`, and place a FIN and an
+  acknowledgment as the whole segment would. The checksum is not verified and
+  a segment in an IP fragment that was not reassembled is ignored.
 - `read_tcp_streams(source, *, reassembler=None, dissector=None,
   max_frame_size=262144)` reads the TCP streams of a capture in one call:
   `read_dissected` through `TCPReassembler.add`, then `flush()` at the end.

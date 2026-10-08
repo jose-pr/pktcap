@@ -32,7 +32,8 @@ large for a float.
 - **`TCPReassembler.flush() -> Tuple[TCPStreamData, ...]`** — the end of the
   capture: everything still held, each run after a hole with its `missing`,
   connections in order of `stream`. The table is empty afterwards. It sets no
-  `end` of its own: a FIN that was captured still ends its direction.
+  `end` of its own: a FIN that was captured still ends its direction. An item
+  it gives carries the time of the last TCP frame that had a time.
 - **`TCPReassembler.stats`** — a `TCPStreamStats` snapshot.
 
 **`TCPStreamData(time, source, destination, data, offset, missing=0, stream=0, end=False)`**
@@ -53,7 +54,7 @@ large for a float.
   between them and the end, the end is an item of its own, with no `data`
   and those octets in `missing`.
 
-**`TCPStreamStats(segments, streams, delivered, retransmitted, out_of_order, missing, conflicts, ignored, evicted, pending, held)`**
+**`TCPStreamStats(segments, streams, delivered, retransmitted, out_of_order, missing, conflicts, ignored, evicted, pending, held, dropped)`**
 — a named tuple of counts: TCP segments taken; connections numbered so far;
 octets handed out; octets dropped as copies of delivered or held ones;
 segments that arrived ahead of a hole; octets given up on; held octets that a
@@ -61,8 +62,11 @@ later copy disagreed with; segments and acknowledgments set aside (octets
 before the start or beyond a FIN, a reset out of sequence, a SYN-ACK that
 contradicts the connection, an acknowledgment beyond everything seen, a
 segment in an IP fragment that was not reassembled); connections forgotten at
-`max_streams` or for age; connections in the table; octets held out of order
-at the moment.
+`max_streams` or for age (a connection every direction of which has ended gives
+up its place first and is not counted); connections in the table; octets held
+out of order at the moment; octets held when their connection was forgotten.
+`retransmitted` also counts octets captured once, after their place was given
+up.
 
 **`read_tcp_streams(source, *, reassembler=None, dissector=None, max_frame_size=262144) -> Iterator[TCPStreamData]`**
 — `read_dissected` through `TCPReassembler.add`, then `flush()` when the capture
@@ -147,16 +151,18 @@ SYN-ACK is ignored.
 ## Bounds
 
 Every amount a capture controls has a ceiling. Reaching the last three loses
-the wait and never the octets; only the first two drop held octets. Every
-octet given up on is reported in the `missing` of an item, except where its
-connection was forgotten first: `stats.missing` counts those too.
+the wait and never the octets; only the first two drop held octets, and
+`dropped` counts them. Every octet given up on is reported in the `missing` of
+an item, except where its connection was forgotten first, or where it was cut
+from the end of a direction's last segment (rule 12): `stats.missing` counts
+those too.
 
 | What the capture controls | Ceiling | At the ceiling |
 | --- | --- | --- |
 | connections tracked | `max_streams` (1,024) | the least recently active is forgotten, its held octets dropped, `evicted` |
 | capture time a connection may be silent | `idle_timeout` (300 s) | forgotten when its addresses are next seen, which start a new `stream`; `evicted` |
 | octets held out of order over all connections | `max_buffered` (16,777,216), each held piece charged its length plus 64 | the direction that has waited longest gives up its holes and delivers, until the total fits |
-| pieces held in one direction | 1,024 | that direction gives up its earliest hole |
+| pieces held in one direction, a piece being a run of held octets with no hole in it, joined as segments arrive | 1,024 | that direction gives up its earliest hole |
 | one piece too large for `max_buffered` on its own | `max_buffered` | delivered at once behind a given-up hole |
 
 Silence is `abs(time - last)`: a jump either way past the timeout counts, since

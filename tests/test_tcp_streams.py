@@ -154,8 +154,9 @@ def test_the_values_are_named_tuples_with_the_documented_defaults():
         "evicted",
         "pending",
         "held",
+        "dropped",
     )
-    assert TCPReassembler().stats == TCPStreamStats(*[0] * 11)
+    assert TCPReassembler().stats == TCPStreamStats(*[0] * 12)
 
 
 # -- order -------------------------------------------------------------------
@@ -611,7 +612,7 @@ def test_a_frame_that_is_not_tcp_gives_nothing():
     udp = build.ethernet(build.ipv4("10.0.0.1", "10.0.0.2", build.udp(1, 2, b"x")))
     frame = wire.dissector.dissect(CapturedFrame(1.0, build.ETHERNET, udp))
     assert wire.reassembler.add(frame) == ()
-    assert wire.stats == TCPStreamStats(*[0] * 11)
+    assert wire.stats == TCPStreamStats(*[0] * 12)
 
 
 def test_a_segment_in_an_ip_fragment_that_was_not_reassembled_is_ignored():
@@ -1041,6 +1042,87 @@ def test_a_time_that_is_not_a_number_says_nothing_as_a_time_of_zero_does():
     assert [i.time for i in wire.flush()][-1] == 106.0
 
 
+C = ("10.0.0.3", 7)
+
+
+def complete(wire, src, dst=B, first=100):
+    """A whole connection: both SYNs, a request, a reply, a FIN each way."""
+    wire.send(first - 1, flags=SYN, src=src, dst=dst)
+    wire.send(499, flags=SYN | ACK, src=dst, dst=src, ack=first)
+    wire.send(first, b"ping", PSH | ACK, src=src, dst=dst, ack=500)
+    wire.send(500, b"pong", PSH | ACK, src=dst, dst=src, ack=first + 4)
+    wire.send(first + 4, b"", FIN | ACK, src=src, dst=dst, ack=504)
+    wire.send(504, b"", FIN | ACK, src=dst, dst=src, ack=first + 5)
+    wire.send(first + 5, b"", ACK, src=src, dst=dst, ack=505)
+
+
+@pytest.mark.parametrize("how", ["max_streams", "idle_timeout"])
+def test_held_octets_of_a_forgotten_connection_are_counted_as_dropped(how):
+    wire = Wire(max_streams=1, idle_timeout=10.0)
+    wire.send(999, flags=SYN, time=100.0)
+    wire.send(1000, b"ab", time=100.0)
+    wire.send(1010, b"H" * 500, time=100.0)  # held behind an 8-octet hole
+    assert wire.stats.held == 500 and wire.stats.dropped == 0
+    if how == "max_streams":
+        wire.send(1, b"z", src=C, dst=B, time=100.0)
+    else:
+        wire.send(5000, b"", ACK, src=B, dst=A, ack=1002, time=900.0)
+    wire.flush()
+    stats = wire.stats
+    assert stats.evicted == 1 and stats.held == 0
+    assert stats.dropped == 500 and stats.missing == 0
+    assert b"H" not in wire.octets(A)
+
+
+def test_octets_held_and_given_up_are_never_counted_as_dropped():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1010, b"H" * 20)
+    wire.flush()
+    assert wire.stats.dropped == 0 and wire.stats.delivered == 20
+
+
+def test_a_connection_that_has_finished_gives_up_its_place_first():
+    wire = Wire(max_streams=4)
+    slow = ("10.0.9.9", 4444)
+    wire.send(999, flags=SYN, src=slow)
+    wire.send(1000, b"first, ", src=slow)
+    wire.send(1015, b"third", src=slow)  # waits for "second, "
+    for n in range(4):
+        complete(wire, ("10.0.1.%d" % n, 5000))
+    stats = wire.stats
+    assert stats.evicted == 0 and stats.dropped == 0
+    assert stats.pending == 4 and stats.held == 5
+    wire.send(1007, b"second, ", src=slow)
+    wire.flush()
+    mine = [
+        (i.data, i.offset, i.missing, i.stream) for i in wire.items if i.source == slow
+    ]
+    assert mine == [(b"first, ", 0, 0, 0), (b"second, third", 7, 0, 0)]
+    assert wire.stats.evicted == 0 and wire.stats.missing == 0
+    assert sum(1 for i in wire.items if i.end) == 8
+
+
+def test_a_connection_with_a_direction_still_open_is_forgotten_by_age_of_use():
+    wire = Wire(max_streams=2)
+    wire.send(1000, b"a", src=("10.0.9.1", 1))
+    wire.send(1000, b"b", src=("10.0.9.2", 2))
+    wire.send(1000, b"c", src=("10.0.9.3", 3))
+    assert wire.stats.evicted == 1 and wire.stats.pending == 2
+
+
+def test_of_two_finished_connections_the_less_recently_active_goes_first():
+    wire = Wire(max_streams=2)
+    one, two = ("10.0.1.1", 5000), ("10.0.1.2", 5000)
+    complete(wire, one)
+    complete(wire, two)
+    wire.send(105, b"", ACK, src=one, dst=B, ack=505)  # touched again
+    wire.send(1, b"z", src=C, dst=B)
+    assert wire.stats.evicted == 0
+    # `two` was the one forgotten: its addresses start a new stream.
+    assert wire.send(7, b"q", src=two, dst=B)[0].stream == 3
+
+
 # -- the budget of held octets --------------------------------------------------
 
 
@@ -1147,6 +1229,102 @@ def test_no_more_than_a_thousand_and_twenty_four_pieces_are_held_in_one_directio
     assert len(wire.octets()) == 10000
     consistent(wire.items)
     assert wire.stats.delivered == 10000 and wire.stats.held == 0
+
+
+MSS = 1460
+
+
+@pytest.mark.parametrize("behind", [1024, 1025, 5000])
+def test_segments_in_order_behind_one_lost_segment_are_one_piece(behind):
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"a" * MSS)
+    for k in range(2, 2 + behind):  # segment 1 is not captured yet
+        wire.send(1000 + k * MSS, b"c" * MSS)
+    assert wire.stats.held == behind * MSS and wire.stats.missing == 0
+    got = wire.send(1000 + MSS, b"b" * MSS)  # its retransmission
+    assert [(len(i.data), i.offset, i.missing) for i in got] == [
+        ((behind + 1) * MSS, MSS, 0)
+    ]
+    assert got[0].data == b"b" * MSS + b"c" * (behind * MSS)
+    assert wire.flush() == ()
+    stats = wire.stats
+    assert (stats.missing, stats.retransmitted, stats.held) == (0, 0, 0)
+    assert stats.out_of_order == behind
+    consistent(wire.items)
+
+
+def test_a_piece_that_ends_where_the_next_begins_stays_a_piece_of_its_own():
+    # Two pieces cost 20 + 2 x 64 = 148; joined they would cost 20 + 64.
+    for budget, gave_up in ((148, False), (147, True)):
+        wire = Wire(max_buffered=budget)
+        handshake(wire)
+        wire.send(1100, b"x" * 10)
+        wire.send(1090, b"y" * 10)  # ends where the first begins
+        assert (wire.stats.missing > 0) is gave_up, budget
+
+
+def test_1025_separate_pieces_still_give_up_the_earliest_hole():
+    wire = Wire()
+    handshake(wire)
+    for index in range(1, 1026):
+        wire.send(1000 + 3 * index, b"xx")  # a hole of one octet before each
+    assert wire.stats.held == 2 * 1024
+    assert wire.stats.missing == 3  # the first hole, [0, 3), was given up
+    assert wire.items[0].missing == 3
+
+
+def test_a_joined_piece_is_charged_once_whatever_the_segments_it_joins():
+    wire = Wire(max_buffered=700)
+    handshake(wire)
+    for k in range(1, 7):  # six adjacent segments of 100 octets: one piece
+        wire.send(1000 + k * 100, bytes([64 + k]) * 100)
+    # 600 + 64 fits; charged per segment, 600 + 6 x 64 would not.
+    assert wire.stats.held == 600 and wire.stats.missing == 0
+    wire.send(1900, b"s" * 100)  # a second piece: 700 + 128 does not fit
+    assert wire.stats.missing > 0 and wire.stats.held <= 700
+
+
+def test_joined_octets_are_handed_out_as_bytes_the_first_copy_of_an_overlap_wins():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1010, b"0123456789")
+    wire.send(1020, b"abc")
+    wire.send(1015, b"56??9abcdefg")  # overlaps both, and continues past them
+    wire.send(1000, b"X" * 10)
+    assert wire.octets() == b"X" * 10 + b"0123456789abcdefg"
+    assert all(type(i.data) is bytes for i in wire.items)
+    assert wire.stats.conflicts == 2
+    consistent(wire.items)
+    held = Wire()
+    handshake(held)
+    for k in range(1, 4):
+        held.send(1000 + k * 4, b"wxyz")
+    held.send(1000, b"head")
+    assert held.items[-1].data == b"head" + b"wxyz" * 3
+    assert type(held.items[-1].data) is bytes
+
+
+def test_the_work_to_join_segments_does_not_grow_with_what_is_held():
+    import time as clock
+
+    def cost(count):
+        wire = Wire()
+        frames = [wire.frame(1000 + MSS * i, b"x" * MSS) for i in range(1, count + 1)]
+        best = float("inf")
+        for _ in range(5):
+            reassembler = TCPReassembler()
+            reassembler.add(wire.frame(999, flags=SYN))
+            started = clock.perf_counter()
+            for frame in frames:
+                reassembler.add(frame)
+            best = min(best, clock.perf_counter() - started)
+        assert reassembler.stats.held == count * MSS
+        return best
+
+    # Joining by copying what is held each time costs the square: 8 times the
+    # segments is about 64 times the work, against 8 when each costs the same.
+    assert cost(2000) < 24 * cost(250)
 
 
 def test_the_work_per_segment_does_not_grow_with_the_pieces_held():

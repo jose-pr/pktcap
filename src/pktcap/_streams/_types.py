@@ -41,7 +41,8 @@ class TCPStreamStats(NamedTuple):
     :ivar segments: TCP segments taken, whatever became of them.
     :ivar streams: connections numbered so far.
     :ivar delivered: octets handed out.
-    :ivar retransmitted: octets dropped as copies of delivered or held ones.
+    :ivar retransmitted: octets dropped as copies of delivered or held ones,
+        and octets captured once after their place was given up.
     :ivar out_of_order: segments that arrived ahead of a hole.
     :ivar missing: octets given up on.
     :ivar conflicts: held octets that a later copy disagreed with.
@@ -50,9 +51,11 @@ class TCPStreamStats(NamedTuple):
         contradicts the connection, an acknowledgment beyond everything seen,
         a segment in an IP fragment that was not reassembled.
     :ivar evicted: connections forgotten at ``max_streams`` or for age; their
-        held octets are dropped.
+        held octets are dropped. A connection every direction of which had
+        ended gives up its place first and is not counted when it does.
     :ivar pending: connections in the table.
     :ivar held: octets held out of order at the moment.
+    :ivar dropped: octets held when their connection was forgotten.
     """
 
     segments: int
@@ -66,3 +69,4 @@ class TCPStreamStats(NamedTuple):
     evicted: int
     pending: int
     held: int
+    dropped: int

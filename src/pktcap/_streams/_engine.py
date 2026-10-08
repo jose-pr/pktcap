@@ -35,7 +35,7 @@ class Engine:
         self._now = 0.0
         self._streams = self._segments = self._delivered = 0
         self._retransmitted = self._out_of_order = self._conflicts = 0
-        self._ignored = self._evicted = 0
+        self._ignored = self._evicted = self._dropped = 0
 
     @property
     def stats(self) -> TCPStreamStats:
@@ -52,6 +52,7 @@ class Engine:
             self._evicted,
             self._pending(),
             self._shared.held,
+            self._dropped,
         )
 
     def _pending(self) -> int:

@@ -127,6 +127,9 @@ class TCPReassembler(Engine):
         self._max_streams = max_streams
         self._idle = idle
         self._table: "OrderedDict[_Key, _Connection]" = OrderedDict()
+        # Connections every direction of which has ended, least recently
+        # active first: they give up their place before any other.
+        self._done: "OrderedDict[_Key, None]" = OrderedDict()
 
     def _pending(self) -> int:
         return len(self._table)
@@ -167,6 +170,7 @@ class TCPReassembler(Engine):
                 self._touch(key, conn, time)
                 return ()
             del self._table[key]
+            self._done.pop(key, None)
             self._close(conn, time, out)
             return tuple(out)
         if conn is not None and tcp.syn:
@@ -176,6 +180,7 @@ class TCPReassembler(Engine):
                 return ()
             if verdict == _NEW:
                 del self._table[key]
+                self._done.pop(key, None)
                 self._close(conn, time, out)
                 conn = None
         if conn is None:
@@ -199,6 +204,8 @@ class TCPReassembler(Engine):
                 conn.directions[source] = direction
             self._segment(direction, tcp, data, snapped, time, out)
         self._enforce(time, out)
+        if key in self._table:
+            self._note(key, conn)
         return tuple(out)
 
     def flush(self) -> Tuple[TCPStreamData, ...]:
@@ -212,6 +219,7 @@ class TCPReassembler(Engine):
                 if not direction.ended:
                     self._give_up(direction, self._now, out)
         self._table.clear()
+        self._done.clear()
         self._waiting.clear()
         return tuple(out)
 
@@ -232,20 +240,35 @@ class TCPReassembler(Engine):
         if time != 0.0:
             conn.last = time
 
+    def _note(self, key: _Key, conn: _Connection) -> None:
+        """Whether the connection has finished: every direction it has seen
+        has ended."""
+        if conn.directions and all(d.ended for d in conn.directions.values()):
+            self._done[key] = None
+            self._done.move_to_end(key)
+        else:
+            self._done.pop(key, None)
+
     def _create(self, key: _Key) -> _Connection:
         while len(self._table) >= self._max_streams:
-            oldest = next(iter(self._table))
-            self._forget(oldest, self._table[oldest])
+            if self._done:
+                finished = next(iter(self._done))
+                self._forget(finished, self._table[finished], counted=False)
+            else:
+                oldest = next(iter(self._table))
+                self._forget(oldest, self._table[oldest])
         conn = self._table[key] = _Connection(self._streams)
         self._streams += 1
         return conn
 
-    def _forget(self, key: _Key, conn: _Connection) -> None:
+    def _forget(self, key: _Key, conn: _Connection, counted: bool = True) -> None:
         for direction in conn.directions.values():
-            direction.forget()
+            self._dropped += direction.forget()
             self._waiting.pop(direction, None)
         del self._table[key]
-        self._evicted += 1
+        self._done.pop(key, None)
+        if counted:
+            self._evicted += 1
 
     def _close(self, conn: _Connection, time: float, out: List[TCPStreamData]) -> None:
         """The connection is over: every direction delivers and ends."""

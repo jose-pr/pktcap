@@ -7,13 +7,15 @@ octet it is ahead, anything else is behind.
 
 Octets that arrived ahead of a hole are held as pieces that never overlap, in
 a sorted list of start offsets. Adding a piece is a binary search and a walk
-over the pieces it covers; joining happens once, when a run is delivered.
+over the pieces it covers. A new piece that begins where the piece before it
+ends is appended to that piece's buffer, so the pieces are the runs in order
+of arrival; a delivered run is handed out as ``bytes``.
 """
 
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 __all__ = ["Direction", "Shared", "MASK", "HALF"]
 
@@ -36,7 +38,7 @@ class Shared:
         self.missing = 0  # octets given up on
 
 
-def _differing(old: bytes, new: bytes) -> int:
+def _differing(old: Union[bytes, bytearray], new: bytes) -> int:
     """How many octets of two equal-length copies disagree."""
     if old == new:
         return 0
@@ -88,7 +90,7 @@ class Direction:
         self.top = 0  # the furthest offset any accepted segment reached
         self.lost = 0  # octets given up on and not yet reported
         self.starts: List[int] = []
-        self.pieces: Dict[int, bytes] = {}
+        self.pieces: Dict[int, Union[bytes, bytearray]] = {}
         self.held = 0
         self.fin: Optional[int] = None  # the offset a FIN sits at
         self.ended = False
@@ -157,10 +159,19 @@ class Direction:
                 fresh.append((cursor, data[cursor - offset :]))
                 cursor = end
         for start, chunk in fresh:
-            starts.insert(bisect_left(starts, start), start)
-            pieces[start] = chunk
             self.held += len(chunk)
             self.shared.held += len(chunk)
+            place = bisect_left(starts, start)
+            if place:
+                before = starts[place - 1]
+                piece = pieces[before]
+                if before + len(piece) == start:
+                    if not isinstance(piece, bytearray):
+                        piece = pieces[before] = bytearray(piece)
+                    piece += chunk
+                    continue
+            starts.insert(place, start)
+            pieces[start] = chunk
             self.shared.pieces += 1
         return copied, conflicts
 
@@ -220,17 +231,22 @@ class Direction:
                 del pieces[start]
                 removed, count = len(piece), 1
             else:
-                pieces[start] = piece[: position - start]
                 removed, count = len(piece) - (position - start), 0
+                if isinstance(piece, bytearray):
+                    del piece[position - start :]
+                else:
+                    pieces[start] = piece[: position - start]
             self.held -= removed
             self.shared.held -= removed
             self.shared.pieces -= count
         return dropped
 
-    def forget(self) -> None:
-        """Drop everything held, as the connection is forgotten."""
+    def forget(self) -> int:
+        """Drop everything held, as the connection is forgotten; the octets."""
+        dropped = self.held
         self.shared.held -= self.held
         self.shared.pieces -= len(self.starts)
         self.held = 0
         self.starts.clear()
         self.pieces.clear()
+        return dropped
