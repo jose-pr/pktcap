@@ -22,7 +22,7 @@ from typing import Callable, Dict, Mapping, Optional, Tuple
 from .._dissect import DissectedFrame
 from .._exceptions import CaptureHookError
 from .._formats import RecordFormat, record_format
-from .._output import _safe
+from .._filenames import safe
 from .._plugins._config import process_environment
 from .._records import datagram_record, frame_record
 
@@ -221,7 +221,7 @@ class _CommandHook:
             variable = _PREFIX + key.upper()
             if variable == _PREFIX + "FORMAT" or variable in added:
                 raise ValueError("the variable %s is set twice" % variable)
-            added[variable] = _safe(value)
+            added[variable] = safe(value)
         env.update(added)
         return env
 
