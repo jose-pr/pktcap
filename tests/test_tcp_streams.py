@@ -1334,6 +1334,19 @@ def test_a_connection_silent_past_the_timeout_restarts_as_a_new_stream():
     assert wire.stats.evicted == 1 and wire.stats.streams == 2
 
 
+def test_a_finished_connection_forgotten_for_age_is_not_counted_as_evicted():
+    """Both directions ended, then silence: nothing is held, so nothing is
+    lost when the addresses are used again. ``evicted`` stays a count of
+    connections that were cut short."""
+    wire = Wire(idle_timeout=10.0)
+    wire.send(999, flags=SYN, time=100.0)
+    wire.send(1000, b"bye", FIN | ACK, time=101.0)
+    wire.send(5000, flags=FIN | ACK, src=B, dst=A, ack=1004, time=102.0)
+    got = wire.send(70000, b"again", time=900.0)
+    assert view(got) == [(b"again", 0, 0, 1, False)]
+    assert wire.stats.evicted == 0 and wire.stats.streams == 2
+
+
 def test_the_idle_timeout_is_checked_when_the_addresses_are_next_seen():
     wire = Wire(idle_timeout=10.0)
     wire.send(1000, b"a", time=100.0)

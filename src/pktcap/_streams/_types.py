@@ -53,7 +53,7 @@ class TCPStreamStats(NamedTuple):
         an IP fragment that was not reassembled.
     :ivar evicted: connections forgotten at ``max_streams`` or for age; their
         held octets are dropped. A connection every direction of which had
-        ended gives up its place first and is not counted when it does.
+        ended gives up its place first and is never counted.
     :ivar pending: connections in the table.
     :ivar held: octets held out of order at the moment.
     :ivar dropped: octets held when their connection was forgotten.

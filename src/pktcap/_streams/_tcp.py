@@ -258,7 +258,7 @@ class TCPReassembler(Engine):
             return None
         # A time of zero says nothing; a jump either way counts as silence.
         if time != 0.0 and conn.last != 0.0 and not abs(time - conn.last) <= self._idle:
-            self._forget(key, conn)
+            self._forget(key, conn, counted=key not in self._done)
             return None
         return conn
 
