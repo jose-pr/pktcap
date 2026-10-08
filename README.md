@@ -186,6 +186,17 @@ sudo pktcap capture --interface eth0 -f "proto=udp and port=67" -o dhcp.pcapng
 tcpdump -i eth0 -U -w - | pktcap convert -i - --datagrams -o requests.jsonl
 ```
 
+`capture --listen HOST:PORT` (also `[::1]:PORT`, `*:PORT`, an adapter name or
+a MAC; repeat it) records the datagrams that arrive at UDP ports the command
+binds: it runs on any platform with no privilege, and sees what reaches this
+host only, under an IP header it makes up. `--format text` writes one readable
+line a frame, and `capture --hook PROGRAM` (or `MODULE:FUNCTION`) runs a
+program for each record written, with a time limit. The command classes
+(`pktcap.cli.Capture`, `Convert`, `Replay` and the bases under them) are
+built to be subclassed by a library with a protocol of its own, which adds its
+dissector, its filter and its defaults and nothing else; the override points
+are in the header.
+
 Every option, and the one tool a `PKTCAP_MCP=stdio` server offers, is in the
 header that ships in the package, `pktcap/cli/AGENTS.md`, also at
 <https://github.com/jose-pr/pktcap/blob/main/src/pktcap/cli/AGENTS.md>.

@@ -9,6 +9,27 @@ says *what changed*; this says *what it costs and how it was checked*.
 Nothing has been released. The package is prepared at version 0.1.0; no tag
 exists and nothing has been published.
 
+### The commands as a base, the socket source and hooks
+
+How it was checked:
+
+- `tests/test_cli_subclass.py` is the contract: a demonstration subclass of
+  `Convert`, `Capture` and `Replay` uses every override point, mixed with a base
+  class that has a `config` and a `listen` of its own; the Python block of
+  `cli/AGENTS.md` is executed there.
+- `tests/test_cli_listen.py` drives `capture --listen` on loopback sockets the
+  tests own, and once through `python -m pktcap` as a child process, which
+  prints one line for a datagram sent to the address `-v` reports.
+- `tests/test_cli_hook.py` runs real programs and Python functions as hooks.
+- 63 mutations (the override points being called, each bound of the socket
+  source and of the hook program, the datagram an endpoint does not admit, the
+  `always` rule of the plugin list, the escaping and the cut of a text line)
+  each make a test fail. Six first survived: an equivalent redundancy in
+  the cut was removed, and five tests were added or strengthened.
+- Measured 2026-10-09: a socket on macOS 15.7 and FreeBSD 16.0 cannot send a UDP
+  datagram above `net.inet.udp.maxdgram` (9216 octets by default), so the test
+  of the largest datagram sends what the host will.
+
 ### TCP stream reassembly
 
 `TCPReassembler` and `read_tcp_streams` put each direction of a TCP connection
