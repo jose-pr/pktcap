@@ -39,20 +39,55 @@ class Wire:
         self.items = []
         self.clock = 1000.0
 
-    def frame(self, sequence, data=b"", flags=PSH, *, src=A, dst=B, ack=0, time=None):
+    def frame(
+        self,
+        sequence,
+        data=b"",
+        flags=PSH,
+        *,
+        src=A,
+        dst=B,
+        ack=0,
+        time=None,
+        snap=None,
+        pad=0,
+        stated=None,
+    ):
+        """One frame. ``snap`` keeps that many octets of it, as a snap length
+        does; ``pad`` appends zero octets after the IP packet; ``stated``
+        overrides the IP header's length field."""
         if time is None:
             self.clock += 0.001
             time = self.clock
-        raw = build.tcp_frame(
-            src[0],
-            dst[0],
-            src[1],
-            dst[1],
-            sequence & MASK,
-            data,
-            flags=flags,
-            acknowledgment=ack & MASK,
-        )
+        if stated is None:
+            raw = build.tcp_frame(
+                src[0],
+                dst[0],
+                src[1],
+                dst[1],
+                sequence & MASK,
+                data,
+                flags=flags,
+                acknowledgment=ack & MASK,
+            )
+        else:
+            segment = build.tcp(
+                src[1],
+                dst[1],
+                data,
+                flags=flags,
+                sequence=sequence & MASK,
+                acknowledgment=ack & MASK,
+            )
+            if ":" in src[0]:
+                packet = build.ipv6(
+                    src[0], dst[0], segment, next_header=6, length=stated
+                )
+                raw = build.ethernet(packet, v6=True)
+            else:
+                packet = build.ipv4(src[0], dst[0], segment, protocol=6, total=stated)
+                raw = build.ethernet(packet)
+        raw = (raw + bytes(pad))[:snap]
         return self.dissector.dissect(CapturedFrame(time, build.ETHERNET, raw))
 
     def send(self, *args, **kwargs):
@@ -622,6 +657,172 @@ def test_a_mapped_ipv6_address_is_a_different_host_from_the_ipv4_one():
     wire.send(1, b"a", src=A, dst=B)
     wire.send(1, b"b", src=mapped, dst=("::ffff:10.0.0.2", 80))
     assert wire.stats.streams == 2
+
+
+# -- a segment is as long as its IP header says --------------------------------
+
+SNAP4 = 14 + 20 + 20 + 10  # the headers and ten octets of each segment
+SNAP6 = 14 + 40 + 20 + 10
+V6A, V6B = ("2001:db8::1", 40000), ("2001:db8::2", 443)
+
+
+def cut_pairs(wire, snap, src=A, dst=B, base=1000, answer=5000):
+    """Six segments of 100 octets, each acknowledged, cut to ten octets by a
+    snap length. ``view`` of what each frame handed out, per frame."""
+    per_frame, seq = [], base
+    for n in range(6):
+        data = bytes([65 + n]) * 100
+        got = wire.send(seq, data, PSH | ACK, src=src, dst=dst, ack=answer, snap=snap)
+        seq += 100
+        per_frame.append(view(got))
+        got = wire.send(answer, b"", ACK, src=dst, dst=src, ack=seq, snap=snap)
+        per_frame.append(view(got))
+    return per_frame
+
+
+@pytest.mark.parametrize("v6", [False, True])
+def test_a_segment_cut_by_a_snap_length_is_acknowledged_and_delivered_at_once(v6):
+    src, dst = (V6A, V6B) if v6 else (A, B)
+    wire = Wire()
+    wire.send(999, flags=SYN, src=src, dst=dst)
+    wire.send(4999, flags=SYN | ACK, src=dst, dst=src, ack=1000)
+    per_frame = cut_pairs(wire, SNAP6 if v6 else SNAP4, src, dst)
+    for n in range(6):
+        gave = [(bytes([65 + n]) * 10, n * 100, 90 if n else 0, 0, False)]
+        assert per_frame[2 * n] == gave
+        assert per_frame[2 * n + 1] == []
+    stats = wire.stats
+    assert (stats.held, stats.ignored, stats.out_of_order) == (0, 0, 0)
+    assert wire.flush() == ()
+    # The last segment's cut octets are given up and no item follows to
+    # report them.
+    assert stats.missing == 6 * 90
+    assert sum(i.missing for i in wire.items) == 5 * 90
+    consistent(wire.items)
+
+
+def test_the_same_capture_uncut_is_unchanged():
+    wire = Wire()
+    handshake(wire)
+    per_frame = cut_pairs(wire, None)
+    for n in range(6):
+        assert per_frame[2 * n] == [(bytes([65 + n]) * 100, n * 100, 0, 0, False)]
+        assert per_frame[2 * n + 1] == []
+    assert wire.stats.missing == 0 and wire.stats.ignored == 0
+
+
+def test_a_fin_on_a_cut_segment_ends_the_direction_at_the_stated_position():
+    wire = Wire()
+    handshake(wire)
+    out = list(wire.send(1000, b"x" * 100, PSH | ACK | FIN, ack=5000, snap=SNAP4))
+    out += wire.send(5000, b"", ACK, src=B, dst=A, ack=1101, snap=SNAP4)
+    assert wire.send(1100, b"more") == ()  # beyond the FIN
+    out += wire.flush()
+    assert view(out) == [(b"x" * 10, 0, 0, 0, False), (b"", 100, 90, 0, True)]
+    assert wire.stats.missing == 90 == sum(i.missing for i in out)
+    assert wire.stats.ignored == 1
+    uncut = Wire()
+    handshake(uncut)
+    got = uncut.send(1000, b"x" * 100, PSH | ACK | FIN, ack=5000)
+    assert view(got) == [(b"x" * 100, 0, 0, 0, True)]
+
+
+def test_a_cut_segment_with_a_fin_and_none_of_its_octets_captured():
+    wire = Wire()
+    handshake(wire)
+    # The headers are all that remains of 100 octets.
+    got = wire.send(1000, b"x" * 100, PSH | ACK | FIN, snap=14 + 20 + 20)
+    assert view(got) == [(b"", 100, 100, 0, True)]
+    assert wire.stats.missing == 100
+
+
+def test_padding_after_the_ip_packet_gives_nothing_up():
+    wire = Wire()
+    handshake(wire)
+    assert view(wire.send(1000, b"abc", pad=40)) == [(b"abc", 0, 0, 0, False)]
+    assert view(wire.send(1003, b"de", pad=40)) == [(b"de", 3, 0, 0, False)]
+    assert wire.stats.missing == 0 and wire.stats.ignored == 0
+
+
+@pytest.mark.parametrize("v6", [False, True])
+def test_a_zero_length_field_gives_nothing_up(v6):
+    src, dst = (V6A, V6B) if v6 else (A, B)
+    wire = Wire()
+    wire.send(999, flags=SYN, src=src, dst=dst)
+    got = wire.send(1000, b"x" * 10, src=src, dst=dst, stated=0)
+    assert view(got) == [(b"x" * 10, 0, 0, 0, False)]
+    got = wire.send(1010, b"y" * 10, src=src, dst=dst, stated=0, snap=SNAP6 - 5)
+    assert wire.stats.missing == 0 and wire.stats.ignored == 0
+
+
+def test_a_segment_from_a_reassembled_datagram_is_as_long_as_its_octets():
+    segment = build.tcp(5000, 80, b"split across two frames", sequence=1, flags=PSH)
+    first = build.ipv4(A[0], B[0], segment[:24], protocol=6, ident=3, more=True)
+    # The last fragment states 50 octets more than it holds.
+    last = build.ipv4(A[0], B[0], segment[24:], protocol=6, ident=3, offset=24)
+    stated = (len(last) + 50).to_bytes(2, "big")
+    last = last[:2] + stated + last[4:]
+    wire = Wire()
+    for index, packet in enumerate((first, last)):
+        frame = wire.dissector.dissect(
+            CapturedFrame(float(index + 1), build.ETHERNET, build.ethernet(packet))
+        )
+        assert frame.reassembled == (index == 1)
+        wire.items.extend(wire.reassembler.add(frame))
+    assert view(wire.items) == [(b"split across two frames", 0, 0, 0, False)]
+    assert wire.send(24, b"next")[0].missing == 0
+    assert wire.stats.missing == 0
+
+
+def test_a_cut_segment_out_of_order_holds_its_octets_and_leaves_the_rest_a_hole():
+    wire = Wire()
+    handshake(wire)
+    assert wire.send(1100, b"B" * 100, snap=SNAP4) == ()  # [100, 200), 10 held
+    assert wire.stats.held == 10 and wire.stats.out_of_order == 1
+    got = wire.send(1000, b"A" * 100)
+    assert view(got) == [(b"A" * 100 + b"B" * 10, 0, 0, 0, False)]
+    assert wire.stats.missing == 0  # [110, 200) is a hole like any other
+    wire.send(1200, b"C" * 5)  # held behind it
+    # An acknowledgment of the whole cut segment gives the hole up.
+    got = wire.send(5000, b"", ACK, src=B, dst=A, ack=1205)
+    assert view(got) == [(b"C" * 5, 200, 90, 0, False)]
+    assert wire.stats.missing == 90 and wire.stats.ignored == 0
+    consistent(wire.items)
+
+
+def test_a_cut_segment_that_arrives_in_order_gives_up_before_what_is_held_beyond():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1050, b"m" * 10)  # held at [50, 60), inside the octets the cut hides
+    wire.send(1100, b"n" * 10)  # held at [100, 110), just after them
+    got = wire.send(1000, b"A" * 100, snap=SNAP4)
+    assert view(got) == [
+        (b"A" * 10, 0, 0, 0, False),
+        (b"m" * 10, 50, 40, 0, False),
+        (b"n" * 10, 100, 40, 0, False),
+    ]
+    assert wire.stats.held == 0 and wire.stats.missing == 80
+    consistent(wire.items)
+
+
+def test_a_cut_segment_seen_twice_changes_nothing_the_second_time():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"A" * 100, snap=SNAP4)
+    before = wire.stats
+    assert wire.send(1000, b"A" * 100, snap=SNAP4) == ()
+    after = wire.stats
+    assert after.missing == before.missing == 90
+    assert after.retransmitted == 10 and after.ignored == 0
+    assert wire.send(1100, b"next")[0].missing == 90
+
+
+def test_a_frame_cut_inside_the_tcp_header_is_no_segment():
+    wire = Wire()
+    handshake(wire)
+    before = wire.stats.segments
+    assert wire.send(1000, b"abc", snap=14 + 20 + 10) == ()
+    assert wire.stats.segments == before and wire.stats.missing == 0
 
 
 # -- the whole of it ---------------------------------------------------------

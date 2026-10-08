@@ -159,6 +159,7 @@ class Engine:
         direction: Direction,
         tcp: TCPLayer,
         data: bytes,
+        snapped: int,
         time: float,
         out: List[TCPStreamData],
     ) -> None:
@@ -166,7 +167,8 @@ class Engine:
         if syn and direction.syn is None:
             direction.syn = tcp.sequence  # the SYN of a direction seen without it
         offset = direction.offset_of((tcp.sequence + syn) & MASK)
-        position = offset + len(data)  # where a FIN sits
+        captured = offset + len(data)  # where the captured octets end
+        position = captured + snapped  # where the segment ends: a FIN sits here
         if fin:
             # Settled before the octets are placed, so that nothing held at or
             # beyond it is delivered with them.
@@ -191,7 +193,27 @@ class Engine:
             if offset > direction.next:
                 self._out_of_order += 1
             self._place(direction, offset, data, time, out)
+        if snapped:
+            self._give_up_cut(direction, captured, position, time, out)
         self._settle(direction, time, out)
+
+    def _give_up_cut(
+        self,
+        direction: Direction,
+        captured: int,
+        end: int,
+        time: float,
+        out: List[TCPStreamData],
+    ) -> None:
+        """The octets a snap length cut from a segment, from ``captured`` to
+        ``end``. Once the captured octets before them are delivered the cut
+        ones are given up, so the next item reports them; before that they are
+        a hole like any other."""
+        if direction.fin is not None:
+            captured, end = min(captured, direction.fin), min(end, direction.fin)
+        direction.top = max(direction.top, end)
+        if direction.next >= captured:
+            self._emit(direction, direction.release(end), time, out)
 
     def _fin(self, direction: Direction, position: int) -> None:
         """A FIN ends the direction at its position; octets beyond are dropped."""

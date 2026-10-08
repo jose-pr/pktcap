@@ -122,6 +122,19 @@ ends: the one-call form, as `read_datagrams` is for UDP.
 10. **Not done**: the checksum is not verified; the urgent pointer is ignored
     and its octet delivered in place (RFC 6093); a segment inside an IP
     fragment that was not reassembled is ignored.
+12. **A segment is as long as its IP header says**, not as long as the capture
+    kept. The octets a snap length cut from its end are those the header
+    states beyond the packet captured: for IPv4 the total length, for IPv6 40
+    plus the payload length, less the octets captured. A zero length field
+    states nothing, octets after the stated length are padding, and a segment
+    read from a reassembled datagram is as long as its octets. The stated
+    length places a FIN and moves the furthest octet seen, which rule 7 reads.
+    A cut segment that arrives in order delivers its captured octets and gives
+    up the cut ones at once, so the next item of the direction reports them in
+    `missing` (an end item, when a FIN follows); one that arrives out of order
+    holds its captured octets and leaves the cut ones a hole like any other.
+    Cut octets given up after a direction's last item are in `stats.missing`
+    and in no item.
 
 A zero-length segment with no SYN, FIN or RST delivers nothing and starts no
 connection, and is still read for its acknowledgment. A SYN takes one sequence

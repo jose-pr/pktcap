@@ -10,7 +10,7 @@ one segment.
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from .._dissect import DissectedFrame
 from .._layers import IPv4Layer, IPv6FragmentLayer, IPv6Layer, TCPLayer
@@ -36,17 +36,34 @@ class _Connection:
         self.directions: Dict[_Endpoint, Direction] = {}
 
 
+def _snapped(layer: Union[IPv4Layer, IPv6Layer], packet: int) -> int:
+    """The octets a snap length cut from the end of an IP packet, of which
+    ``packet`` octets were captured: what its length field states beyond them.
+    A zero field (a jumbogram, a send the network card segments) states
+    nothing, and octets after the stated length are padding."""
+    if isinstance(layer, IPv4Layer):
+        stated = layer.length
+    else:
+        stated = layer.payload_length + 40 if layer.payload_length else 0
+    return max(stated - packet, 0) if stated else 0
+
+
 def _segment_of(
     frame: DissectedFrame,
-) -> Optional[Tuple[TCPLayer, _Endpoint, _Endpoint, bytes, bool]]:
+) -> Optional[Tuple[TCPLayer, _Endpoint, _Endpoint, bytes, bool, int]]:
     """The innermost TCP segment of a frame: header, both socket addresses,
-    octets, and whether it lies in an IP fragment that was not reassembled."""
+    octets, whether it lies in an IP fragment that was not reassembled, and
+    how many octets of it a snap length cut. A segment read from a reassembled
+    datagram is cut by nothing."""
     source = destination = None
     fragment = False
+    snapped = 0
+    before = frame.frame.data  # the octets the layer being read came from
     for layer, payload in zip(frame.layers, frame.payloads):
         if isinstance(layer, (IPv4Layer, IPv6Layer)):
             source, destination = layer.source, layer.destination
             fragment = isinstance(layer, IPv4Layer) and layer.is_fragment
+            snapped = _snapped(layer, len(before))
         elif isinstance(layer, IPv6FragmentLayer):
             fragment = layer.is_fragment
         elif isinstance(layer, TCPLayer):
@@ -58,7 +75,9 @@ def _segment_of(
                 (destination, layer.destination_port),
                 payload,
                 fragment and not frame.reassembled,
+                0 if frame.reassembled else snapped,
             )
+        before = payload
     return None
 
 
@@ -124,7 +143,7 @@ class TCPReassembler(Engine):
         found = _segment_of(frame)
         if found is None:
             return ()
-        tcp, source, destination, data, fragment = found
+        tcp, source, destination, data, fragment, snapped = found
         self._segments += 1
         if fragment:
             self._ignored += 1
@@ -178,7 +197,7 @@ class TCPReassembler(Engine):
                     tcp.syn,
                 )
                 conn.directions[source] = direction
-            self._segment(direction, tcp, data, time, out)
+            self._segment(direction, tcp, data, snapped, time, out)
         self._enforce(time, out)
         return tuple(out)
 
