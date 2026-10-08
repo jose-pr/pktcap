@@ -50,7 +50,7 @@ prints the reason for every skip: a skip is not a pass.
 | `test_copy.py` | `copy_frames`: a capture of UDP, TCP and ARP frames copied whole and as datagrams, the filter, the limit that leaves the source unread, the file budget's refusals, and what is refused at the call |
 | `test_replay.py` | `replay_schedule`, `replay` and `replay_to`: the waits and their cap, the limit, sends to loopback sockets the test owns over IPv4 and IPv6, partial datagrams, frames replayed to a callable and never sent, and that the guard sees a replay that would leave the host |
 | `test_live.py` | `LiveCapture`, `sniff_frames` and `sniff` with the privileged socket replaced: the lifecycle, every packet as a cooked frame, loopback seen once, naming the interface; and one test of the real `AF_PACKET` socket |
-| `test_tcp_streams.py` | TCP stream reassembly through `FrameDissector` and real segments: order, retransmission, overlap, wrap, start and end, a reset, a new stream on the same addresses, both families, and any order of a stream's segments giving its octets back |
+| `test_tcp_streams.py` | TCP stream reassembly through `FrameDissector` and real segments: order, retransmission, overlap, wrap, start and end, a reset, a new stream on the same addresses once a SYN is confirmed, a segment far beyond what was believed, frames cut by a snap length, both families, and any order of a stream's segments giving its octets back |
 | `test_reassembly.py` | IP reassembly through `FrameDissector`: any order, both families, any protocol, reassembly off, overlaps and duplicates, and each bound (count, octets, fragments, age, work per fragment, memory) |
 
 ## Conformance
