@@ -37,6 +37,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   socket closed when it stops, and `import pktcap` still imports no `asyncio`.
   The IP header of such a frame is made up, and a socket never sees other
   hosts' traffic, the link layer or fragments.
+- `command_hook(command, *, format="json", timeout=10.0, fail_fast=False,
+  names=None, datagrams=False)` is a hook for a copy that runs a program for
+  each frame written: the record of the frame on standard input, the values
+  `names(frame)` gives as `PKTCAP_HOOK_<FIELD>` variables (each passing the
+  file-name rule of `CaptureWriter`), no argument and no shell. The program is
+  found once, as an absolute path, and a `.bat` or `.cmd` file is refused on
+  Windows. Past `timeout` the program and everything it started are killed. A
+  failure is counted in the callable's `failures`, logged on
+  `pktcap._copy._hook` with a bounded, escaped tail of the error output (the
+  first, then at most one a minute), and with `fail_fast` raises the new
+  `CaptureHookError(message, *, status=None, timed_out=False)`, a
+  `PktcapError` and an `OSError`.
+- `copy_frames` takes `names`, called for each frame kept to give the writer
+  the values of its `fields`, and `each`, called with the frame after its
+  item is written and not for a frame that was dropped, had no datagram or
+  was turned away by the file budget.
 - `datagram_frame(datagram, *, interface=None, ident=0)` builds the raw-IP
   frame of a `CapturedDatagram`, the octets `PcapWriter` writes for it, so
   that dissecting it gives the datagram back.

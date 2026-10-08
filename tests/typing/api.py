@@ -223,8 +223,27 @@ with pktcap.CaptureWriter("out.json") as copy_target:
         select=pktcap.compile_capture_filter("proto=udp", pktcap.frame_filter),
         datagrams=True,
         limit=10,
+        names=lambda item: {"port": 69},
+        each=lambda item: None,
+    )
+    hooked = pktcap.copy_frames(
+        pktcap.read_dissected("x.pcap"),
+        copy_target,
+        each=pktcap.command_hook(
+            "./hook",
+            format="json",
+            timeout=5.0,
+            fail_fast=True,
+            names=lambda item: {"xid": 1},
+            datagrams=True,
+        ),
     )
 assert_type(copied, pktcap.CopyResult)
+assert_type(hooked, pktcap.CopyResult)
+assert_type(pktcap.command_hook("./hook"), Callable[[pktcap.DissectedFrame], None])
+hook_error = pktcap.CaptureHookError("x", status=3, timed_out=False)
+assert_type(hook_error.status, Optional[int])
+assert_type(hook_error.timed_out, bool)
 assert_type(copied.read, int)
 assert_type(copied.refused, int)
 

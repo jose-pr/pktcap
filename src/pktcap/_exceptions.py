@@ -26,6 +26,7 @@ __all__ = [
     "DissectError",
     "CapturePluginError",
     "CaptureConfigError",
+    "CaptureHookError",
 ]
 
 
@@ -209,3 +210,37 @@ class CaptureConfigError(PktcapError, ValueError):
 
     def __reduce__(self) -> Tuple[Any, ...]:
         return (_restore_config_error, (self.args[0], self.path, self.lineno))
+
+
+def _restore_hook_error(
+    message: str, status: Optional[int], timed_out: bool
+) -> "CaptureHookError":
+    return CaptureHookError(message, status=status, timed_out=timed_out)
+
+
+class CaptureHookError(PktcapError, OSError):
+    """A hook command failed and was asked to end the capture (``fail_fast``).
+
+    An :class:`OSError`, as the failure of any other program or socket a
+    capture relies on is. The message names the program and ends with a
+    bounded, escaped tail of the program's error output.
+
+    :ivar status: the program's exit status, or ``None`` when it was killed
+        for running past its time limit.
+    :ivar timed_out: the program ran past its time limit and was killed with
+        everything it had started.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: Optional[int] = None,
+        timed_out: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.timed_out = timed_out
+
+    def __reduce__(self) -> Tuple[Any, ...]:
+        return (_restore_hook_error, (self.args[0], self.status, self.timed_out))

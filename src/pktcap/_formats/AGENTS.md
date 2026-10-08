@@ -130,34 +130,6 @@ hexadecimal digits of the SHA-256 of the value as given (UTF-8), 64 characters
 at most; a value of 64 or fewer is untouched. A time outside any calendar is
 written as `t<seconds>`.
 
-## Copying frames into a writer
-
-**`copy_frames(frames, writer, *, select=None, datagrams=False, limit=None) -> CopyResult`**
-— write the frames a predicate accepts to a writer, in order.
-
-- `frames` is any iterable of `DissectedFrame`: `read_dissected(path)` for a
-  capture, `sniff_frames()` for a live source. `writer` is a `CaptureWriter`
-  the caller made and still owns: it is neither opened nor closed here, and
-  a second call adds to it.
-- `select` is a predicate over a frame, such as
-  `compile_capture_filter(text, frame_filter)`; `None` accepts every frame.
-- `datagrams=True` writes each frame's UDP datagram (reassembled) in place of
-  the frame, and passes over a frame that has none.
-- `limit` stops the copy once that many items are written; the source is not
-  read past it, so a live source is not waited on for one more. `0` reads
-  nothing. An item the writer turned away does not count.
-- Raises `TypeError` for a `writer` that is not a `CaptureWriter`, a `select`
-  that is not callable, a `limit` that is not an `int`, or an item that is not
-  a `DissectedFrame`; `ValueError` for a `limit` below zero. The arguments are
-  checked before anything is read. `OSError` from the writer ends the copy;
-  what was written stays written and `writer.written` counts it.
-
-**`CopyResult(read, written, skipped, refused)`** — a named tuple of counts for
-one call: `read` items taken from the source, `written` items the writer
-wrote, `skipped` items `select` refused or that had no datagram, and
-`refused` items the writer turned away for its `max_files` budget during this
-call (the writer's own `refused` is for its whole life).
-
 ## What a record is
 
 A mapping of text keys to plain data: `dict`, `list`, `str`, `int`, `float`,

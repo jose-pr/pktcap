@@ -6,10 +6,10 @@ output, as one call a library user can make as well.
 
 from __future__ import annotations
 
-from typing import Callable, Iterable, NamedTuple, Optional
+from typing import Callable, Iterable, Mapping, NamedTuple, Optional
 
-from ._dissect import DissectedFrame
-from ._output import CaptureWriter
+from .._dissect import DissectedFrame
+from .._output import CaptureWriter
 
 __all__ = ["CopyResult", "copy_frames"]
 
@@ -38,6 +38,8 @@ def copy_frames(
     select: Optional[Callable[[DissectedFrame], bool]] = None,
     datagrams: bool = False,
     limit: Optional[int] = None,
+    names: Optional[Callable[[DissectedFrame], Mapping[str, object]]] = None,
+    each: Optional[Callable[[DissectedFrame], object]] = None,
 ) -> CopyResult:
     """Write the frames ``select`` accepts to ``writer``, in order.
 
@@ -51,8 +53,17 @@ def copy_frames(
         a frame that has none, instead of the frame.
     :param limit: stop once this many items are written; the source is not
         read past that. A refused item does not count.
-    :raises TypeError: ``writer`` is not a :class:`CaptureWriter`, ``select``
-        is not callable, ``limit`` is not an ``int``, or ``frames`` yields
+    :param names: called with each frame ``select`` kept, before it is
+        written; the mapping it returns is the writer's ``names``, the values
+        of its ``fields``. It is given the frame even when ``datagrams`` is
+        set, and may be called again for the same frame by a hook.
+    :param each: called with the frame after its item is written, in order,
+        and not for a frame ``select`` dropped, one with no datagram, or one
+        the writer turned away. An exception from it ends the copy; the item
+        stays written.
+    :raises TypeError: ``writer`` is not a :class:`CaptureWriter`, ``select``,
+        ``names`` or ``each`` is not callable, ``limit`` is not an ``int``,
+        ``names`` gives something that is not a mapping, or ``frames`` yields
         something that is not a :class:`DissectedFrame`.
     :raises ValueError: ``limit`` is below zero.
     :raises OSError: the writer could not write. What was written before it
@@ -63,6 +74,10 @@ def copy_frames(
         raise TypeError("writer must be a CaptureWriter")
     if select is not None and not callable(select):
         raise TypeError("select must be callable")
+    if names is not None and not callable(names):
+        raise TypeError("names must be callable")
+    if each is not None and not callable(each):
+        raise TypeError("each must be callable")
     if limit is not None:
         if isinstance(limit, bool) or not isinstance(limit, int):
             raise TypeError("limit must be an int")
@@ -85,10 +100,17 @@ def copy_frames(
         if item is None:
             skipped += 1
             continue
+        values = None
+        if names is not None:
+            values = names(frame)
+            if not isinstance(values, Mapping):
+                raise TypeError("names must give a mapping")
         turned_away = writer.refused
-        writer.write(item)
+        writer.write(item, names=values)
         if writer.refused > turned_away:
             refused += 1
         else:
             written += 1
+            if each is not None:
+                each(frame)
     return CopyResult(read, written, skipped, refused)

@@ -198,3 +198,123 @@ def test_a_failing_writer_ends_the_copy_with_its_own_error(tmp_path):
     with CaptureWriter(str(blocked / "out.json")) as writer:
         with pytest.raises(OSError):
             copy_frames(_frames(UDP_FRAME), writer)
+
+
+# -- names and each: what a hook and a file name need ---------------------------
+
+
+def test_names_feed_the_writers_fields_for_each_frame_written(tmp_path):
+    pattern = str(tmp_path / "out" / "{port}_{index}.json")
+    seen = []
+
+    def names(item):
+        seen.append(item)
+        return {"port": item.datagram().destination[1]}
+
+    frames = _frames(UDP_FRAME, TCP_FRAME, SECOND_UDP)
+    with CaptureWriter(pattern, per_record=True, fields=("port",)) as writer:
+        result = copy_frames(
+            frames,
+            writer,
+            datagrams=True,
+            names=names,
+            select=compile_capture_filter("proto=udp", frame_filter),
+        )
+    assert result == CopyResult(read=3, written=2, skipped=1, refused=0)
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == [
+        "67_1.json",
+        "69_0.json",
+    ]
+    # Called with the dissected frame, and only for one the filter kept.
+    assert seen == [frames[0], frames[2]]
+
+
+def test_names_that_give_no_mapping_are_a_type_error(tmp_path):
+    with CaptureWriter(tmp_path / "out.json") as writer:
+        with pytest.raises(TypeError, match="mapping"):
+            copy_frames(_frames(UDP_FRAME), writer, names=lambda item: ["a"])
+    assert writer.written == 0
+
+
+def test_each_is_called_after_a_frame_is_written_with_the_frame(tmp_path):
+    out = tmp_path / "out.json"
+    calls = []
+    with CaptureWriter(out) as writer:
+
+        def each(item):
+            # The record is on disk already when the hook runs.
+            calls.append((item, len(_json_lines(out))))
+
+        frames = _frames(UDP_FRAME, TCP_FRAME)
+        copy_frames(frames, writer, each=each)
+    assert calls == [(frames[0], 1), (frames[1], 2)]
+
+
+def test_each_is_not_called_for_a_frame_the_filter_dropped(tmp_path):
+    frames = _frames(UDP_FRAME, TCP_FRAME, SECOND_UDP)
+    calls = []
+    with CaptureWriter(tmp_path / "out.json") as writer:
+        copy_frames(
+            frames,
+            writer,
+            select=compile_capture_filter("proto=tcp", frame_filter),
+            each=calls.append,
+        )
+    assert calls == [frames[1]]
+
+
+def test_each_is_not_called_for_a_frame_with_no_datagram_or_one_the_budget_refused(
+    tmp_path,
+):
+    calls = []
+    pattern = str(tmp_path / "{index}.json")
+    frames = _frames(ARP_FRAME, UDP_FRAME, SECOND_UDP)
+    with CaptureWriter(pattern, per_record=True, max_files=1) as writer:
+        result = copy_frames(frames, writer, datagrams=True, each=calls.append)
+    assert result == CopyResult(read=3, written=1, skipped=1, refused=1)
+    assert calls == [frames[1]]
+
+
+def test_each_is_called_for_the_frame_that_reaches_the_limit(tmp_path):
+    frames = _frames(UDP_FRAME, TCP_FRAME, SECOND_UDP)
+    calls = []
+    with CaptureWriter(tmp_path / "out.json") as writer:
+        copy_frames(frames, writer, limit=2, each=calls.append)
+    assert calls == frames[:2]
+
+
+def test_an_error_from_each_ends_the_copy_and_the_frame_stays_written(tmp_path):
+    taken = []
+
+    def source():
+        for item in _frames(UDP_FRAME, TCP_FRAME, SECOND_UDP):
+            taken.append(item)
+            yield item
+
+    def each(item):
+        raise RuntimeError("the hook failed")
+
+    with CaptureWriter(tmp_path / "out.json") as writer:
+        with pytest.raises(RuntimeError, match="the hook failed"):
+            copy_frames(source(), writer, each=each)
+    assert writer.written == 1 and len(taken) == 1
+
+
+def test_names_and_each_are_checked_before_anything_is_read(tmp_path):
+    def source():
+        raise AssertionError("read")
+        yield  # pragma: no cover
+
+    with CaptureWriter(tmp_path / "out.json") as writer:
+        with pytest.raises(TypeError, match="names"):
+            copy_frames(source(), writer, names=5)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="each"):
+            copy_frames(source(), writer, each="print")  # type: ignore[arg-type]
+
+
+def test_a_python_hook_is_any_callable_that_takes_the_dissected_frame(tmp_path):
+    seen = []
+    frames = _frames(UDP_FRAME)
+    with CaptureWriter(tmp_path / "out.json") as writer:
+        copy_frames(frames, writer, each=lambda item: seen.append(type(item)))
+    assert seen == [type(frames[0])]

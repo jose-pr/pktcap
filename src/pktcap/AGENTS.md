@@ -29,6 +29,7 @@ installed package (`importlib.resources.files("pktcap")`):
 | `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay`, `convert` and `plugins`, every option, what each prints, its statuses |
 | `pktcap/_streams/AGENTS.md` | `TCPReassembler`, `TCPStreamData`, `TCPStreamStats`: the rules for putting TCP streams back together, and the bounds |
 | `pktcap/_sources/AGENTS.md` | capturing live from an interface, and from UDP sockets: `LiveCapture`, `sniff_frames`, `sniff`, `UDPCapture`, `sniff_udp`, `asniff_udp`, `datagram_frame` |
+| `pktcap/_copy/AGENTS.md` | `copy_frames` and `CopyResult`, `command_hook` and `CaptureHookError`: frames into a writer, and a program run for each one |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
 **Any valid capture is read.** Every frame of a pcap or pcapng file comes
@@ -252,8 +253,10 @@ record under a name pattern. It takes a `CapturedDatagram` or a
 `DissectedFrame`; a capture format writes the item itself and a record format
 the record given, or `datagram_record` or `frame_record` of the item. Its
 signature, name pattern, file budget and checks are in
-`pktcap/_formats/AGENTS.md`, with **`copy_frames`** and its result `CopyResult`:
-a source of dissected frames, filtered, into one of these writers.
+`pktcap/_formats/AGENTS.md`. **`copy_frames`** and its result `CopyResult` write
+a source of dissected frames, filtered, into one of these writers, and
+**`command_hook`** runs a program for each frame written; both are in
+`pktcap/_copy/AGENTS.md`.
 
 ## Filtering
 
@@ -421,6 +424,7 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
 | `CapturePluginError` | `PktcapError`, `ValueError` | a plugin the user named that cannot be loaded: `plugin` and `source` say which, and from where |
 | `CaptureConfigError` | `PktcapError`, `ValueError` | a configuration file, or `PKTCAP_CONFIG`, that is malformed or not trusted: `path` and `lineno` |
+| `CaptureHookError` | `PktcapError`, `OSError` | a hook command that failed or ran past its time limit, under `fail_fast`: `status` and `timed_out` |
 
 `MissingExtraError(message, *, format, extra)` has `format` (`"toml"`) and
 `extra` (the extra to install, `"toml"`), and its message names the extra: a
@@ -462,4 +466,5 @@ Read when a list of plugins is asked for, never at import.
   writer and a live capture each keep state.
 - **This library configures no logging, installs no signal handler and
   prints nothing.** It logs at `WARNING` on `pktcap._dissect` (a dissector
-  that failed) and `pktcap._output` (the file budget reached).
+  that failed) and `pktcap._output` (the file budget reached), and at
+  `ERROR` on `pktcap._copy._hook` (a hook command that failed).

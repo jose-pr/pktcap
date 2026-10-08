@@ -17,7 +17,7 @@ from importlib.metadata import version as _version
 
 from ._captured import CapturedDatagram, CapturedFrame
 from ._container import CaptureSource, read_frames
-from ._copy import CopyResult, copy_frames
+from ._copy import CopyResult, command_hook, copy_frames
 from ._dissect import (
     LINKTYPES,
     DissectedFrame,
@@ -37,6 +37,7 @@ from ._exceptions import (
     CaptureConfigError,
     CaptureFilterError,
     CaptureFormatError,
+    CaptureHookError,
     CapturePluginError,
     DissectError,
     LiveCaptureError,
@@ -90,6 +91,7 @@ __all__ = [
     "CaptureConfigError",
     "CaptureFilterError",
     "CaptureFormatError",
+    "CaptureHookError",
     "CapturePluginError",
     "CaptureSource",
     "CaptureWriter",
@@ -137,6 +139,7 @@ __all__ = [
     "VLANLayer",
     "asniff_udp",
     "check_dissector",
+    "command_hook",
     "compile_capture_filter",
     "copy_frames",
     "datagram_frame",

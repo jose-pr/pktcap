@@ -1,10 +1,11 @@
 """Where a plugin list comes from (internal): an argument, ``PKTCAP_LOAD``,
 or the configuration file, in that order.
 
-This is the one module that reads the environment, and only when asked for a
-list, never at import. A list is read from these three places and from no
-other: not the working directory, not a file found by walking up from it, and
-nothing a capture holds.
+This is the one module that reads the environment, and only when asked, never
+at import: for a list, or for the copy a hook command's process starts from
+(:func:`process_environment`). A list is read from these three places and from
+no other: not the working directory, not a file found by walking up from it,
+and nothing a capture holds.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import os
 import pathlib
 import re
 import stat
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from .._exceptions import CaptureConfigError, CapturePluginError
 
@@ -24,6 +25,7 @@ __all__ = [
     "capture_config_path",
     "describe",
     "plugin_list",
+    "process_environment",
 ]
 
 PLUGINS_VARIABLE = "PKTCAP_LOAD"
@@ -45,6 +47,11 @@ _DOTTED_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\
 _NO_DEFAULT_SECTION = "\x00"
 _SECTION = "pktcap"
 _KEY = "load"
+
+
+def process_environment() -> Dict[str, str]:
+    """A copy of this process's environment, for a child process to start from."""
+    return dict(os.environ)
 
 
 def describe(source: str) -> str:
