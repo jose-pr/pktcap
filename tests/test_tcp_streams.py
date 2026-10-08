@@ -387,6 +387,52 @@ def test_a_fin_with_a_hole_and_nothing_held_ends_with_the_octets_missing():
     assert view(wire.flush()) == [(b"", 10, 8, 0, True)]
 
 
+def test_a_hole_between_the_last_held_octets_and_the_fin_is_reported_before_the_end():
+    """Held octets, then a hole, then the FIN: the end is an item of its own
+    carrying that hole. Marked on the held octets' item, the end sat twenty
+    octets early and those twenty were counted and never reported."""
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"ab")
+    wire.send(1010, b"held")
+    wire.send(1034, flags=FIN)
+    assert view(wire.flush()) == [(b"held", 10, 8, 0, False), (b"", 34, 20, 0, True)]
+    assert wire.stats.missing == 28 == sum(i.missing for i in wire.items)
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_every_octet_given_up_is_reported_in_an_item(seed):
+    """With no connection forgotten, the octets the counters call missing are
+    exactly the ones the items report, whatever ends the streams."""
+    rng = random.Random(seed)
+    wire = Wire()
+    flags = [PSH, PSH | ACK, ACK, SYN, SYN | ACK, FIN, FIN | ACK, RST]
+    weights = [30, 30, 20, 1, 1, 4, 4, 1]
+    after = {}
+    for _ in range(300):
+        src, dst = (A, B) if rng.random() < 0.5 else (B, A)
+        base = after.setdefault((src, dst), rng.randrange(1 << 32))
+        number = base + rng.choice(
+            [0, 0, 0, rng.randrange(0, 300), -rng.randrange(0, 40)]
+        )
+        data = bytes(rng.choice(b"ab") for _ in range(rng.choice([0, 1, 5, 40])))
+        after[(src, dst)] = number + len(data)
+        wire.send(
+            number,
+            data,
+            rng.choices(flags, weights)[0],
+            src=src,
+            dst=dst,
+            ack=after.get((dst, src), 0) + rng.choice([0, 0, -20, 50, 100000]),
+        )
+    wire.flush()
+    consistent(wire.items)
+    stats = wire.stats
+    assert stats.evicted == 0
+    assert stats.missing == sum(i.missing for i in wire.items)
+    assert stats.delivered == sum(len(i.data) for i in wire.items)
+
+
 def test_an_end_is_not_marked_by_the_end_of_the_capture_alone():
     wire = Wire()
     wire.send(1000, b"abc")

@@ -47,7 +47,10 @@ something that is not a `DissectedFrame` and for an option of the wrong type,
   They are already counted in `offset`.
 - `stream` numbers the connection, both directions alike, from 0 in order of
   first appearance.
-- `end` says the direction is over after `data`.
+- `end` says the direction is over after `data`. It is set on the
+  direction's last octets when they reach the end; when octets were given up
+  between them and the end, the end is an item of its own, with no `data`
+  and those octets in `missing`.
 
 **`TCPStreamStats(segments, streams, delivered, retransmitted, out_of_order, missing, conflicts, ignored, evicted, pending, held)`**
 — a named tuple of counts: TCP segments taken; connections numbered so far;
@@ -127,7 +130,9 @@ contradicts the SYN the connection started with is ignored.
 ## Bounds
 
 Every amount a capture controls has a ceiling. Reaching the last three loses
-the wait and never the octets; only the first two drop held octets.
+the wait and never the octets; only the first two drop held octets. Every
+octet given up on is reported in the `missing` of an item, except where its
+connection was forgotten first: `stats.missing` counts those too.
 
 | What the capture controls | Ceiling | At the ceiling |
 | --- | --- | --- |

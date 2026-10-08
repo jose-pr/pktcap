@@ -20,7 +20,9 @@ class TCPStreamData(NamedTuple):
         are already counted in ``offset``.
     :ivar stream: the connection's number, shared by both directions, from 0
         in the order connections first appeared.
-    :ivar end: this direction is over after ``data``.
+    :ivar end: this direction is over after ``data``. When octets were given
+        up between the last ones handed out and the end, the end is an item
+        of its own, with no ``data`` and those octets in ``missing``.
     """
 
     time: float

@@ -87,13 +87,14 @@ class Engine:
     def _finish(
         self, direction: Direction, time: float, out: List[TCPStreamData]
     ) -> None:
-        """End a direction after what it delivered, in the last item it has
-        in ``out`` or in an empty one."""
+        """End a direction after what it delivered: in the last item it has
+        in ``out`` when that item reaches the end, else in an empty one, which
+        also carries the octets given up between the two."""
         direction.ended = True
         for index in range(len(out) - 1, -1, -1):
             item = out[index]
             if (item.stream, item.source) == (direction.stream, direction.source):
-                if not item.end:
+                if not item.end and not direction.lost:
                     out[index] = item._replace(end=True)
                     return
                 break

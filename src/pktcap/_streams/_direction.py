@@ -40,7 +40,12 @@ def _differing(old: bytes, new: bytes) -> int:
     """How many octets of two equal-length copies disagree."""
     if old == new:
         return 0
-    return sum(1 for a, b in zip(old, new) if a != b)
+    # Counted without a loop over the octets in Python: a capture chooses how
+    # many copies disagree and how long each is. The octets that agree are the
+    # zero octets of the two copies combined bit by bit.
+    size = len(old)
+    mixed = int.from_bytes(old, "big") ^ int.from_bytes(new, "big")
+    return size - mixed.to_bytes(size, "big").count(0)
 
 
 class Direction:
