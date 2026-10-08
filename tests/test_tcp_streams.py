@@ -354,7 +354,7 @@ def test_a_syn_seen_after_the_data_it_precedes_is_the_connections_own():
     wire = Wire()
     wire.send(1000, b"abc")
     assert wire.send(999, flags=SYN) == ()
-    assert wire.stats.streams == 1
+    assert wire.stats.streams == 1 and wire.stats.ignored == 0
     assert wire.send(1003, b"d")[0].offset == 3
 
 
@@ -765,6 +765,13 @@ def test_a_fin_exactly_far_is_believed_and_one_octet_beyond_is_not():
         assert view(wire.flush()) == ([(b"", 6 + FAR, FAR, 0, True)] if ends else [])
 
 
+def test_a_fin_far_ahead_on_a_segment_that_starts_within_the_limit_is_set_aside_alone():
+    wire = begun()
+    wire.send(1006 + FAR - 2, b"x" * 5, PSH | FIN)  # starts in range, FIN is not
+    assert wire.stats.held == 5 and wire.stats.ignored == 1
+    assert view(wire.flush()) == [(b"x" * 5, FAR + 4, FAR - 2, 0, False)]
+
+
 def test_two_far_segments_that_follow_one_another_move_the_direction():
     wire = begun()
     wire.send(1020, b"held")  # held at [20, 24)
@@ -820,7 +827,8 @@ def test_a_far_reset_is_set_aside_and_two_that_follow_one_another_reset():
     wire.send(1000 + FAR + 100, flags=RST)
     assert wire.stats.pending == 1  # the believed segment forgot the first
     got = wire.send(1000 + FAR + 100, flags=RST)
-    assert view(got)[-1][4] is True and wire.stats.pending == 0
+    assert view(got) == [(b"", 9, 0, 0, True), (b"", 0, 0, 0, True)]
+    assert wire.stats.pending == 0
 
 
 def test_a_reset_from_a_side_that_has_sent_nothing_is_believed_whatever_its_number():
@@ -1621,23 +1629,25 @@ def test_joined_octets_are_handed_out_as_bytes_the_first_copy_of_an_overlap_wins
 def test_the_work_to_join_segments_does_not_grow_with_what_is_held():
     import time as clock
 
+    size = 60000  # large segments, so that copying what is held dominates
+
     def cost(count):
         wire = Wire()
-        frames = [wire.frame(1000 + MSS * i, b"x" * MSS) for i in range(1, count + 1)]
+        frames = [wire.frame(1000 + size * i, b"x" * size) for i in range(1, count + 1)]
         best = float("inf")
-        for _ in range(5):
-            reassembler = TCPReassembler()
+        for _ in range(3):
+            reassembler = TCPReassembler(max_buffered=10**9)
             reassembler.add(wire.frame(999, flags=SYN))
             started = clock.perf_counter()
             for frame in frames:
                 reassembler.add(frame)
             best = min(best, clock.perf_counter() - started)
-        assert reassembler.stats.held == count * MSS
+        assert reassembler.stats.held == count * size
         return best
 
     # Joining by copying what is held each time costs the square: 8 times the
     # segments is about 64 times the work, against 8 when each costs the same.
-    assert cost(2000) < 24 * cost(250)
+    assert cost(400) < 24 * cost(50)
 
 
 def test_the_work_per_segment_does_not_grow_with_the_pieces_held():

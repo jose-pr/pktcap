@@ -42,13 +42,13 @@ class _Connection:
 def _snapped(layer: Union[IPv4Layer, IPv6Layer], packet: int) -> int:
     """The octets a snap length cut from the end of an IP packet, of which
     ``packet`` octets were captured: what its length field states beyond them.
-    A zero field (a jumbogram, a send the network card segments) states
-    nothing, and octets after the stated length are padding."""
+    A zero field (a jumbogram, a send the network card segments) states no
+    more than the header, and octets after the stated length are padding."""
     if isinstance(layer, IPv4Layer):
         stated = layer.length
     else:
-        stated = layer.payload_length + 40 if layer.payload_length else 0
-    return max(stated - packet, 0) if stated else 0
+        stated = layer.payload_length + 40
+    return max(stated - packet, 0)
 
 
 def _segment_of(

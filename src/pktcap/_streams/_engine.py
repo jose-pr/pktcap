@@ -223,7 +223,7 @@ class Engine:
         what it holds, gives up the octets up to ``start`` and goes on from
         there. Whether it was set aside."""
         far = direction.far
-        if direction.fin is None and far and far[0] <= start <= far[1] + FAR:
+        if far and far[0] <= start <= far[1] + FAR:
             direction.far = None
             if move:
                 self._emit(direction, direction.release_all(), time, out)
