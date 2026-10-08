@@ -183,15 +183,21 @@ class TCPReassembler(Engine):
                     return ()
             self._replace(key, conn, time, out)
             return tuple(out)
-        if conn is not None and conn.aside is not None:
-            if self._confirms(conn.aside, source, tcp):
-                origin, target, number = conn.aside
+        aside = conn.aside if conn is not None else None
+        if conn is not None and aside is not None:
+            if self._confirms(aside, source, tcp):
+                origin, target, number = aside
                 self._ignored -= 1
                 self._replace(key, conn, time, out)
                 conn = self._create(key)
                 conn.directions[origin] = Direction(
                     origin, target, conn.stream, self._shared, number, True
                 )
+            elif source == aside[0] and not tcp.syn and (data or tcp.fin):
+                # Its sender went on from somewhere else: the SYN was not its
+                # own. Kept, a stream that reached that number much later
+                # would confirm it.
+                conn.aside = None
         if conn is not None and tcp.syn:
             verdict = self._syn(conn, source, destination, tcp)
             if verdict == _IGNORE:

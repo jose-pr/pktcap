@@ -134,7 +134,8 @@ ends: the one-call form, as `read_datagrams` is for UDP.
    confirms it: one from the other side with ACK set whose acknowledgment
    number is the SYN's plus one, or one from the SYN's sender, other than a
    SYN, that starts from the SYN's number plus one up to 16,777,216 octets
-   beyond. Once confirmed, the connection it replaces ends, the SYN is not
+   beyond. When the sender's next segment with octets or a FIN starts
+   anywhere else, the SYN was not its own and is forgotten. Once confirmed, the connection it replaces ends, the SYN is not
    counted in `ignored`, the new connection starts on the same addresses
    with that SYN (offset 0 is the octet after it), and the confirming
    segment is read in it. The octets the SYN itself carried are not kept. On

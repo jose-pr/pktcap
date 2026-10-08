@@ -897,6 +897,23 @@ def test_a_syn_numbered_at_random_never_loses_an_octet():
         assert wire.octets(A, stream=0) + wire.octets(A, stream=1) == truth
 
 
+def test_a_set_aside_syn_is_forgotten_when_its_sender_goes_on_from_elsewhere():
+    """A SYN numbered a little ahead of a live stream: the sender's next
+    octets come from its own place, so the SYN was not its own. Remembered,
+    the stream would confirm it on reaching that number and split in two."""
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"hello ", PSH | ACK, ack=5000)
+    assert wire.send(6006, flags=SYN) == ()
+    body = b"".join(b"%04d " % n for n in range(1200))
+    for start in range(0, len(body), 100):
+        wire.send(1006 + start, body[start : start + 100], PSH | ACK, ack=5000)
+    wire.flush()
+    assert wire.stats.streams == 1
+    assert wire.octets(A, stream=0) == b"hello " + body
+    assert wire.stats.missing == 0 and wire.stats.ignored == 1
+
+
 def test_a_genuine_reuse_of_the_addresses_is_confirmed_by_its_syn_ack():
     wire = Wire()
     handshake(wire)
