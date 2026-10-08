@@ -112,6 +112,10 @@ class CaptureWriter:
                 )
         elif append:
             raise ValueError("a %s capture cannot be appended to" % self._format)
+        if append and per_record:
+            raise ValueError(
+                "append adds to one growing file: it cannot be used with per_record"
+            )
         self._fields = tuple(fields)
         self._pattern: Optional[str] = None
         if per_record:

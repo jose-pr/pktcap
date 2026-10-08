@@ -105,9 +105,15 @@ class Capture(Writing):
 
     def _frames(self, dissector: FrameDissector) -> Iterator[DissectedFrame]:
         self._until = self._deadline()
-        stop = None if self.duration is None else self._stop
+        stop = self._stop
         if self.listen is not None:
-            self._source = sniff_udp(self._bound(), stop=stop, dissector=dissector)
+            endpoints = self._bound()
+            try:
+                self._source = sniff_udp(endpoints, stop=stop, dissector=dissector)
+            except BaseException:
+                for endpoint in endpoints:  # the source turned them away
+                    getattr(endpoint, "close", lambda: None)()
+                raise
             return self._source  # type: ignore[no-any-return]
         if not has_live_capture():
             raise LiveCaptureError(_NOT_LINUX)
@@ -120,13 +126,8 @@ class Capture(Writing):
             return None
         if self.served():
             raise ValueError("a tool call cannot name a hook")
-        layer = self._origin("hook")
-        if layer not in self._hook_from_:
-            raise ValueError(
-                "--hook was set from the %s layer of a root's configuration; this "
-                "command takes a hook from: %s" % (layer, ", ".join(self._hook_from_))
-            )
-        name = self._chosen() or "json"
+        self._taken_from("hook", self._hook_from_)
+        name = self._written()
         self._hooked = make_hook(
             self.hook,
             format=name if name in RECORD_FORMATS else "json",
@@ -159,14 +160,14 @@ class Capture(Writing):
     def _bound(self) -> Tuple[UDPEndpoint, ...]:
         """``_endpoints()``, a failure of which is one line naming what was
         asked for."""
-        asked = (
-            self.listen
-            if isinstance(self.listen, str)
-            else ", ".join(self.listen or ())
-        )
         try:
             endpoints = self._endpoints()
         except OSError as exc:
+            asked = (
+                self.listen
+                if isinstance(self.listen, str)
+                else ", ".join(str(item) for item in self.listen or ())
+            )
             raise OSError(
                 "cannot listen on %s: %s" % (asked, bind_error_hint(exc) or exc)
             ) from exc

@@ -208,11 +208,6 @@ def test_a_tool_call_cannot_name_a_hook(tmp_path):
     assert not marker.exists()
 
 
-def test_logging_is_quiet_without_dash_v(caplog):
-    caplog.set_level(logging.WARNING)
-    assert [r for r in caplog.records if "listening" in r.getMessage()] == []
-
-
 def test_the_failures_of_a_python_function_are_logged_at_the_rate_a_program_is(
     hook_module, caplog
 ):

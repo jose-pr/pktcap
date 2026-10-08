@@ -104,8 +104,8 @@ context manager.
   pattern that is malformed or uses anything but bare field names (`{}`, `{0}`,
   `{xid.real}`); a pattern field that is neither built in nor in `fields`; a
   `fields` entry that is built in; a stream of `toml` or `ini` (one record per
-  file: they need `per_record=True`); `append` with a capture format;
-  `per_record` with a stream; a missing extra (`MissingExtraError`); a text
+  file: they need `per_record=True`); `append` with a capture format or with
+  `per_record`; `per_record` with a stream; a missing extra (`MissingExtraError`); a text
   stream (`TypeError`).
 - `write` raises `ValueError` for a closed writer or a field with no value,
   `TypeError` for an item of another type, and what `dumps_record` or the

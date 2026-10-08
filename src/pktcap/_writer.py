@@ -78,6 +78,8 @@ def _ip_packet(
     source: SocketAddress, destination: SocketAddress, payload: bytes, ident: int
 ) -> bytes:
     """The datagram under the IP and UDP headers it never had at a socket."""
+    if not isinstance(payload, (bytes, bytearray, memoryview)):
+        raise TypeError("payload must be bytes-like")
     src, sport = _endpoint(source, "source")
     dst, dport = _endpoint(destination, "destination")
     data = bytes(payload)

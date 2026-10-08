@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   lists the layers a subclass takes a hook from, of `"argument"`,
   `"environment"` and `"file"`; the plugin list never comes from a root's
   layers. A tool call cannot name `append`.
+- `Capture._stop` is asked whatever the options are, a hook is given the format
+  the writer writes (the ending of `--output` when it decides), a repeated
+  endpoint is a `ValueError` at the construction of `UDPCapture`, the sockets
+  a command bound are closed when the source refuses them, and `--append`
+  with `--per-record` is status 2 (`CaptureWriter` raises `ValueError`).
 - `UDPCapture` asks each endpoint whether it admits a datagram
   (`UDPEndpoint.admits`): one it does not is counted in the new
   `not_admitted` and gives no frame, in `sniff_udp` and `asniff_udp` as well.
@@ -108,7 +113,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   was turned away by the file budget.
 - `datagram_frame(datagram, *, interface=None, ident=0)` builds the raw-IP
   frame of a `CapturedDatagram`, the octets `PcapWriter` writes for it, so
-  that dissecting it gives the datagram back.
+  that dissecting it gives the datagram back for a whole datagram; a payload
+  that is not bytes-like is a `TypeError`.
 - `loads_record(text, format="json")` reads one record back from the text
   `dumps_record` writes, in the same four formats, as its inverse: for every
   record `dumps_record` takes, `loads_record(dumps_record(r, f), f) == r`,

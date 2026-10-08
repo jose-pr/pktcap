@@ -117,6 +117,11 @@ class Writing(Selecting):
             return self._format_
         return None
 
+    def _written(self) -> str:
+        """The name of the format the writer writes: what ``_chosen`` gives,
+        else the ending of ``--output``."""
+        return infer_format(self.output, self._chosen())
+
     def _writer(self) -> CaptureWriter:
         """The writer ``--output`` and ``--format`` name; nothing is opened
         until the first record. Capture octets are never sent to a terminal."""

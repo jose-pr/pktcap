@@ -79,7 +79,7 @@ returns the status and does not call `sys.exit`.
 | --- | --- |
 | `--output`/`-o TARGET` | a file; a file-name pattern with `--per-record`; `-` for standard output (default `-`) |
 | `--format` | one of `pcap`, `pcapng`, `json`, `yaml`, `toml`, `ini`, `text` (one readable line a frame). Omitted: from the ending of `--output`; `json` for `-` |
-| `--append` | add to a record file that exists instead of replacing it; a capture format cannot be appended to (status 2) |
+| `--append` | add to a record file that exists instead of replacing it; a capture format cannot be appended to, nor can `--per-record` (status 2) |
 | `--per-record` | one file per record, `--output` being the pattern (`{index}`, `{timestamp}`, `{format}`); needed for `toml` and `ini` |
 | `--max-files N` | with `--per-record`, the most files created (default 1000); the rest are counted as refused and the status is 1 |
 | `--datagrams` | write each frame's UDP datagram, IP fragments reassembled, and pass over frames without one. Omitted: write the frames. In a capture format a datagram is written under synthesised headers |
@@ -150,8 +150,8 @@ with no privilege.
   `*:PORT` or `:PORT`, an adapter name or a MAC, several joined by commas. A
   value with no port gets the command's `_default_port_`, and with none is
   refused (status 2, netimps' message). A taken port is status 1, one line
-  `cannot listen on SPEC: ...`. `-v` logs `listening on HOST:PORT` for each
-  socket, the way to learn a port 0. What it sees and does not (a made-up IP
+  `cannot listen on SPEC: ...`. `listening on HOST:PORT` is logged at INFO for
+  each socket, shown unless `-q`, the way to learn a port 0. What it sees and does not (a made-up IP
   header, no other host's traffic) and that it holds the port are in
   `_sources/AGENTS.md`. A datagram that arrives on an interface a limited
   socket does not serve is counted in the summary as `N not admitted`; one
@@ -263,8 +263,8 @@ wants a listing sets `"text"`. Methods, with when each is called:
 | `Writing._limit(self) -> Optional[int]` | once | the most items written; `Convert` gives `--limit`, `Capture` `--count` |
 | `Writing._hook(self) -> Optional[Callable[[DissectedFrame], object]]` | once, before the source | called after a frame is written, never for one the filter dropped |
 | `Writing._report(self, result: CopyResult, dissector: FrameDissector) -> int` | once, at the end, after Ctrl-C too | prints the summary on stderr; returns the status |
-| `Capture._endpoints(self) -> Tuple[UDPEndpoint, ...]` | once, when `--listen` is given | the default is `netimps.bind_listen` of `--listen` read with `_default_port_`; the capture owns what is returned; override for a family, broadcast or one socket per address |
-| `Capture._stop(self) -> bool` | between datagrams, at least once a second | the default is the `--duration` deadline |
+| `Capture._endpoints(self) -> Tuple[UDPEndpoint, ...]` | once, when `--listen` is given | the default is `netimps.bind_listen` of `--listen` read with `_default_port_`; the capture owns what is returned (and closes it if the source refuses it); override for a family, broadcast or one socket per address |
+| `Capture._stop(self) -> bool` | between datagrams, at least once a second, whatever the options | the default is the `--duration` deadline, false without one |
 | `Replay._destination` is private; `Replay._datagrams(self, registry) -> Iterator[CapturedDatagram]` | once | the filtered datagrams in capture order |
 | `Replay._replay(self, datagrams, host: str, port: int) -> Any` | once | default `replay_to` with the options; its result is given to `_report` |
 | `Replay._report(self, result: Any) -> Optional[int]` | once | default prints `sent N, partial M` |

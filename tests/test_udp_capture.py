@@ -841,3 +841,24 @@ def test_sniff_udp_gives_no_frame_for_a_datagram_its_endpoint_does_not_admit():
         assert frames.not_admitted == 1 and frames.truncated == 0
     finally:
         frames.close()
+
+
+def test_an_endpoint_given_twice_is_refused_at_construction_and_stays_the_callers():
+    endpoint = listener()
+    try:
+        with pytest.raises(ValueError, match="twice"):
+            pktcap.UDPCapture([endpoint, endpoint])
+        assert not closed(endpoint)
+    finally:
+        endpoint.close()
+
+
+def test_two_endpoints_over_one_socket_are_refused_too():
+    endpoint = listener()
+    other = UDPEndpoint(endpoint.socket)
+    try:
+        with pytest.raises(ValueError, match="twice"):
+            pktcap.UDPCapture([endpoint, other])
+        assert not closed(endpoint)
+    finally:
+        endpoint.close()

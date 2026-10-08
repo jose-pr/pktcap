@@ -87,6 +87,15 @@ class Loading(LoggingArgs, Cmd):
         layer = value_sources(self).get(field)
         return {"env": "environment", "config": "file"}.get(layer or "", "argument")
 
+    def _taken_from(self, field: str, layers: Tuple[str, ...]) -> None:
+        """``ValueError`` unless the field's value came from one of ``layers``."""
+        layer = self._origin(field)
+        if layer not in layers:
+            raise ValueError(
+                "--%s was set from the %s layer of a root's configuration; this "
+                "command takes it from: %s" % (field, layer, ", ".join(layers))
+            )
+
     def _registry(self) -> DissectorRegistry:
         """A registry of this run's own, with the plugins loaded into it:
         ``_plugins_`` first, then the user's list.

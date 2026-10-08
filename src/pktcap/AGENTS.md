@@ -470,7 +470,7 @@ Read when a list of plugins is asked for, never at import.
 - **A `CapturedDatagram` is not `netimps.Datagram`.** One is read from a
   capture (time, both addresses, payload); the other is received on a socket.
 - **A writer replaces an existing file at the first write**, not when it is
-  built. `CaptureWriter(append=True)` adds to a record file.
+  built. `CaptureWriter(append=True)` adds to a record file (not with `per_record`).
 - **Nothing here is safe to share between threads.** A frame dissector, a
   writer and a live capture each keep state.
 - **This library configures no logging, installs no signal handler and

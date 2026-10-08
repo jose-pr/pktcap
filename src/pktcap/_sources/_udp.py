@@ -74,8 +74,8 @@ class UDPCapture:
         of it is only its start.
     :raises TypeError: an endpoint that is not a ``UDPEndpoint``, or an option
         of the wrong type. The endpoints are then still the caller's.
-    :raises ValueError: no endpoint, more than 256, a ``timeout`` that is not
-        positive or a ``max_size`` outside 1 to 65535.
+    :raises ValueError: no endpoint, more than 256, an endpoint given twice, a
+        ``timeout`` that is not positive or a ``max_size`` outside 1 to 65535.
     """
 
     def __init__(
@@ -93,6 +93,8 @@ class UDPCapture:
         for endpoint in held:
             if not isinstance(endpoint, UDPEndpoint):
                 raise TypeError("endpoints must be netimps.UDPEndpoint objects")
+        if len({id(endpoint.socket) for endpoint in held}) != len(held):
+            raise ValueError("an endpoint is given twice")
         if not _number(timeout, "timeout") > 0:
             raise ValueError("timeout must be positive")
         if isinstance(max_size, bool) or not isinstance(max_size, int):

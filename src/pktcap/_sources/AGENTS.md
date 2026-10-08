@@ -90,21 +90,24 @@ interface's number or `None`; `ident` the IPv4 identification, kept to 16
 bits. A v4-mapped pair of addresses is an IPv4 packet, one IPv4 end with one
 IPv6 end an IPv6 packet with the IPv4 end mapped, and a zone is not on the
 wire. **The law:** `FrameDissector().dissect(datagram_frame(d)).datagram() == d`
-for a datagram whose hosts are written as they appear on the wire (a mapped
-pair comes back as plain IPv4 hosts, a zone comes back removed). `ValueError`
+for a whole datagram (`fragmented` and `truncated` false; a partial one comes
+back as a whole one) whose hosts are written as they appear on the wire (a
+mapped pair comes back as plain IPv4 hosts, a zone comes back removed). `ValueError`
 for a host that is no address (a name is not looked up), a port outside
 0-65535, a payload over 65,507 octets (IPv4) or 65,527 (IPv6), a time out of
-range or an `interface` outside 0 to 2**32 - 1; `TypeError` for a wrong type;
-nothing is built then.
+range or an `interface` outside 0 to 2**32 - 1; `TypeError` for a wrong type,
+a payload that is not bytes-like (`bytes`, `bytearray`, `memoryview`) among
+them; nothing is built then.
 
 **`UDPCapture(endpoints, *, timeout=1.0, max_size=65535)`** — the twin of
 `LiveCapture`, every platform. A context manager and an iterator of frames.
 
 - `endpoints` is an iterable of at most **256** bound `netimps.UDPEndpoint`
-  objects. **The capture owns them from construction** and closes them in
-  `close()`. A call that raises leaves them the caller's.
+  objects, each once. **The capture owns them from construction** and closes
+  them in `close()`. A call that raises leaves them the caller's.
 - `timeout` is how long `read()` waits (positive); `max_size` the largest
-  payload returned, 1 to 65,535. `ValueError` for no endpoint, more than 256, a
+  payload returned, 1 to 65,535. `ValueError` for no endpoint, more than 256, one
+  given twice, a
   `timeout` not above zero or a `max_size` outside range; `TypeError` for an
   item that is no `UDPEndpoint` or an option of the wrong type.
 - **`UDPCapture.read() -> Optional[CapturedFrame]`** — the next datagram as a

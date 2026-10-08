@@ -236,3 +236,16 @@ def test_the_frame_dissects_to_the_layers_a_capture_of_it_would():
     )
     assert [type(layer) for layer in frame.layers] == [IPv4Layer, UDPLayer]
     assert frame.layer(UDPLayer).destination_port == 69
+
+
+@pytest.mark.parametrize("payload", [5, [1, 2], "text", None, 10**9, (1, 2)])
+def test_a_payload_that_is_not_bytes_like_is_a_type_error_and_builds_nothing(payload):
+    with pytest.raises(TypeError, match="payload"):
+        datagram_frame(_datagram(("10.0.0.1", 1), ("10.0.0.2", 2), payload))
+
+
+@pytest.mark.parametrize("make", [bytearray, memoryview])
+def test_a_bytes_like_payload_is_taken_as_its_octets(make):
+    datagram = _datagram(("10.0.0.1", 1), ("10.0.0.2", 2), make(b"hello"))
+    frame = datagram_frame(datagram)
+    assert FrameDissector().dissect(frame).datagram().payload == b"hello"

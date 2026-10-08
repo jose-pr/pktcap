@@ -51,6 +51,7 @@ prints the reason for every skip: a skip is not a pass.
 | `test_cli_tools.py` | `convert` and `plugins` served as tools and nothing else: the tool list, a call that returns the records as its result, capture octets refused as text, and the real server driven over pipes with `PKTCAP_MCP=stdio` |
 | `test_cli_listen.py` | `pktcap capture --listen`: a datagram as a line of text, IPv6 in brackets, each kind of value, a wrong one refused before a socket binds, a taken port, a subclass's default port, and the real command line |
 | `test_hook_process.py` | how a hook's program is run: its own exit is the run, a descendant left holding its streams, a tree ended at the limit, a program that cannot be started, a bare name found on `PATH` alone |
+| `test_cli_capture_rules.py` | what a subclass and a user meet in `capture`: `_stop` without `--duration`, the format a hook is given, a `listen` that is not text, sockets closed when the source refuses them, `--append` with `--per-record` |
 | `test_cli_hook.py` | `--hook`: a program given the record, a failure counted or ending the capture, the time limit, `MODULE:FUNCTION` found where the interpreter finds it, a tool call refused |
 | `test_cli_origin.py` | where a hook and a plugin list may come from: a root's settings file or variable is refused, `_hook_from_` widens the hook alone, a tool call cannot name `append` |
 | `test_cli_subclass.py` | the contract: a demonstration subclass of each command using every override point, mixed with a foreign base that has its own `config` and `listen` |
