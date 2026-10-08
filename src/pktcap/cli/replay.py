@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Annotated, BinaryIO, Iterator, Optional, Union
+from typing import Annotated, Any, BinaryIO, ClassVar, Iterator, Optional, Tuple, Union
 
 from duho import Meta
 from netimps import Host, UDPEndpoint, bind, split_host
@@ -14,24 +14,26 @@ from .._dissect import FrameDissector, read_dissected
 from .._dissectors import DissectorRegistry
 from .._exceptions import CaptureFormatError
 from .._replay import replay_to
-from ._common import Base
+from ._common import Selecting
 
 __all__ = ["Replay"]
 
 
-class Replay(Base):
+class Replay(Selecting):
     """Send the payload of each UDP datagram of a capture, in order and in time, to the one destination --to names, never to the addresses in the file."""
 
     _parsername_ = "replay"
     # Puts datagrams on a network: not a call a program makes by accident.
     _mcp_ = False
+    #: The port of a ``--to`` that names none; ``None`` refuses such a value.
+    _default_port_: ClassVar[Optional[int]] = None
 
     input: str
     "The pcap or pcapng capture to read, or - for standard input"
     ("--input", "-i")
 
     to: str
-    "The destination, HOST:PORT (an IPv6 address in brackets): the only place anything is sent"
+    "The destination, HOST:PORT (an IPv6 address in brackets; the port may be left out where the command has a default): the only place anything is sent"
     ("--to",)
 
     speed: Annotated[float, Meta(conflicts="pace")] = 1.0
@@ -62,8 +64,10 @@ class Replay(Base):
     'Print the result as one JSON object, {"sent": N, "partial": M}. Omitted: text'
     ("--json",)
 
-    def _destination(self) -> "tuple[str, int]":
+    def _destination(self) -> Tuple[str, int]:
         host, port = split_host(self.to)
+        if port is None:
+            port = self._default_port_
         if port is None:
             raise ValueError(
                 "--to needs a port: HOST:PORT, with [ ] around an IPv6 address"
@@ -74,7 +78,8 @@ class Replay(Base):
         return sys.stdin.buffer if self.input == "-" else self.input
 
     def _datagrams(self, registry: DissectorRegistry) -> Iterator[CapturedDatagram]:
-        """The datagrams of the frames the filter keeps, in capture order."""
+        """The datagrams of the frames the filter keeps, in capture order:
+        what ``_replay`` is given."""
         wanted = self._select(registry)
         for frame in read_dissected(self._source(), dissector=FrameDissector(registry)):
             datagram = frame.datagram() if wanted(frame) else None
@@ -90,13 +95,15 @@ class Replay(Base):
         sock = bind(family_any, self.source_port or 0, broadcast=self.broadcast)
         return UDPEndpoint(sock, pktinfo=False)
 
-    def __call__(self) -> Optional[int]:
-        registry = self._registry()
-        host, port = self._destination()
+    def _replay(
+        self, datagrams: Iterator[CapturedDatagram], host: str, port: int
+    ) -> Any:
+        """Send the datagrams to the destination, paced and limited by the
+        options; returns what ``_report`` is given."""
         endpoint = self._endpoint(host)
         try:
-            result = replay_to(
-                self._datagrams(registry),
+            return replay_to(
+                datagrams,
                 host,
                 port,
                 endpoint=endpoint,
@@ -104,14 +111,25 @@ class Replay(Base):
                 max_delay=self.max_delay,
                 limit=self.limit,
             )
-        except CaptureFormatError as exc:
-            name = "standard input" if self.input == "-" else self.input
-            raise ValueError("%s: %s" % (name, exc)) from exc
         finally:
             if endpoint is not None:
                 endpoint.close()
+
+    def _report(self, result: Any) -> Optional[int]:
+        """Print the outcome on standard output: ``sent N, partial M``, or
+        the same as a JSON object with ``--json``."""
         if self.json_out:
             print(json.dumps({"sent": result.sent, "partial": result.partial}))
         else:
             print("sent %d, partial %d" % (result.sent, result.partial))
         return None
+
+    def __call__(self) -> Optional[int]:
+        registry = self._registry()
+        host, port = self._destination()
+        try:
+            result = self._replay(self._datagrams(registry), host, port)
+        except CaptureFormatError as exc:
+            name = "standard input" if self.input == "-" else self.input
+            raise ValueError("%s: %s" % (name, exc)) from exc
+        return self._report(result)

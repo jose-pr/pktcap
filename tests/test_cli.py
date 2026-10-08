@@ -134,9 +134,9 @@ def test_no_command_is_a_usage_error(capsys):
 
 def test_every_filter_key_is_in_the_help_of_the_option(capsys):
     """The help names the keys by hand; this keeps it the library's list."""
-    from pktcap.cli._common import Base
+    from pktcap.cli import Selecting
 
-    parser = Base._parser_()
+    parser = Selecting._parser_()
     text = parser.format_help()
     assert all(key in text for key in pktcap.FRAME_FILTER_KEYS)
 

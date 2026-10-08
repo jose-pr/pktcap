@@ -60,7 +60,7 @@ class Plugins(Loading):
         return lines
 
     def __call__(self) -> Optional[int]:
-        path = capture_config_path(self.config)
+        path = capture_config_path(self.plugin_config)
         configuration = None if path is None else str(path)
         registry = self._registry()
         keys = frame_filter_keys(registry)

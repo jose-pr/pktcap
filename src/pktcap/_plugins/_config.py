@@ -73,6 +73,11 @@ def _shown(text: str) -> str:
     return repr(text if len(text) <= 40 else text[:40] + "...")
 
 
+def is_dotted_name(text: str) -> bool:
+    """Whether ``text`` is a dotted Python name of a plugin item's length."""
+    return len(text) <= _MAX_ITEM_LENGTH and bool(_DOTTED_NAME.match(text))
+
+
 def _is_none(text: object) -> bool:
     return isinstance(text, str) and text.strip().lower() == "none"
 

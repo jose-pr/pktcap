@@ -51,7 +51,8 @@ def test_every_field_of_the_tool_says_what_it_is_and_what_omitting_it_means():
         "input",
         "limit",
         "plugins",
-        "config",
+        "plugin_config",
+        "append",
     }
     for name in own:
         assert properties[name]["description"], name

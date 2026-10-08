@@ -28,8 +28,9 @@ classifiers = [
 ]
 # netimps supplies the address, interface and socket helpers: the writer's
 # address handling, the sockets a replay sends through, the interface a live
-# capture names.
-dependencies = ["netimps>=0.4.0,<0.5"]
+# capture names. 0.4.1 added bind_listen (what `capture --listen` binds with)
+# and UDPEndpoint.admits (what the socket source asks of each datagram).
+dependencies = ["netimps>=0.4.1,<0.5"]
 
 [project.optional-dependencies]
 # One extra per record format that needs a third-party library. JSON and INI

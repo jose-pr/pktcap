@@ -119,7 +119,7 @@ def _summary_of(layer: object) -> str:
     if not isinstance(result, str):
         _failed(layer, "returned %s" % type(result).__name__)
         return ""
-    return result[: MAX_LINE + 1]
+    return result
 
 
 def frame_summary(frame: DissectedFrame) -> str:

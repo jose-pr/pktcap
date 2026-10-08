@@ -56,7 +56,7 @@ def test_a_header_below_the_top_is_listed_there_and_says_what_it_is(path):
     head = "\n".join(_lines(path)[:12])
     assert head.startswith("# `pktcap`")
     if path == _COMMAND_HEADER:
-        assert "not library API" in " ".join(head.split())
+        assert "only `main` and the command classes" in " ".join(head.split())
     else:
         assert "public API header" in head
         assert "private and not an import path" in " ".join(head.split())

@@ -45,6 +45,16 @@ class _Frames:
         self.close()
         raise StopIteration
 
+    @property
+    def truncated(self) -> int:
+        """Datagrams dropped for being over the size limit, so far."""
+        return self._capture.truncated
+
+    @property
+    def not_admitted(self) -> int:
+        """Datagrams dropped because their endpoint does not admit them."""
+        return self._capture.not_admitted
+
     def close(self) -> None:
         """End the iteration and close the sockets. Harmless when repeated."""
         self._done = True
@@ -78,6 +88,16 @@ class _AsyncFrames:
             raise
         await self.aclose()
         raise StopAsyncIteration
+
+    @property
+    def truncated(self) -> int:
+        """Datagrams dropped for being over the size limit, so far."""
+        return self._capture.truncated
+
+    @property
+    def not_admitted(self) -> int:
+        """Datagrams dropped because their endpoint does not admit them."""
+        return self._capture.not_admitted
 
     async def aclose(self) -> None:
         """End the iteration; every task has left and every socket is closed

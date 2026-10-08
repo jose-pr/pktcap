@@ -202,7 +202,7 @@ def test_dash_c_is_the_configuration_file_on_every_command_and_count_has_no_shor
             for action in command._parser_()._actions
             for option in action.option_strings
         }
-        assert owners["-c"] == owners["--config"] == "config", command.__name__
+        assert owners["-c"] == owners["--config"] == "plugin_config", command.__name__
     assert "-c" not in [
         o
         for a in Capture._parser_()._actions
@@ -292,8 +292,8 @@ def test_the_tools_served_are_convert_and_plugins():
 @pytest.mark.parametrize("command", ["pktcap.convert", "pktcap.plugins"])
 @pytest.mark.parametrize(
     "field, value",
-    [("plugins", ["NAME"]), ("config", "FILE")],
-    ids=["plugins", "config"],
+    [("plugins", ["NAME"]), ("plugin_config", "FILE")],
+    ids=["plugins", "plugin_config"],
 )
 def test_a_tool_call_that_names_plugins_or_a_file_is_refused_and_imports_nothing(
     command, field, value, trace, plugin_module, tmp_path

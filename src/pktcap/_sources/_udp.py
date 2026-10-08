@@ -65,6 +65,9 @@ class UDPCapture:
     closes them, once, in :meth:`close`. Not safe to share between threads.
 
     :param endpoints: bound :class:`netimps.UDPEndpoint` objects, at most 256.
+        An endpoint limited to interfaces (``UDPEndpoint(interfaces=)``) is
+        asked about every datagram: one it does not admit is counted in
+        :attr:`not_admitted` and dropped before a frame is built.
     :param timeout: how many seconds :meth:`read` waits for a datagram.
     :param max_size: the largest payload returned; a bigger datagram is
         counted in :attr:`truncated` and dropped, since what a socket returns
@@ -107,13 +110,20 @@ class UDPCapture:
         #: Datagrams over ``max_size`` (or that no frame can hold), read and
         #: dropped.
         self.truncated = 0
+        #: Datagrams an endpoint does not admit (``UDPEndpoint.admits``: they
+        #: arrived on an interface it does not serve), read and dropped.
+        self.not_admitted = 0
 
     def _frame(
         self, endpoint: UDPEndpoint, datagram: Datagram
     ) -> Optional[CapturedFrame]:
-        """The frame of one received datagram; ``None`` and counted when it is
-        too big, which a read of ``max_size + 1`` octets tells. The length, not
-        the receive flag, decides: the flag is wrong on some paths."""
+        """The frame of one received datagram; ``None`` and counted when its
+        endpoint does not admit it, or when it is too big, which a read of
+        ``max_size + 1`` octets tells. The length, not the receive flag,
+        decides: the flag is wrong on some paths."""
+        if not endpoint.admits(datagram):
+            self.not_admitted += 1
+            return None
         if len(datagram.data) > self._max_size:
             self.truncated += 1
             return None

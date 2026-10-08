@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import sys
-from typing import BinaryIO, Optional, Union
+from typing import BinaryIO, Iterator, Optional, Union
 
-from .._copy import copy_frames
-from .._dissect import FrameDissector, read_dissected
+from .._dissect import DissectedFrame, FrameDissector, read_dissected
 from .._exceptions import CaptureFormatError
 from ._writing import Writing
 
@@ -14,7 +13,7 @@ __all__ = ["Convert"]
 
 
 class Convert(Writing):
-    """Copy a pcap or pcapng capture, filtered, into pcap, pcapng or records (json, yaml, toml, ini)."""
+    """Copy a pcap or pcapng capture, filtered, into pcap, pcapng or records (json, yaml, toml, ini) or lines of text."""
 
     _parsername_ = "convert"
 
@@ -37,24 +36,19 @@ class Convert(Writing):
     def _name(self) -> str:
         return "standard input" if self.input == "-" else self.input
 
-    def __call__(self) -> Optional[int]:
-        registry = self._registry()
-        select = self._select(registry)
-        dissector = FrameDissector(registry)
-        with self._writer() as writer:
-            try:
-                result = copy_frames(
-                    read_dissected(self._source(), dissector=dissector),
-                    writer,
-                    select=select,
-                    datagrams=self.datagrams,
-                    limit=self.limit,
-                )
-            except CaptureFormatError as exc:
-                # The records before the damage are written; the exception
-                # never names the file, so this does.
-                raise ValueError(
-                    "%s: %s (%d written before it)"
-                    % (self._name(), exc, writer.written)
-                ) from exc
-        return self._report(result, dissector.stats, dissector)
+    def _limit(self) -> Optional[int]:
+        return self.limit
+
+    def _frames(self, dissector: FrameDissector) -> Iterator[DissectedFrame]:
+        return self._named(read_dissected(self._source(), dissector=dissector))
+
+    def _named(self, frames: Iterator[DissectedFrame]) -> Iterator[DissectedFrame]:
+        try:
+            yield from frames
+        except CaptureFormatError as exc:
+            # The records before the damage are written; the exception never
+            # names the file, so this does.
+            raise ValueError(
+                "%s: %s (%d written before it)"
+                % (self._name(), exc, self._open.written)
+            ) from exc

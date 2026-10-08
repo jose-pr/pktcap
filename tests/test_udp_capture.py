@@ -681,6 +681,34 @@ def test_a_queue_that_is_full_holds_the_readers_and_loses_nothing_it_took():
     assert seen == sorted(seen) and len(seen) == len(set(seen)) and seen
 
 
+def test_the_asynchronous_queue_stops_the_readers_so_the_kernel_drops_the_rest():
+    """A consumer that is not reading holds the readers at a bound: the rest of
+    what is sent is left to the kernel's buffer, which drops it. With no bound
+    the readers would keep taking every datagram off the socket."""
+    endpoint = listener()
+    sent = 2000
+
+    async def run():
+        capture = UDPCapture([endpoint], timeout=0.2)
+        try:
+            assert await capture.aread() is None  # the readers are running
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
+                for batch in range(sent // 20):
+                    for _ in range(20):
+                        sender.sendto(b"x" * 500, ("127.0.0.1", port_of(endpoint)))
+                    await asyncio.sleep(0.01)
+            await asyncio.sleep(0.3)
+            seen = 0
+            while await capture.aread() is not None:
+                seen += 1
+            return seen
+        finally:
+            await capture.aclose()
+
+    seen = asyncio.run(run())
+    assert 0 < seen < sent // 2
+
+
 # -- imports -----------------------------------------------------------------------
 
 
@@ -705,3 +733,105 @@ def test_the_socket_source_imports_no_asyncio_until_the_twin_is_used():
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert out.stdout.strip() == "False"
+
+
+# -- an endpoint limited to interfaces ------------------------------------------
+
+
+def _other_interface():
+    """An interface with an index that loopback traffic does not arrive on."""
+    from netimps import get_interfaces
+
+    loopback = get_interface("127.0.0.1").index
+    for interface in get_interfaces():
+        if interface.index and interface.index != loopback:
+            return interface
+    return None
+
+
+def limited(interfaces, host="127.0.0.1"):
+    endpoint = UDPEndpoint(bind(host, 0), interfaces=interfaces)
+    if not endpoint.has_pktinfo:
+        endpoint.close()
+        pytest.skip("this host reports no arrival interface")
+    return endpoint
+
+
+def test_a_datagram_from_an_interface_the_endpoint_does_not_serve_is_counted_not_returned():
+    other = _other_interface()
+    if other is None:
+        pytest.skip("this host has no adapter besides loopback")
+    endpoint = limited([other])
+    with UDPCapture([endpoint], timeout=0.5) as capture:
+        send(b"not for this endpoint", endpoint)
+        wait_readable(endpoint)
+        assert capture.read() is None
+        assert capture.not_admitted == 1 and capture.truncated == 0
+
+
+def test_a_datagram_from_an_interface_the_endpoint_serves_is_returned():
+    endpoint = limited([get_interface("127.0.0.1")])
+    with UDPCapture([endpoint]) as capture:
+        send(b"served", endpoint)
+        frame = read_one(capture)
+        assert capture.not_admitted == 0
+    assert FrameDissector().dissect(frame).datagram().payload == b"served"
+
+
+def test_one_endpoint_refusing_does_not_hide_the_datagram_of_another():
+    other = _other_interface()
+    if other is None:
+        pytest.skip("this host has no adapter besides loopback")
+    refusing, serving = limited([other]), limited([])
+    with UDPCapture([refusing, serving]) as capture:
+        send(b"dropped", refusing)
+        send(b"kept", serving)
+        wait_readable(refusing, serving)
+        frame = read_one(capture)
+        assert FrameDissector().dissect(frame).datagram().payload == b"kept"
+        assert capture.not_admitted == 1
+
+
+def test_the_asynchronous_read_drops_and_counts_what_the_endpoint_does_not_admit():
+    other = _other_interface()
+    if other is None:
+        pytest.skip("this host has no adapter besides loopback")
+    refusing, serving = limited([other]), limited([])
+
+    async def run():
+        capture = UDPCapture([refusing, serving], timeout=0.2)
+        try:
+            send(b"dropped", refusing)
+            send(b"kept", serving)
+            deadline = time.monotonic() + WAIT
+            frame = None
+            while frame is None and time.monotonic() < deadline:
+                frame = await capture.aread()
+            for _ in range(20):  # the refused one may still be in its reader's hand
+                if capture.not_admitted:
+                    break
+                await asyncio.sleep(0.05)
+            return frame, capture.not_admitted
+        finally:
+            await capture.aclose()
+
+    frame, count = asyncio.run(run())
+    assert FrameDissector().dissect(frame).datagram().payload == b"kept"
+    assert count == 1
+
+
+def test_sniff_udp_gives_no_frame_for_a_datagram_its_endpoint_does_not_admit():
+    other = _other_interface()
+    if other is None:
+        pytest.skip("this host has no adapter besides loopback")
+    refusing, serving = limited([other]), limited([])
+    frames = sniff_udp([refusing, serving])
+    try:
+        send(b"dropped", refusing)
+        send(b"kept", serving)
+        wait_readable(refusing, serving)
+        frame = next(frames)
+        assert frame.datagram().payload == b"kept"
+        assert frames.not_admitted == 1 and frames.truncated == 0
+    finally:
+        frames.close()

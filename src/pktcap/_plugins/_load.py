@@ -20,15 +20,18 @@ from ._config import (
     ConfigArgument,
     always_list,
     describe,
+    is_dotted_name,
     plugin_list,
 )
 
-__all__ = ["LoadedPlugin", "load_plugins"]
+__all__ = ["LoadedPlugin", "load_hook", "load_plugins"]
 
 _LOG = logging.getLogger(__name__)
 
 #: The attribute a plugin module offers: ``pktcap_plugin(registry)``.
 _HOOK = "pktcap_plugin"
+#: How an error names the option a hook is named by.
+_HOOK_SOURCE = "--hook"
 
 
 class LoadedPlugin(NamedTuple):
@@ -206,3 +209,33 @@ def load_plugins(
         registry._restore(snapshot)
         raise
     return tuple(loaded)
+
+
+def load_hook(spec: str) -> Callable[..., Any]:
+    """The callable ``MODULE:NAME`` names, imported as written.
+
+    Nothing is added to ``sys.path``: the module is found where the
+    interpreter would find it for any other import. ``NAME`` may be dotted
+    (``Class.method``). Importing runs the module's code, so the only caller
+    is the command line, for the one argument that names it.
+
+    :raises ValueError: ``spec`` is not two dotted Python names around one
+        ``:``, or names no module, no such attribute or something that is not
+        callable; or the module failed to import (a :class:`CapturePluginError`).
+    """
+    module_name, colon, attribute = spec.partition(":")
+    if not (colon and is_dotted_name(module_name) and is_dotted_name(attribute)):
+        raise _error(spec, _HOOK_SOURCE, "not MODULE:NAME, two dotted Python names")
+    try:
+        target: Any = _import(module_name, spec, _HOOK_SOURCE)
+    except _NoSuchModule as exc:
+        raise _error(spec, _HOOK_SOURCE, "no module of that name") from exc
+    for part in attribute.split("."):
+        target = getattr(target, part, None)
+        if target is None:
+            raise _error(
+                spec, _HOOK_SOURCE, "%r has no attribute %r" % (module_name, attribute)
+            )
+    if not callable(target):
+        raise _error(spec, _HOOK_SOURCE, "%s is not callable" % spec)
+    return target  # type: ignore[no-any-return]

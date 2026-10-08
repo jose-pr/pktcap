@@ -76,8 +76,12 @@ type of service from it.
 **It holds the port.** A server already bound to it makes the bind fail; with
 address reuse (`netimps.bind` allows it by default) the two sockets can share
 or take each other's datagrams. Bind without it
-(`netimps.bind(host, port, reuse_address=False)`), and to watch a port a server
-holds, capture on the interface instead.
+(`netimps.bind(host, port, reuse_address=False)`; `netimps.bind_listen` does,
+unless asked not to), and to watch a port a server holds, capture on the
+interface instead. **An endpoint limited to interfaces**
+(`UDPEndpoint(interfaces=)`, which `bind_listen` makes for an adapter name or a
+MAC) is asked about every datagram: one it does not admit
+(`UDPEndpoint.admits`) is counted in `not_admitted` and gives no frame.
 
 **`datagram_frame(datagram, *, interface=None, ident=0) -> CapturedFrame`** —
 a `CapturedDatagram` as the raw-IP frame (link type 101) a dissector reads,
@@ -115,6 +119,10 @@ nothing is built then.
   because they held more than `max_size` octets: a socket returns only the
   start of such a datagram, so it is counted and not returned. One read asks
   for `max_size + 1` octets and the count is by length.
+- **`UDPCapture.not_admitted`** — how many datagrams were read and dropped
+  because their endpoint does not admit them (they arrived on an interface it
+  does not serve; an endpoint with no limit admits all). Counted before the
+  size check, on `read()` and `aread()` alike.
 - **`UDPCapture.aread() -> Optional[CapturedFrame]`** — `read()` awaited: one
   task for each endpoint, started by the first call, feeds one queue of 64
   frames; a slow consumer stops the tasks and the kernel drops what its buffer
@@ -132,7 +140,8 @@ it ends, fails, is closed (`close()` on the iterator, also before the first
 frame) or is dropped. `stop()` is called between datagrams and at least once a
 second on a quiet socket; true ends the iteration. `TypeError` at the call for
 a `stop` that is not callable, a `dissector` that is not a `FrameDissector`, or
-an item that is no `UDPEndpoint`; `ValueError` for none or more than 256.
+an item that is no `UDPEndpoint`; `ValueError` for none or more than 256. The
+iterator has read-only `truncated` and `not_admitted` counts of its capture.
 
 **`asniff_udp(endpoints, *, dissector=None) -> AsyncIterator[DissectedFrame]`**
 — `sniff_udp` for an event loop, on `UDPEndpoint.arecv`. When it ends, fails or

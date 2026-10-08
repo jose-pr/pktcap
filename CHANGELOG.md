@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The `--config` option of the commands is the field `plugin_config` (the
+  flags `--config` and `-c` are unchanged), so a base class of another library
+  may have a `config` of its own; the tool-input key of `pktcap.convert` and
+  `pktcap.plugins` is `plugin_config`, and `pktcap.convert` takes `append`.
+  pktcap needs netimps 0.4.1.
 - Dissecting an IPv6 frame costs about half. An IPv6 address keeps its text
   (the 1,024 a process used last), since a capture names few hosts and every
   frame names two. What a caller gets back is the same.
@@ -24,6 +29,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The command classes are the base of a protocol library's commands.
+  `pktcap.cli` exports `main`, `Loading`, `Selecting` (was `Base`), `Writing`,
+  `Capture`, `Convert`, `Replay` and `Plugins`, bound on first use so that
+  importing it still needs no `duho`. A subclass sets `_plugins_`, `_filter_`,
+  `_fields_`, `_format_`, `_interruptible_` and `_default_port_`, and
+  overrides `_select`, `_frames`, `_names`, `_limit`, `_hook`, `_report`,
+  `_endpoints`, `_stop`, `_datagrams` and `_replay`; the loop that `convert`
+  and `capture` each held is `Writing.__call__`. `Replay` is split into
+  `_destination`, `_datagrams`, `_replay` and `_report`.
+- `pktcap capture --listen SPEC` (repeatable, excludes `--interface`) captures
+  the datagrams that arrive at UDP ports, on every platform and with no
+  privilege; `SPEC` is the grammar of `netimps.parse_listen`, bound with
+  `netimps.bind_listen`. `--hook`, `--hook-fail-fast` and `--hook-timeout`
+  run a program (or a Python `MODULE:FUNCTION`) for each record written.
+  `--append` on `convert` and `capture` adds to a record file.
+- `UDPCapture` asks each endpoint whether it admits a datagram
+  (`UDPEndpoint.admits`): one it does not is counted in the new
+  `not_admitted` and gives no frame, in `sniff_udp` and `asniff_udp` as well.
 - A UDP socket is a capture source, on every platform and with no privilege.
   `UDPCapture(endpoints, *, timeout=1.0, max_size=65535)` reads datagrams
   from bound `netimps.UDPEndpoint` objects (at most 256) and returns each as a

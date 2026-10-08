@@ -6,10 +6,12 @@ without running `--help`. It ships inside the package and is self-contained;
 the library's header is `pktcap/AGENTS.md`. Development documentation lives
 with the source at <https://github.com/jose-pr/pktcap>.
 
-`pktcap.cli` is the command line's package and is **not library API**: it is
-absent from `pktcap.__all__`, nothing here is importable by contract, and
-every command is a call into the library that a program can make itself
-(`copy_frames`, `replay_to`, `sniff_frames`, `load_plugins`).
+`pktcap.cli` is the command line's package. It is absent from
+`pktcap.__all__`, and **only `main` and the command classes in "Subclassing" are
+API**, for a library with a protocol of its own to subclass; everything else in
+the package is private. Every command is a call into the library that a program
+can make itself (`copy_frames`, `replay_to`, `sniff_frames`, `load_plugins`,
+`sniff_udp`, `command_hook`).
 
 ```bash
 pip install "pktcap[cli]"        # installs duho; the command is `pktcap` or `python -m pktcap`
@@ -37,8 +39,8 @@ returns the status and does not call `sys.exit`.
   `pktcap plugins` lists them all. Omitted: every frame. A bad expression is
   status 2, before anything is read.
 - **`--load NAME`** (every command; repeat it, or separate names by `,` `;`
-  `:` or space; `none` for none) and **`--config`/`-c FILE`** (`none` for no
-  file): the plugins to load, each a dotted module name with a
+  `:` or space; `none` for none) and **`--config`/`-c FILE`** (the field
+  `plugin_config`; `none` for no file): the plugins to load, each a dotted module name with a
   `pktcap_plugin(registry)` function or `MODULE.CALLABLE`. They are loaded
   into a registry of the command's own, before the filter is compiled and
   before anything is opened. The first of the option, the variable
@@ -75,7 +77,8 @@ returns the status and does not call `sys.exit`.
 | Option | Meaning |
 | --- | --- |
 | `--output`/`-o TARGET` | a file; a file-name pattern with `--per-record`; `-` for standard output (default `-`) |
-| `--format` | one of `pcap`, `pcapng`, `json`, `yaml`, `toml`, `ini`. Omitted: from the ending of `--output`; `json` for `-` |
+| `--format` | one of `pcap`, `pcapng`, `json`, `yaml`, `toml`, `ini`, `text` (one readable line a frame). Omitted: from the ending of `--output`; `json` for `-` |
+| `--append` | add to a record file that exists instead of replacing it; a capture format cannot be appended to (status 2) |
 | `--per-record` | one file per record, `--output` being the pattern (`{index}`, `{timestamp}`, `{format}`); needed for `toml` and `ini` |
 | `--max-files N` | with `--per-record`, the most files created (default 1000); the rest are counted as refused and the status is 1 |
 | `--datagrams` | write each frame's UDP datagram, IP fragments reassembled, and pass over frames without one. Omitted: write the frames. In a capture format a datagram is written under synthesised headers |
@@ -132,13 +135,42 @@ sent.
 
 ## `pktcap capture`
 
-`pktcap capture [--interface NAME] [--filter EXPR] [--output TARGET] [--format FMT] [--per-record] [--max-files N] [--datagrams] [--count N] [--duration SECONDS]`
+`pktcap capture [--interface NAME | --listen SPEC...] [--filter EXPR] [--output TARGET] [--format FMT] [--per-record] [--max-files N] [--datagrams] [--append] [--count N] [--duration SECONDS] [--hook COMMAND] [--hook-fail-fast] [--hook-timeout SECONDS]`
 
-Captures live and writes what it sees, never sending anything. **Linux only**
-(`AF_PACKET`), and the process needs `CAP_NET_RAW` (root, or
-`setcap cap_net_raw+ep` on the interpreter).
+Captures and writes what it sees, never sending anything. From an interface it
+is **Linux only** (`AF_PACKET`), and the process needs `CAP_NET_RAW` (root, or
+`setcap cap_net_raw+ep` on the interpreter). From `--listen` it runs anywhere,
+with no privilege.
 
 - `--interface NAME`: a name, an address or a MAC. Omitted: every interface.
+- `--listen SPEC` (repeatable, and excludes `--interface`, status 2): capture
+  the datagrams that arrive at sockets the command binds, read with
+  `netimps.parse_listen` before anything is opened: `HOST:PORT`, `[V6]:PORT`,
+  `*:PORT` or `:PORT`, an adapter name or a MAC, several joined by commas. A
+  value with no port gets the command's `_default_port_`, and with none is
+  refused (status 2, netimps' message). A taken port is status 1, one line
+  `cannot listen on SPEC: ...`. `-v` logs `listening on HOST:PORT` for each
+  socket, the way to learn a port 0. **What it sees:** datagrams delivered to
+  those ports on this host. **What it does not:** other hosts' unicast
+  traffic, anything this host sends, the link layer, the real IP header
+  (**made up**: TTL 64, no fragmentation, valid checksums) and fragments.
+  **It holds the port** (bound exclusively): a server already on it makes the
+  bind fail; capture on the interface to watch a port a server holds. A
+  datagram that arrives on an interface a limited socket does not serve (an
+  adapter name) is dropped and counted in the summary as `N not admitted`;
+  one over 65,535 octets as `N over the size limit`.
+- `--hook COMMAND`: run a program for each record written, with the record on
+  standard input (JSON when the output is a capture or `text`) and the values
+  the command names (`_names`) as `PKTCAP_HOOK_<FIELD>`, passed as
+  `command_hook` passes them. `COMMAND` is a program name on `PATH` or a path,
+  found once; **or `MODULE:FUNCTION`**, imported as written with nothing added
+  to `sys.path` and called with each `DissectedFrame`. The command comes from
+  this option alone (never a file, the environment, a tool call or a capture),
+  with no argument and no shell; a `.bat`/`.cmd` is refused on Windows.
+  `--hook-timeout SECONDS` (default 10) kills the program and what it started;
+  a failure is counted (`N hook failures` in the summary) and logged, and
+  `--hook-fail-fast` ends the capture at the first one with status 1. A hook
+  that cannot be found is status 2 before anything is bound.
 - `--count N`: stop once N records are written. Omitted: until stopped.
 - `--duration SECONDS`/`-d`: stop after that long, within a second of it. Omitted:
   until stopped.
@@ -190,9 +222,77 @@ layers: dhcp, ethernet, ipv4, ...
   **`plugins`** as `pktcap.plugins`, which only reads. The records come back as
   the tool's result; a capture format cannot be returned as text, so `format`
   `pcap` or `pcapng` needs an `output` file, and an `input` of `-` is refused.
-  A tool call that names `plugins` or `config` is refused (status 2, naming
-  `PKTCAP_LOAD`). `capture` runs until stopped and needs a privilege, and
-  `replay` puts datagrams on a network: neither is served.
+  A tool call that names `plugins` or `plugin_config` is refused (status 2,
+  naming `PKTCAP_LOAD`); `convert` also takes `append`. `capture` runs until stopped and binds ports or needs a privilege, and
+  `replay` puts datagrams on a network: neither is served, and a subclass that
+  serves `capture` is refused a `hook` in a tool call.
 - `AGENT_HELP=1` makes `--help` print one JSON document describing every
   command; `NO_COLOR` and `FORCE_COLOR` decide the colour of the help and the
   log.
+
+## Subclassing
+
+A library with a protocol of its own subclasses these classes and adds only what
+is the protocol's. `from pktcap.cli import Loading, Selecting, Writing, Capture,
+Convert, Replay, Plugins` binds each on first use, so `import pktcap.cli` needs
+no `duho`; without it the name is an `ImportError` (`MissingExtraError`)
+naming `pip install "pktcap[cli]"`. Class attributes ending in `_` and methods
+beginning with `_` listed below are the **override points**; nothing else
+beginning with `_` is promised.
+
+| Class | Options it declares | Class attributes |
+| --- | --- | --- |
+| `Loading(LoggingArgs, Cmd)` | `--load` (`plugins`), `--config`/`-c` (`plugin_config`) | `_plugins_ = ()`: dotted plugin names always loaded, first, source `always`; code's, never read from input |
+| `Selecting(Loading)` | `--filter`/`-f` | `_filter_ = None`: own clauses, ANDed with `--filter` |
+| `Writing(Selecting)` | `--output`, `--format`, `--per-record`, `--max-files`, `--datagrams`, `--append` | `_fields_ = ()` file-name fields beyond `timestamp`, `index`, `format`; `_interruptible_ = False`; `_format_ = None` |
+| `Convert(Writing)` | `--input`/`-i`, `--limit` | |
+| `Capture(Writing)` | `--interface`, `--listen`, `--count`, `--duration`/`-d`, `--hook`, `--hook-fail-fast`, `--hook-timeout`; `_interruptible_ = True` | `_default_port_ = None` (`None`, an `int` or a tuple of them) |
+| `Replay(Selecting)` | `--input`/`-i`, `--to`, `--speed`, `--no-delay`, `--max-delay`, `--limit`, `--source-port`, `--broadcast`, `--json` | `_default_port_ = None` (an `int` or `None`) |
+| `Plugins(Loading)` | `--layer`, `--json` | |
+
+`Loading.served() -> bool` is true in a tool call. `Writing.__call__` is the one
+loop and is not overridden: registry, `_select`, `_hook`, the writer, `_frames`,
+`copy_frames`, `_report`. `_format_` is the format when neither `--format` nor a
+known ending of `--output` names one (`None`: `json`); a protocol library that
+wants a listing sets `"text"`. Methods, with when each is called:
+
+| Override | Called | A subclass may assume |
+| --- | --- | --- |
+| `Selecting._select(self, registry) -> Callable[[DissectedFrame], bool]` | once, before the source is opened | the registry holds `_plugins_` and the user's; a bad expression is status 2; call `super()` to keep `_filter_` and `--filter` |
+| `Writing._frames(self, dissector: FrameDissector) -> Iterator[DissectedFrame]` | once, after the filter and the writer exist | the loop closes the iterator (`close()` if it has one); `ValueError` is status 2, `OSError` status 1, `KeyboardInterrupt` ends the run only when `_interruptible_` |
+| `Writing._names(self, frame) -> Mapping[str, object]` | for each frame the filter kept, before it is written, and by a hook | values for `_fields_`, and the hook's `PKTCAP_HOOK_*`; each passes the writer's file-name rule |
+| `Writing._limit(self) -> Optional[int]` | once | the most items written; `Convert` gives `--limit`, `Capture` `--count` |
+| `Writing._hook(self) -> Optional[Callable[[DissectedFrame], object]]` | once, before the source | called after a frame is written, never for one the filter dropped |
+| `Writing._report(self, result: CopyResult, dissector: FrameDissector) -> int` | once, at the end, after Ctrl-C too | prints the summary on stderr; returns the status |
+| `Capture._endpoints(self) -> Tuple[UDPEndpoint, ...]` | once, when `--listen` is given | the default is `netimps.bind_listen` of `--listen` read with `_default_port_`; the capture owns what is returned; override for a family, broadcast or one socket per address |
+| `Capture._stop(self) -> bool` | between datagrams, at least once a second | the default is the `--duration` deadline |
+| `Replay._destination` is private; `Replay._datagrams(self, registry) -> Iterator[CapturedDatagram]` | once | the filtered datagrams in capture order |
+| `Replay._replay(self, datagrams, host: str, port: int) -> Any` | once | default `replay_to` with the options; its result is given to `_report` |
+| `Replay._report(self, result: Any) -> Optional[int]` | once | default prints `sent N, partial M` |
+
+**What a subclass must do that a thin wrapper would not:**
+
+- A foreign base with a field of the same name wins silently if it comes first
+  in the bases (`duho` keeps the first). With a `--config` of its own the
+  parser fails to build (`conflicting option string`) until the subclass
+  redeclares `plugin_config` under a flag of its own (`("--pktcap-config",)`);
+  redeclaring `--listen` drops the exclusion with `--interface`, which it must
+  restate (`Meta(conflicts=...)`) if it wants it.
+- A root that serves the subclass maps `MissingExtraError` (an `ImportError`)
+  and `CaptureHookError` (an `OSError`) to status 1; `main`'s does.
+- A subclass that serves `Capture` as a tool (`_mcp_ = True`) is refused a
+  `hook` in a tool call by the class; do not remove that.
+- `_names` runs for hooks as well as file names, so it must not raise on a
+  frame the filter let through; `_filter_` is how it is guaranteed its layer.
+
+```python
+from pktcap.cli import Convert
+
+
+class Listing(Convert):
+    """Convert, with a filter of its own and a readable default."""
+
+    _parsername_ = "listing"
+    _filter_ = "proto=udp"
+    _format_ = "text"
+```

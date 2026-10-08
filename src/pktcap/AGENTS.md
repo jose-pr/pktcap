@@ -409,8 +409,10 @@ is a `CapturePluginError` and leaves the registry as it was. More:
 `pip install "pktcap[cli]"` installs the `pktcap` command (also
 `python -m pktcap`) with `capture`, `replay`, `convert` and `plugins`, each a
 call into this API (`sniff_frames`, `replay_to`, `copy_frames`, `load_plugins`).
-`pktcap.cli` is not library API and is in no export. `PKTCAP_MCP=stdio` serves
-`convert` and `plugins` as tools. Every option and status: `pktcap/cli/AGENTS.md`.
+`pktcap.cli` is in no export: `main` and the command classes (`Loading`,
+`Selecting`, `Writing`, `Capture`, `Convert`, `Replay`, `Plugins`) are the base a
+protocol library subclasses. `PKTCAP_MCP=stdio` serves `convert` and `plugins`
+as tools. Every option, status and override point: `pktcap/cli/AGENTS.md`.
 
 ## Exceptions
 
