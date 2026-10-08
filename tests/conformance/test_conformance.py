@@ -7,13 +7,18 @@ Each directory under ``cases/`` holds an input (``case.pcap``,
 
 - ``read-``: pktcap reads the same frames, names the same layers with the
   same fields in each, and decodes the same UDP datagrams.
+- ``read-`` and ``write-``, TCP: pktcap puts each stream back together as
+  tshark's ``follow`` does, the same octets in each direction with the same
+  gaps.
 - ``refuse-``: tshark fails on the capture, and pktcap raises
   ``CaptureFormatError`` after the same number of frames.
 - ``write-``: what a writer writes is, octet for octet, the file tshark read
   as the frames or datagrams asked for, with every checksum good.
 
 A case named in ``deviations.json`` is one where pktcap differs on purpose:
-it is asserted as pktcap behaves, and the README lists it.
+it is asserted as pktcap behaves, and the README lists it. An entry with
+``"reading": "streams"`` differs in the streams and nothing else; any other
+differs in the datagrams.
 """
 
 import hashlib
@@ -43,6 +48,7 @@ from pktcap import (
     read_datagrams,
     read_dissected,
     read_frames,
+    read_tcp_streams,
 )
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -54,11 +60,16 @@ DEVIATIONS = {
 README = HERE.parent.parent / "README.md"
 
 
+def _deviates(case, reading):
+    entry = DEVIATIONS.get(case.name)
+    return entry is not None and entry.get("reading", "datagrams") == reading
+
+
 def _named(prefix, deviating=False):
     return [
         pytest.param(case, id=case.name)
         for case in CASES
-        if case.name.startswith(prefix) and (case.name in DEVIATIONS) == deviating
+        if case.name.startswith(prefix) and _deviates(case, "datagrams") == deviating
     ]
 
 
@@ -303,7 +314,7 @@ def _assert_frames_are_the_recorded_ones(frames, rows):
 def test_there_are_cases_of_every_kind_and_each_has_a_golden():
     kinds = {case.name.split("-")[0] for case in CASES}
     assert kinds == {"read", "refuse", "write"}
-    assert len(CASES) >= 41
+    assert len(CASES) >= 53
     for case in CASES:
         assert (case / "golden.json").is_file(), case.name
 
@@ -417,6 +428,80 @@ def test_a_listed_deviation_behaves_as_listed_and_does_differ(case):
     # tshark read it and made datagrams of it: the two do differ.
     assert golden["exit_status"] == 0
     assert len(golden["datagrams"]) != len(datagrams) or raised
+
+
+# -- TCP streams ----------------------------------------------------------
+
+
+def _stream_cases(deviating):
+    return [
+        pytest.param(case, id=case.name)
+        for case in CASES
+        if "streams" in _golden(case) and _deviates(case, "streams") == deviating
+    ]
+
+
+def _node(address):
+    """A socket address as tshark names a node of a stream."""
+    host, port = address
+    return ("[%s]:%d" if ":" in host else "%s:%d") % (host, port)
+
+
+def _followed(case):
+    """What pktcap makes of the case's streams, in the shape of the golden:
+    ``{stream: {node: [[octets missing before, hex], ...]}}``, a direction
+    with nothing to say left out."""
+    if case.name.startswith("write-"):
+        question = json.loads((case / "case.json").read_text(encoding="utf-8"))
+        source = io.BytesIO(_written(question))
+    else:
+        source = _capture(case)
+    out = {}
+    for item in read_tcp_streams(source):
+        if not item.data and not item.missing:
+            continue  # an end marker: tshark prints none
+        runs = out.setdefault(item.stream, {}).setdefault(_node(item.source), [])
+        if runs and not item.missing:
+            runs[-1][1] += item.data.hex()
+        else:
+            runs.append([item.missing, item.data.hex()])
+    return out
+
+
+def _recorded_streams(golden):
+    out = {}
+    for stream in golden["streams"]:
+        nodes = dict(zip(stream["nodes"], stream["runs"]))
+        quiet = {node: runs for node, runs in nodes.items() if runs}
+        if quiet:  # a stream of a SYN alone has no octets to compare
+            out[stream["stream"]] = quiet
+    return out
+
+
+@pytest.mark.parametrize("case", _stream_cases(deviating=False))
+def test_pktcap_puts_the_streams_back_together_as_tshark_follow_does(case):
+    recorded = _recorded_streams(_golden(case))
+    assert _followed(case) == recorded
+
+
+def test_the_recorded_streams_include_a_gap_and_both_families():
+    gaps, hosts = 0, set()
+    for case in CASES:
+        for stream in _golden(case).get("streams", ()):
+            hosts.update("[" in node for node in stream["nodes"])
+            gaps += sum(1 for runs in stream["runs"] for run in runs if run[0])
+    assert gaps >= 1 and hosts == {True, False}
+
+
+@pytest.mark.parametrize("case", _stream_cases(deviating=True))
+def test_a_listed_stream_deviation_behaves_as_listed_and_does_differ(case):
+    expected = {
+        int(stream): nodes
+        for stream, nodes in DEVIATIONS[case.name]["pktcap"]["streams"].items()
+    }
+    ours = _followed(case)
+    assert ours == expected
+    assert ours != _recorded_streams(_golden(case))
 
 
 # -- refusing -------------------------------------------------------------

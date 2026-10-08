@@ -23,5 +23,23 @@
   "case": "read-built-pcapng-interfaces-without-end",
   "difference": "More than 4,096 interfaces described in one pcapng section: tshark reads the capture; pktcap raises `CaptureFormatError`.",
   "pktcap": {"raises": true, "frames": 0}
+ },
+ {
+  "case": "read-built-tcp-stream-missing-unacknowledged",
+  "reading": "streams",
+  "difference": "Octets beyond a hole that nothing acknowledges: tshark holds them back for good and follows only what came before the hole; pktcap gives the hole up when the capture ends and delivers them with the count of octets missing before them.",
+  "pktcap": {"streams": {"0": {"192.0.2.5:50000": [[0, "68656164"], [15, "7461696c6d6f7265"]]}}}
+ },
+ {
+  "case": "read-built-tcp-stream-reset",
+  "reading": "streams",
+  "difference": "A segment after a reset in sequence: tshark keeps it in the same stream; pktcap takes the reset at its word, ends the connection there and numbers what follows as a new stream.",
+  "pktcap": {"streams": {"0": {"192.0.2.5:50000": [[0, "6265666f726520746865207265736574"]], "192.0.2.1:80": [[0, "7265706c79"]]}, "1": {"192.0.2.5:50000": [[0, "616674657220746865207265736574"]]}}}
+ },
+ {
+  "case": "read-built-tcp-vlan",
+  "reading": "streams",
+  "difference": "A reset in sequence, then another segment on the same addresses: tshark follows one stream there; pktcap starts a new stream after the reset, so its streams are numbered 0, 1 and 2 where tshark's are 0 and 1.",
+  "pktcap": {"streams": {"1": {"[2001:db8::5]:50000": [[0, "7369787465656e206f63746574732e2e"]]}, "2": {"192.0.2.5:50000": [[0, "7369787465656e206f63746574732e2e"]]}}}
  }
 ]

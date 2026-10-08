@@ -1,0 +1,139 @@
+{
+ "datagrams": [],
+ "error": null,
+ "exit_status": 0,
+ "frames": 4,
+ "layers": [
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x0800",
+   "frame.cap_len": "71",
+   "frame.number": "1",
+   "frame.protocols": "eth:ethertype:ip:tcp",
+   "frame.time_epoch": "1700000000.000000000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "57",
+   "ip.proto": "6",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "tcp.ack_raw": "90000",
+   "tcp.dstport": "80",
+   "tcp.flags": "0x0018",
+   "tcp.hdr_len": "20",
+   "tcp.payload": "616c72656164792072756e6e696e672c20",
+   "tcp.seq_raw": "700000",
+   "tcp.srcport": "50000",
+   "tcp.window_size_value": "4096"
+  },
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x0800",
+   "frame.cap_len": "63",
+   "frame.number": "2",
+   "frame.protocols": "eth:ethertype:ip:tcp",
+   "frame.time_epoch": "1700000001.000000000",
+   "ip.dst": "192.0.2.5",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "49",
+   "ip.proto": "6",
+   "ip.src": "192.0.2.1",
+   "ip.ttl": "64",
+   "tcp.ack_raw": "700017",
+   "tcp.dstport": "50000",
+   "tcp.flags": "0x0018",
+   "tcp.hdr_len": "20",
+   "tcp.payload": "7265706c79206f6e65",
+   "tcp.seq_raw": "90000",
+   "tcp.srcport": "80",
+   "tcp.window_size_value": "4096"
+  },
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x0800",
+   "frame.cap_len": "60",
+   "frame.number": "3",
+   "frame.protocols": "eth:ethertype:ip:tcp",
+   "frame.time_epoch": "1700000002.000000000",
+   "ip.dst": "192.0.2.1",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "46",
+   "ip.proto": "6",
+   "ip.src": "192.0.2.5",
+   "ip.ttl": "64",
+   "tcp.ack_raw": "90009",
+   "tcp.dstport": "80",
+   "tcp.flags": "0x0018",
+   "tcp.hdr_len": "20",
+   "tcp.payload": "616e64206f6e",
+   "tcp.seq_raw": "700017",
+   "tcp.srcport": "50000",
+   "tcp.window_size_value": "4096"
+  },
+  {
+   "eth.dst": "02:02:02:02:02:02",
+   "eth.src": "04:04:04:04:04:04",
+   "eth.type": "0x0800",
+   "frame.cap_len": "62",
+   "frame.number": "4",
+   "frame.protocols": "eth:ethertype:ip:tcp",
+   "frame.time_epoch": "1700000003.000000000",
+   "ip.dst": "192.0.2.5",
+   "ip.flags.df": "False",
+   "ip.flags.mf": "False",
+   "ip.frag_offset": "0",
+   "ip.id": "0x0001",
+   "ip.len": "48",
+   "ip.proto": "6",
+   "ip.src": "192.0.2.1",
+   "ip.ttl": "64",
+   "tcp.ack_raw": "700023",
+   "tcp.dstport": "50000",
+   "tcp.flags": "0x0018",
+   "tcp.hdr_len": "20",
+   "tcp.payload": "20616e642074776f",
+   "tcp.seq_raw": "90009",
+   "tcp.srcport": "80",
+   "tcp.window_size_value": "4096"
+  }
+ ],
+ "reference": {
+  "environment": "Linux aarch64",
+  "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
+ },
+ "streams": [
+  {
+   "nodes": [
+    "192.0.2.5:50000",
+    "192.0.2.1:80"
+   ],
+   "runs": [
+    [
+     [
+      0,
+      "616c72656164792072756e6e696e672c20616e64206f6e"
+     ]
+    ],
+    [
+     [
+      0,
+      "7265706c79206f6e6520616e642074776f"
+     ]
+    ]
+   ],
+   "stream": 0
+  }
+ ]
+}

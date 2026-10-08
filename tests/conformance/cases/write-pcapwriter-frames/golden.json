@@ -122,5 +122,23 @@
   "environment": "Linux aarch64",
   "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
  },
- "sha256": "5c0f16157a8362b6e0732accea7e3f471823476e322d7519ff536fab6c852ea7"
+ "sha256": "5c0f16157a8362b6e0732accea7e3f471823476e322d7519ff536fab6c852ea7",
+ "streams": [
+  {
+   "nodes": [
+    "[2001:db8::5]:50000",
+    "[2001:db8::1]:47001"
+   ],
+   "runs": [
+    [
+     [
+      0,
+      "7369787465656e206f63746574732e2e"
+     ]
+    ],
+    []
+   ],
+   "stream": 0
+  }
+ ]
 }

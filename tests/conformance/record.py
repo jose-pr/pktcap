@@ -9,15 +9,18 @@ importable for the ``write-`` cases, whose input is what a writer makes of
 never edited by hand. ``test_conformance.py`` replays the goldens and needs
 neither this script nor tshark.
 
-A golden holds two readings of the capture: ``layers``, one row per frame of
-the fields tshark printed for the layers this library has dissectors for, and
-``datagrams``, one row per UDP datagram with its payload.
+A golden holds up to three readings of the capture: ``layers``, one row per
+frame of the fields tshark printed for the layers this library has dissectors
+for; ``datagrams``, one row per UDP datagram with its payload; and, for a
+capture with TCP in it, ``streams``, the octets of each direction of each TCP
+stream as tshark's ``follow`` gives them.
 """
 
 import hashlib
 import json
 import pathlib
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -130,6 +133,54 @@ def _fields(path, fields, extra):
     ]
 
 
+#: What ``follow`` prints in place of octets the capture does not hold, in
+#: hex: "[15 bytes missing in capture file]" and a NUL.
+_MISSING = re.compile(rb"\[(\d+) bytes? missing in capture file\]\x00")
+
+
+def _follow(text):
+    """One stream of ``follow,tcp,raw`` output as plain data.
+
+    ``nodes`` are the two socket addresses as tshark names them, in its order;
+    ``runs[i]`` is what node ``i`` sent: ``[octets missing before, hex]`` for
+    each run of octets with no gap inside. The chunks tshark prints, one per
+    segment, are joined; a line indented by a tab is node 1's.
+    """
+    nodes = [None, None]
+    runs = [[], []]
+    gap = [0, 0]
+    inside = False
+    for line in text.splitlines():
+        if line.startswith("Node "):
+            nodes[int(line[5])] = line.split(": ", 1)[1].strip()
+            inside = line.startswith("Node 1")
+        elif inside and line.strip() and not line.startswith("="):
+            side = 1 if line.startswith("\t") else 0
+            raw = bytes.fromhex(line.strip())
+            marker = _MISSING.fullmatch(raw)
+            if marker:
+                gap[side] += int(marker.group(1))
+            elif runs[side] and not gap[side]:
+                runs[side][-1][1] += raw.hex()
+            else:
+                runs[side].append([gap[side], raw.hex()])
+                gap[side] = 0
+    return {"nodes": nodes, "runs": runs}
+
+
+def _streams(path):
+    """tshark's follow of every TCP stream in the capture, or ``None``."""
+    listed = _tshark(["-r", str(path), "-T", "fields", "-e", "tcp.stream"])
+    numbers = sorted({int(n) for n in re.findall(r"\d+", listed.stdout)})
+    if not numbers:
+        return None
+    out = []
+    for number in numbers:
+        shown = _tshark(["-r", str(path), "-q", "-z", "follow,tcp,raw,%d" % number])
+        out.append(dict(_follow(shown.stdout), stream=number))
+    return out
+
+
 def _ask(path, verify=False):
     """tshark's reading of one capture file, as plain data."""
     frames = _tshark(["-r", str(path), "-T", "fields", "-e", "frame.number"])
@@ -161,13 +212,17 @@ def _ask(path, verify=False):
     if frames.returncode:
         # The message names the file by the path it was given: drop it.
         error = frames.stderr.strip().splitlines()[0].replace(str(path), "case")
-    return {
+    asked = {
         "exit_status": frames.returncode,
         "error": error,
         "frames": count,
         "layers": layers,
         "datagrams": datagrams,
     }
+    streams = _streams(path) if not frames.returncode else None
+    if streams is not None:
+        asked["streams"] = streams
+    return asked
 
 
 def written(question):

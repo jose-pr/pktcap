@@ -57,6 +57,161 @@ def _v6_fragments(datagram, size, ident, order=None):
     return [packets[i] for i in order] if order else packets
 
 
+# TCP streams: a client at ``A4`` and a server at ``B4``. Every case is
+# spelled out segment by segment, so the sequence numbers are the question.
+PSH_ACK, SYN, SYN_ACK, FIN_ACK, RST_ACK, ACK = 0x18, 0x02, 0x12, 0x11, 0x14, 0x10
+CLIENT, SERVER = (A4, 50000), (B4, 80)
+
+
+def _segment(sender, seq, ack, data=b"", flags=PSH_ACK, *, v6=False):
+    """One Ethernet frame holding a TCP segment from the client or the server."""
+    source, target = (CLIENT, SERVER) if sender == "c" else (SERVER, CLIENT)
+    if v6:
+        hosts = (A6, B6) if sender == "c" else (B6, A6)
+        source, target = (hosts[0], source[1]), (hosts[1], target[1])
+    return build.tcp_frame(
+        source[0],
+        target[0],
+        source[1],
+        target[1],
+        seq,
+        data,
+        flags=flags,
+        acknowledgment=ack,
+    )
+
+
+def _opening(client_isn=1000, server_isn=5000, **kw):
+    """The three-way handshake."""
+    return [
+        _segment("c", client_isn, 0, flags=SYN, **kw),
+        _segment("s", server_isn, client_isn + 1, flags=SYN_ACK, **kw),
+        _segment("c", client_isn + 1, server_isn + 1, flags=ACK, **kw),
+    ]
+
+
+def tcp_cases():
+    """``{case name: (file name, octets)}`` for the TCP stream cases."""
+    out = {}
+    request = b"GET /index HTTP/1.1\r\nHost: x\r\n\r\n"
+    response = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
+    c1, s1 = 1001, 5001
+
+    def exchange(**kw):
+        return _opening(**kw) + [
+            _segment("c", c1, s1, request, **kw),
+            _segment("s", s1, c1 + len(request), flags=ACK, **kw),
+            _segment("s", s1, c1 + len(request), response, **kw),
+            _segment("c", c1 + len(request), s1 + len(response), flags=FIN_ACK, **kw),
+            _segment(
+                "s", s1 + len(response), c1 + len(request) + 1, flags=FIN_ACK, **kw
+            ),
+            _segment(
+                "c", c1 + len(request) + 1, s1 + len(response) + 1, flags=ACK, **kw
+            ),
+        ]
+
+    def pcap(frames):
+        return ("case.pcap", build.pcap(frames, start=T0))
+
+    out["read-built-tcp-stream-exchange"] = pcap(exchange())
+    out["read-built-tcp-stream-ipv6"] = pcap(exchange(v6=True))
+
+    message = bytes(range(65, 65 + 40))  # 40 octets in four pieces of ten
+    pieces = [(c1 + 10 * i, message[10 * i : 10 * i + 10]) for i in range(4)]
+    out["read-built-tcp-stream-out-of-order"] = pcap(
+        _opening()
+        + [
+            _segment("c", seq, s1, data)
+            for seq, data in [pieces[i] for i in (3, 1, 0, 2)]
+        ]
+        + [_segment("s", s1, c1 + 40, flags=ACK)]
+    )
+    out["read-built-tcp-stream-retransmission"] = pcap(
+        _opening()
+        + [
+            _segment("c", c1, s1, b"aaaaaaaa"),
+            _segment("c", c1, s1, b"aaaaaaaa"),
+            _segment("c", c1 + 8, s1, b"bbbbbbbb"),
+            _segment("c", c1, s1, b"aaaaaaaa"),
+            _segment("c", c1 + 4, s1, b"aaaabbbb"),
+            _segment("c", c1 + 16, s1, b"cccccccc"),
+        ]
+    )
+    # A hole, two copies of the octets beyond it, then the octets that fill it.
+    out["read-built-tcp-stream-overlap-agrees"] = pcap(
+        _opening()
+        + [
+            _segment("c", c1 + 10, s1, b"ABCDEFGHIJ"),
+            _segment("c", c1 + 15, s1, b"FGHIJklmno"),
+            _segment("c", c1, s1, b"0123456789"),
+        ]
+    )
+    out["read-built-tcp-stream-overlap-disagrees"] = pcap(
+        _opening()
+        + [
+            _segment("c", c1 + 10, s1, b"ABCDEFGHIJ"),
+            _segment("c", c1 + 15, s1, b"fghijklmno"),
+            _segment("c", c1, s1, b"0123456789"),
+        ]
+    )
+    lost = b"lost in capture"
+    out["read-built-tcp-stream-missing-acknowledged"] = pcap(
+        _opening()
+        + [
+            _segment("c", c1, s1, b"head"),
+            _segment("c", c1 + 4 + len(lost), s1, b"tail"),
+            _segment("s", s1, c1 + 8 + len(lost), flags=ACK),
+            _segment("s", s1, c1 + 8 + len(lost), b"reply"),
+        ]
+    )
+    out["read-built-tcp-stream-missing-unacknowledged"] = pcap(
+        _opening()
+        + [
+            _segment("c", c1, s1, b"head"),
+            _segment("c", c1 + 4 + len(lost), s1, b"tail"),
+            _segment("c", c1 + 8 + len(lost), s1, b"more"),
+        ]
+    )
+    out["read-built-tcp-stream-mid-capture"] = pcap(
+        [
+            _segment("c", 700000, 90000, b"already running, "),
+            _segment("s", 90000, 700017, b"reply one"),
+            _segment("c", 700017, 90009, b"and on"),
+            _segment("s", 90009, 700023, b" and two"),
+        ]
+    )
+    wrap = 0xFFFFFFF0
+    wrapped = [(wrap + 1 + 10 * i, message[10 * i : 10 * i + 10]) for i in range(4)]
+    out["read-built-tcp-stream-sequence-wraps"] = pcap(
+        _opening(client_isn=wrap)
+        + [
+            _segment("c", seq & 0xFFFFFFFF, s1, data)
+            for seq, data in [wrapped[i] for i in (0, 2, 1, 3)]
+        ]
+    )
+    out["read-built-tcp-stream-reset"] = pcap(
+        _opening()
+        + [
+            _segment("c", c1, s1, b"before the reset"),
+            _segment("s", s1, c1 + 16, b"reply"),
+            _segment("s", s1 + 5, c1 + 16, flags=RST_ACK),
+            _segment("c", c1 + 16, s1 + 5, b"after the reset"),
+        ]
+    )
+    again = exchange()
+    out["read-built-tcp-stream-same-addresses-twice"] = pcap(
+        again
+        + _opening(client_isn=900000, server_isn=300000)
+        + [
+            _segment("c", 900001, 300001, b"second connection"),
+            _segment("s", 300001, 900018, b"second reply"),
+            _segment("c", 900018, 300013, flags=FIN_ACK),
+        ]
+    )
+    return out
+
+
 def cases():
     """``{case name: (file name, octets)}``."""
     request = build.udp(50000, 69, b"\x00\x01boot.efi\x00octet\x00")
@@ -316,6 +471,7 @@ def cases():
         "case.pcapng",
         ng + struct.pack("<II", 6, 1 << 30) + bytes(64),
     )
+    out.update(tcp_cases())
     return out
 
 

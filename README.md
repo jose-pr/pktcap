@@ -274,18 +274,20 @@ sudo pktcap capture --config ~/.config/pktcap/pktcap.ini -f "proto=dhcp" -o dhcp
 ## Differences from tshark
 
 The reference for what a capture holds is **tshark 4.6.8** (Wireshark's
-command-line reader). `tests/conformance/` records what it says about 41
+command-line reader). `tests/conformance/` records what it says about 53
 captures, written by tcpdump 4.99.6, by Wireshark's editcap, by this library's
 writers and its live capture, and by hand, and the suite replays those answers
 with no tool installed. Fidelity is to results: how many frames a capture
 holds; for each frame, which layers it has and the fields of each (addresses,
 VLAN tags, protocol numbers, ports, TCP sequence numbers, flags, options and
-segment payload); which UDP datagrams it carries; which captures are refused
+segment payload); which UDP datagrams it carries; the octets of each
+direction of each TCP stream, and where octets are missing; which captures are refused
 and after how many frames; and that tshark reads what `PcapWriter` and
 `PcapngWriter` write, as the frames they were given and with every checksum
 good. Message texts and exit statuses are not reproduced.
 
-pktcap differs on purpose in these cases, each a bound on untrusted input:
+pktcap differs on purpose in these cases, each a bound on untrusted input or a
+rule it states for what a passive reader cannot know:
 
 | Case | Difference |
 | --- | --- |
@@ -294,6 +296,9 @@ pktcap differs on purpose in these cases, each a bound on untrusted input:
 | `read-built-fragments-without-end` | One datagram in more than 1,024 fragments: tshark reassembles it; pktcap gives it up at the 1,025th. |
 | `read-built-reassemblies-in-flight` | More than `max_reassemblies` (256) datagrams being reassembled at once: tshark holds them all and completes the first when its last fragment arrives; pktcap discarded the oldest when the 257th started, and the rest stay counted in `pending`. |
 | `read-built-pcapng-interfaces-without-end` | More than 4,096 interfaces described in one pcapng section: tshark reads the capture; pktcap raises `CaptureFormatError`. |
+| `read-built-tcp-stream-missing-unacknowledged` | Octets beyond a hole that nothing acknowledges: tshark holds them back for good and follows only what came before the hole; pktcap gives the hole up when the capture ends and delivers them with the count of octets missing before them. |
+| `read-built-tcp-stream-reset` | A segment after a reset in sequence: tshark keeps it in the same stream; pktcap takes the reset at its word, ends the connection there and numbers what follows as a new stream. |
+| `read-built-tcp-vlan` | A reset in sequence, then another segment on the same addresses: tshark follows one stream there; pktcap starts a new stream after the reset, so its streams are numbered 0, 1 and 2 where tshark's are 0 and 1. |
 
 Two more ceilings are lower than tshark's and have no case, because a capture
 that reaches them is large: a pcapng packet block over 327,680 octets (tshark:

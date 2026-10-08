@@ -249,5 +249,39 @@
   "environment": "Linux aarch64",
   "tshark": "TShark (Wireshark) 4.6.8 (Git commit e677bf052328)."
  },
- "sha256": "d1ab543824c7ac51a1ffddc054be91fae54d4f0b8cdabc5c259568e5f3ff50d7"
+ "sha256": "d1ab543824c7ac51a1ffddc054be91fae54d4f0b8cdabc5c259568e5f3ff50d7",
+ "streams": [
+  {
+   "nodes": [
+    "[2001:db8::5]:50000",
+    "[2001:db8::1]:47001"
+   ],
+   "runs": [
+    [
+     [
+      0,
+      "7369787465656e206f63746574732e2e"
+     ]
+    ],
+    []
+   ],
+   "stream": 0
+  },
+  {
+   "nodes": [
+    "192.0.2.5:50000",
+    "192.0.2.1:47001"
+   ],
+   "runs": [
+    [
+     [
+      0,
+      "7369787465656e206f63746574732e2e"
+     ]
+    ],
+    []
+   ],
+   "stream": 1
+  }
+ ]
 }
