@@ -2,7 +2,8 @@
 
 Each is a named tuple of plain values: addresses are text, flags are numbers
 or booleans, so a layer is immutable, hashable, and ``layer._asdict()`` is a
-record ready for any output format. Re-exported from :mod:`pktcap`.
+record ready for any output format. Each has a ``summary()``: one line saying
+what the header holds, for a person. Re-exported from :mod:`pktcap`.
 """
 
 from __future__ import annotations
@@ -23,6 +24,41 @@ __all__ = [
 ]
 
 
+def layer_name(layer: object) -> str:
+    """The name a layer goes by in a record and in a summary: its class name
+    without a trailing ``Layer``, in lower case."""
+    name = type(layer).__name__
+    if name.endswith("Layer") and len(name) > 5:
+        name = name[:-5]
+    return name.lower()
+
+
+#: How the cooked-capture header names the direction of a packet.
+_PACKET_TYPES = {
+    0: "host",
+    1: "broadcast",
+    2: "multicast",
+    3: "other host",
+    4: "outgoing",
+}
+#: The TCP flag bits, lowest first.
+_TCP_FLAGS = (
+    (0x01, "FIN"),
+    (0x02, "SYN"),
+    (0x04, "RST"),
+    (0x08, "PSH"),
+    (0x10, "ACK"),
+    (0x20, "URG"),
+    (0x40, "ECE"),
+    (0x80, "CWR"),
+    (0x100, "AE"),
+)
+
+
+def _more(more_fragments: bool) -> str:
+    return ", more follow" if more_fragments else ""
+
+
 class EthernetLayer(NamedTuple):
     """An Ethernet II header.
 
@@ -36,6 +72,14 @@ class EthernetLayer(NamedTuple):
     destination: str
     source: str
     ethertype: int
+
+    def summary(self) -> str:
+        """The addresses and what follows: ``aa:.. > bb:.. ethertype 0x0800``."""
+        return "%s > %s ethertype 0x%04x" % (
+            self.source,
+            self.destination,
+            self.ethertype,
+        )
 
 
 class VLANLayer(NamedTuple):
@@ -51,6 +95,15 @@ class VLANLayer(NamedTuple):
     priority: int
     drop_eligible: bool
     ethertype: int
+
+    def summary(self) -> str:
+        """The tag: ``vlan 5 priority 0 ethertype 0x0800``."""
+        return "vlan %d priority %d%s ethertype 0x%04x" % (
+            self.id,
+            self.priority,
+            " drop-eligible" if self.drop_eligible else "",
+            self.ethertype,
+        )
 
 
 class LinuxCookedLayer(NamedTuple):
@@ -74,6 +127,18 @@ class LinuxCookedLayer(NamedTuple):
     ethertype: int
     interface: Optional[int] = None
 
+    def summary(self) -> str:
+        """Direction, device type, sender address when there is one, and what
+        follows: ``host, hardware type 772, ethertype 0x0800``."""
+        kind = _PACKET_TYPES.get(self.packet_type, "type %d" % self.packet_type)
+        address = ", address %s" % self.address if self.address else ""
+        return "%s, hardware type %d%s, ethertype 0x%04x" % (
+            kind,
+            self.hardware_type,
+            address,
+            self.ethertype,
+        )
+
 
 class LoopbackLayer(NamedTuple):
     """The four-octet header of a BSD loopback capture.
@@ -83,6 +148,10 @@ class LoopbackLayer(NamedTuple):
     """
 
     family: int
+
+    def summary(self) -> str:
+        """The address family: ``family 2``."""
+        return "family %d" % self.family
 
 
 class IPv4Layer(NamedTuple):
@@ -117,6 +186,23 @@ class IPv4Layer(NamedTuple):
         """Whether this packet is one piece of a fragmented datagram."""
         return self.more_fragments or self.fragment_offset != 0
 
+    def summary(self) -> str:
+        """Addresses, protocol, time to live and identification, and where a
+        fragment starts: ``10.0.0.5 > 10.0.0.1 protocol 17 ttl 64 id 1``."""
+        text = "%s > %s protocol %d ttl %d id %d" % (
+            self.source,
+            self.destination,
+            self.protocol,
+            self.ttl,
+            self.identification,
+        )
+        if self.is_fragment:
+            text += ", fragment at %d%s" % (
+                self.fragment_offset,
+                _more(self.more_fragments),
+            )
+        return text
+
 
 class IPv6Layer(NamedTuple):
     """An IPv6 fixed header. Extension headers are layers of their own.
@@ -139,6 +225,15 @@ class IPv6Layer(NamedTuple):
     traffic_class: int
     flow_label: int
 
+    def summary(self) -> str:
+        """Addresses, what follows and the hop limit."""
+        return "%s > %s next header %d hop limit %d" % (
+            self.source,
+            self.destination,
+            self.next_header,
+            self.hop_limit,
+        )
+
 
 class IPv6ExtensionLayer(NamedTuple):
     """A hop-by-hop (0), routing (43) or destination-options (60) header.
@@ -149,6 +244,10 @@ class IPv6ExtensionLayer(NamedTuple):
 
     next_header: int
     data: bytes
+
+    def summary(self) -> str:
+        """What follows and how many octets the header holds past its first two."""
+        return "next header %d, %d octets" % (self.next_header, len(self.data))
 
 
 class IPv6FragmentLayer(NamedTuple):
@@ -170,6 +269,15 @@ class IPv6FragmentLayer(NamedTuple):
         """False for an "atomic" fragment: a whole datagram in one piece."""
         return self.more_fragments or self.fragment_offset != 0
 
+    def summary(self) -> str:
+        """What follows, the identification and where this piece starts."""
+        return "next header %d, id %d, offset %d%s" % (
+            self.next_header,
+            self.identification,
+            self.fragment_offset,
+            _more(self.more_fragments),
+        )
+
 
 class UDPLayer(NamedTuple):
     """A UDP header.
@@ -186,6 +294,14 @@ class UDPLayer(NamedTuple):
     destination_port: int
     length: int
     checksum: int
+
+    def summary(self) -> str:
+        """The ports and the stated length: ``50000 > 69 length 13``."""
+        return "%d > %d length %d" % (
+            self.source_port,
+            self.destination_port,
+            self.length,
+        )
 
 
 class TCPLayer(NamedTuple):
@@ -234,6 +350,19 @@ class TCPLayer(NamedTuple):
     def rst(self) -> bool:
         """The RST flag: the connection is reset."""
         return bool(self.flags & 0x04)
+
+    def summary(self) -> str:
+        """The ports, the flags that are set, the sequence and acknowledgment
+        numbers and the window: ``40000 > 80 [SYN,ACK] seq 100 ack 7 window 4096``."""
+        names = [name for bit, name in _TCP_FLAGS if self.flags & bit]
+        return "%d > %d [%s] seq %d ack %d window %d" % (
+            self.source_port,
+            self.destination_port,
+            ",".join(names) or "none",
+            self.sequence,
+            self.acknowledgment,
+            self.window,
+        )
 
 
 #: The built-in layers by the name a filter calls them: the class name without

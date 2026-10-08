@@ -37,6 +37,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   socket closed when it stops, and `import pktcap` still imports no `asyncio`.
   The IP header of such a frame is made up, and a socket never sees other
   hosts' traffic, the link layer or fragments.
+- A layer may say how it reads: a layer record may have a method `summary()`
+  returning one line saying what it holds. Every built-in layer has one, and
+  a registered layer without one is described by its name.
+  `frame_summary(frame)` is a frame's time (UTC), its two socket addresses
+  when it has them, the name of its innermost layer and that layer's summary.
+  The line is escaped to printable ASCII, cut at 512 characters, and a
+  `summary()` that raises or gives no text is logged once for its class and
+  never stops anything.
+- `"text"` joins `OUTPUT_FORMATS` (endings `.txt` and `.log`): `CaptureWriter`
+  writes a frame's `frame_summary`, or a line for a datagram, many lines to a
+  file or one file a line with `per_record`. It is not a record format, so
+  `RECORD_FORMATS` is unchanged and `dumps_record` and `loads_record` refuse
+  it, as they refuse `pcap`. `pktcap convert` and `pktcap capture` take
+  `--format text`, and an output file ending in `.txt` or `.log` is text.
 - `load_plugins(..., always=())` loads the plugins a caller's own code names
   before the user's list, with the source `"always"`. They are never read from
   `PKTCAP_LOAD` or the configuration file, which still decide the user's list.

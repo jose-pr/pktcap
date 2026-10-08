@@ -237,7 +237,7 @@ What they leave alone:
 ## The layer records
 
 Each is a named tuple of plain values. An address is text, a flag a `bool`,
-octets `bytes`.
+octets `bytes`. Each has a `summary()`: one line saying what the header holds.
 
 **`EthernetLayer(destination, source, ethertype)`** — the MAC addresses as
 `aa:bb:cc:dd:ee:ff`, and the type field.

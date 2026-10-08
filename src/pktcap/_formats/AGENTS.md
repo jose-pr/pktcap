@@ -53,9 +53,9 @@ tcpdump and Wireshark read. The same three methods; each is a context manager.
 
 ## One writer for every format
 
-`OUTPUT_FORMATS` is `("pcap", "pcapng", "json", "yaml", "toml", "ini")`:
-two capture formats, which take the frame or datagram itself, and the four
-record formats of `RECORD_FORMATS`.
+`OUTPUT_FORMATS` is `("pcap", "pcapng", "json", "yaml", "toml", "ini", "text")`:
+two capture formats, which take the frame or datagram itself, the four
+record formats of `RECORD_FORMATS`, and `text`, a line for a person.
 
 **`CaptureWriter(target, format=None, *, per_record=False, append=False, fields=(), max_files=1000)`**
 — writes frames or datagrams, or the records made of them, in one format. A
@@ -65,7 +65,7 @@ context manager.
   `sys.stdout`); a stream stays the caller's to close.
 - `format=None` takes the format from the ending of the target's name
   (`.pcap`, `.cap`, `.pcapng`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`,
-  `.toml`, `.ini`; letter case ignored, the longest ending wins). A name given
+  `.toml`, `.ini`, `.txt`, `.log`; letter case ignored, the longest ending wins). A name given
   wins over the ending. Content is never sniffed. `UnsupportedFormatError`,
   listing the formats, when neither says.
 - **`CaptureWriter.write(item, record=None, *, text=None, names=None) -> None`** —
@@ -129,6 +129,34 @@ characters, trailing `.` and `_` removed, and followed by `-` and the first 8
 hexadecimal digits of the SHA-256 of the value as given (UTF-8), 64 characters
 at most; a value of 64 or fewer is untouched. A time outside any calendar is
 written as `t<seconds>`.
+
+## A line a person reads
+
+**`frame_summary(frame) -> str`** — the `text` format's line for a
+`DissectedFrame`: its time in UTC (`2023-11-14T22:13:20.500000Z`; a time
+outside any calendar is `t<seconds>`, a NaN `unknown`), then its socket
+addresses when it has them (`10.0.0.5:50000 > 10.0.0.1:69`, an IPv6 host in
+brackets; hosts alone for an IP packet with no UDP or TCP; none without IP),
+then the name of its innermost layer and that layer's summary
+(`udp: 50000 > 69 length 13`). A frame no dissector read says its link type and
+size. `TypeError` for a non-frame.
+
+- **A layer record may have a method `summary() -> str`**: one line saying what
+  it holds. Every built-in layer has one; a registered layer without one, or
+  with a `summary` that is not callable, is described by its name. A
+  `summary()` that raises an `Exception` or returns something that is not
+  text does not stop anything: the layer is described by its name and the
+  failure is logged once for its class, at `WARNING` on `pktcap._summary`.
+- **Text from the wire is escaped**, as every format's is: the line is
+  printable ASCII (`\x1b`, `\ud800`, `\xe9`, a backslash doubled), so a
+  terminal or a log reads it safely whatever a layer's text held.
+- **A line is cut at 512 characters**, after a whole escape, ending in `...`.
+- **`CaptureWriter` with `text`** writes `frame_summary` of a frame and, for a
+  `CapturedDatagram`, `2023-11-14T22:13:20.500000Z 10.0.0.5:68 > 10.0.0.1:67
+  udp 2 octets` (`, fragmented` and `, truncated` when it is partial), each
+  ending in a line feed: many lines to a file, or one file a line with
+  `per_record=True`. It takes `append`, ignores a `record`, refuses `text=` and
+  needs no extra.
 
 ## What a record is
 

@@ -24,6 +24,10 @@ and an error in the filter is raised when it is compiled, never per packet.
   that is taken unless `replace=True`, and always for the name of a built-in
   layer: `ethernet`, `vlan`, `linuxcooked`, `loopback`, `ipv4`, `ipv6`,
   `ipv6extension`, `ipv6fragment`, `udp`, `tcp`.
+- A layer class may have a method **`summary() -> str`**: one line saying what
+  the layer holds, which `frame_summary` and the `text` output use for a frame
+  whose innermost layer it is. A layer without one is described by its name
+  (`pktcap/_formats/AGENTS.md`).
 - `keys` maps a key name (`[a-z][a-z0-9_-]*`, no dot) to `build(clause)`,
   called once per clause when the filter is compiled. `clause.key` is the key
   without the layer's name: lower case up to its first dot and as written

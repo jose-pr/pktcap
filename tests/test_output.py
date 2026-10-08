@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sys
+from typing import NamedTuple
 
 import pytest
 
@@ -19,10 +20,14 @@ from pktcap import (
     DissectorRegistry,
     FrameDissector,
     MissingExtraError,
+    OUTPUT_FORMATS,
+    RECORD_FORMATS,
     UnsupportedFormatError,
     datagram_record,
     dumps_record,
     frame_record,
+    has_output_format,
+    loads_record,
     read_datagrams,
     read_frames,
 )
@@ -197,7 +202,7 @@ def test_a_name_given_wins_over_the_file_name():
     assert CaptureWriter("x.pcap", "JSON").format == "json"
 
 
-@pytest.mark.parametrize("target", ["capture", "x.pcapx", "x.txt", io.BytesIO()])
+@pytest.mark.parametrize("target", ["capture", "x.pcapx", "x.dat", io.BytesIO()])
 def test_a_format_that_cannot_be_told_must_be_named(target):
     with pytest.raises(
         UnsupportedFormatError, match="pcap, pcapng, json, yaml, toml, ini"
@@ -779,3 +784,162 @@ def test_text_still_checks_the_item_and_a_closed_writer():
     writer.close()
     with pytest.raises(ValueError, match="closed"):
         writer.write(FIRST, text="x")
+
+
+# -- the text format: one line a person reads ------------------------------------
+
+STAMP = "2023-11-14T22:13:20.500000Z"
+
+
+def _frames(*raw):
+    dissector = FrameDissector()
+    return [
+        dissector.dissect(CapturedFrame(1_700_000_000.5 + i, 1, data))
+        for i, data in enumerate(raw)
+    ]
+
+
+UDP_RAW = build.ethernet(
+    build.ipv4("10.0.0.5", "10.0.0.1", build.udp(50000, 69, b"first"))
+)
+TCP_RAW = build.tcp_frame("10.0.0.5", "10.0.0.1", 40000, 80, 100, b"x", flags=0x02)
+
+
+def test_text_is_an_output_format_and_not_a_record_format():
+    assert "text" in OUTPUT_FORMATS and "text" not in RECORD_FORMATS
+    assert has_output_format("text") is True
+
+
+def test_text_is_not_a_record_so_neither_end_of_a_record_takes_it():
+    with pytest.raises(UnsupportedFormatError):
+        dumps_record({"a": 1}, "text")
+    with pytest.raises(UnsupportedFormatError):
+        loads_record("a line", "text")
+    with pytest.raises(UnsupportedFormatError):
+        dumps_record({"a": 1}, "TEXT")
+
+
+@pytest.mark.parametrize("name", ["out.txt", "out.log", "OUT.TXT", "trace.Log"])
+def test_the_endings_txt_and_log_name_the_text_format(tmp_path, name):
+    assert CaptureWriter(tmp_path / name).format == "text"
+    assert CaptureWriter(str(tmp_path / name)).format == "text"
+
+
+def test_a_name_given_wins_over_the_ending(tmp_path):
+    assert CaptureWriter(tmp_path / "out.txt", "json").format == "json"
+    assert CaptureWriter(tmp_path / "out.json", "text").format == "text"
+    assert CaptureWriter(tmp_path / "out.json", "TEXT").format == "text"
+
+
+def test_text_appends_a_line_a_frame_to_one_file(tmp_path):
+    path = tmp_path / "out.txt"
+    frames = _frames(UDP_RAW, TCP_RAW)
+    with CaptureWriter(path) as writer:
+        for item in frames:
+            writer.write(item)
+    assert writer.written == 2
+    assert path.read_bytes() == (
+        STAMP
+        + " 10.0.0.5:50000 > 10.0.0.1:69 udp: 50000 > 69 length 13\n"
+        + "2023-11-14T22:13:21.500000Z 10.0.0.5:40000 > 10.0.0.1:80 tcp: "
+        + "40000 > 80 [SYN] seq 100 ack 0 window 4096\n"
+    ).encode("ascii")
+
+
+def test_text_writes_a_line_for_a_datagram_too(tmp_path):
+    path = tmp_path / "out.log"
+    with CaptureWriter(path) as writer:
+        for datagram in ALL + [FIRST._replace(fragmented=True, payload=b"x")]:
+            writer.write(datagram)
+    assert path.read_bytes().decode("ascii").splitlines() == [
+        STAMP + " 10.0.0.5:68 > 10.0.0.1:67 udp 2 octets",
+        "2023-11-14T22:13:21.500000Z [2001:db8::5]:546 > [ff02::1:2]:547 udp 1 octet",
+        "2023-11-14T22:13:22.500000Z 10.0.0.5:68 > 10.0.0.1:67 udp 0 octets",
+        STAMP + " 10.0.0.5:68 > 10.0.0.1:67 udp 1 octet, fragmented",
+    ]
+
+
+def test_text_replaces_a_file_and_appends_when_asked(tmp_path):
+    path = tmp_path / "out.txt"
+    path.write_text("old line\n", encoding="ascii")
+    _write(path, datagrams=[FIRST])
+    assert "old line" not in path.read_text(encoding="ascii")
+    _write(path, datagrams=[SECOND], append=True)
+    lines = path.read_text(encoding="ascii").splitlines()
+    assert len(lines) == 2 and lines[1].startswith("2023-11-14T22:13:21.500000Z")
+
+
+def test_text_goes_to_a_stream_with_a_line_feed_after_each_line():
+    stream = io.BytesIO()
+    _write(stream, "text")
+    assert stream.getvalue().count(b"\n") == 3
+    assert stream.getvalue().endswith(b"\n")
+
+
+def test_text_with_per_record_names_one_file_for_each_item(tmp_path):
+    pattern = str(tmp_path / "out" / "{index}_{port}.txt")
+    frames = _frames(UDP_RAW, TCP_RAW)
+    with CaptureWriter(pattern, per_record=True, fields=("port",)) as writer:
+        for item, port in zip(frames, (69, 80)):
+            writer.write(item, names={"port": port})
+    assert sorted(os.listdir(tmp_path / "out")) == ["0_69.txt", "1_80.txt"]
+    first = (tmp_path / "out" / "0_69.txt").read_bytes()
+    assert first == (
+        STAMP + " 10.0.0.5:50000 > 10.0.0.1:69 udp: 50000 > 69 length 13\n"
+    ).encode("ascii")
+
+
+def test_text_per_record_honours_the_file_budget(tmp_path):
+    pattern = str(tmp_path / "{index}.txt")
+    with CaptureWriter(pattern, per_record=True, max_files=1) as writer:
+        for item in _frames(UDP_RAW, TCP_RAW):
+            writer.write(item)
+    assert (writer.written, writer.refused) == (1, 1)
+    assert os.listdir(tmp_path) == ["0.txt"]
+
+
+def test_text_ignores_a_record_as_the_capture_formats_do():
+    stream = io.BytesIO()
+    with CaptureWriter(stream, "text") as writer:
+        writer.write(_frames(UDP_RAW)[0], {"a": object()})
+    assert stream.getvalue().startswith(STAMP.encode("ascii"))
+
+
+def test_text_is_not_for_text_a_caller_rendered(tmp_path):
+    with CaptureWriter(tmp_path / "out.txt") as writer:
+        with pytest.raises(ValueError, match="text"):
+            writer.write(FIRST, text="a line")
+    assert writer.written == 0
+
+
+def test_what_the_wire_holds_is_escaped_on_the_line(tmp_path):
+    class Wire(NamedTuple):
+        opcode: int
+
+        def summary(self):
+            return "\x1b[31mred\x1b[0m \ud800"
+
+    frame = _frames(UDP_RAW)[0]
+    frame = frame._replace(
+        layers=frame.layers + (Wire(1),), payloads=frame.payloads + (b"",)
+    )
+    path = tmp_path / "out.txt"
+    with CaptureWriter(path) as writer:
+        writer.write(frame)
+    data = path.read_bytes()
+    assert b"\x1b" not in data
+    assert data.endswith(b"wire: \\x1b[31mred\\x1b[0m \\ud800\n")
+    assert all(0x20 <= octet < 0x7F for octet in data[:-1])
+
+
+def test_a_text_stream_may_hold_many_lines_where_toml_holds_one():
+    CaptureWriter(io.BytesIO(), "text")
+    with pytest.raises(ValueError):
+        CaptureWriter(io.BytesIO(), "toml")
+
+
+def test_text_with_a_wrong_item_is_a_type_error(tmp_path):
+    with CaptureWriter(tmp_path / "out.txt") as writer:
+        with pytest.raises(TypeError):
+            writer.write(UDP_RAW)  # type: ignore[arg-type]
+    assert writer.written == 0

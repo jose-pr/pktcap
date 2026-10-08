@@ -85,6 +85,7 @@ from ._streams import (
     read_tcp_streams,
 )
 from ._sources import UDPCapture, asniff_udp, sniff_udp
+from ._summary import frame_summary
 from ._writer import PcapngWriter, PcapWriter, datagram_frame
 
 __all__ = [
@@ -150,6 +151,7 @@ __all__ = [
     "frame_filter_for",
     "frame_filter_keys",
     "frame_record",
+    "frame_summary",
     "load_plugins",
     "loads_record",
     "capture_config_path",

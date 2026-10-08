@@ -34,9 +34,10 @@ from ._filenames import (
     safe,
     timestamp,
 )
-from ._formats import CAPTURE_FORMATS, infer_format, record_format
+from ._formats import CAPTURE_FORMATS, TEXT_FORMAT, infer_format, record_format
 from ._formats._contract import RecordFormat
 from ._records import datagram_record, frame_record
+from ._summary import datagram_summary, frame_summary
 from ._writer import PcapngWriter, PcapWriter
 
 __all__ = ["CaptureWriter"]
@@ -54,7 +55,9 @@ class CaptureWriter:
     :func:`datagram_record` or :func:`frame_record` when none is given:
     ``json`` one line per record, ``yaml`` one document per record. ``toml``
     and ``ini`` cannot hold two records in one file and need
-    ``per_record=True``.
+    ``per_record=True``. ``text`` writes :func:`frame_summary` of a frame, a
+    line for a datagram, and ignores the record: many lines to a file, or one
+    file a line.
 
     Constructing a writer opens nothing: the file is opened by the first
     ``write``. Not safe to share between threads.
@@ -95,7 +98,10 @@ class CaptureWriter:
             raise ValueError("max_files must be at least 1")
         self._format = infer_format(target, format)
         self._record_format: Optional[RecordFormat] = None
-        if self._format not in CAPTURE_FORMATS:
+        self._line = self._format == TEXT_FORMAT
+        if self._line:
+            pass
+        elif self._format not in CAPTURE_FORMATS:
             self._record_format = record_format(self._format)
             self._record_format.require()
             if not per_record and not self._record_format.streamable:
@@ -199,12 +205,17 @@ class CaptureWriter:
                 raise TypeError("text must be a str")
             if self._record_format is None:
                 raise ValueError(
-                    "text is for a record format: a %s capture writes the frame "
-                    "or datagram itself" % self._format
+                    "text is for a record format: %s writes the frame or "
+                    "datagram itself" % self._format
                 )
             if record is not None:
                 raise ValueError("give a record or the text of one, not both")
             data = text.encode("utf-8")
+        elif self._line:
+            line = frame_summary(item) if isinstance(item, DissectedFrame) else None
+            if line is None:
+                line = datagram_summary(item)  # type: ignore[arg-type]
+            data = (line + "\n").encode("ascii")
         elif self._record_format is not None:
             if record is None:
                 if isinstance(item, DissectedFrame):
@@ -221,14 +232,17 @@ class CaptureWriter:
         if self._pattern is not None:
             index, self._count = self._count, self._count + 1
             self._write_file(self._pattern, item.time, data, index, names or {})
-        elif self._record_format is None:
+        elif self._record_format is None and not self._line:
             if self._capture is None:
                 self._make_parents(self._target)
                 self._capture = self._capture_writer(self._target)
             self._capture_write(self._capture, item)
             self.written += 1
         else:
-            self._write_stream(self._record_format.separator.encode("ascii") + data)
+            separator = b""
+            if self._record_format is not None:
+                separator = self._record_format.separator.encode("ascii")
+            self._write_stream(separator + data)
 
     @staticmethod
     def _make_parents(path: Union[str, "os.PathLike[str]", BinaryIO]) -> None:

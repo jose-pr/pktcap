@@ -66,7 +66,7 @@ def _loads(text, name):
 
 def test_the_names_are_a_closed_documented_set():
     assert RECORD_FORMATS == ("json", "yaml", "toml", "ini")
-    assert OUTPUT_FORMATS == ("pcap", "pcapng") + RECORD_FORMATS
+    assert OUTPUT_FORMATS == ("pcap", "pcapng") + RECORD_FORMATS + ("text",)
 
 
 @pytest.mark.parametrize("name", RECORD_FORMATS)
@@ -151,7 +151,7 @@ def test_a_format_named_by_something_that_is_not_text_is_a_type_error():
 
 
 def test_every_format_can_be_written_with_the_dev_extra_installed():
-    assert [has_output_format(name) for name in OUTPUT_FORMATS] == [True] * 6
+    assert [has_output_format(name) for name in OUTPUT_FORMATS] == [True] * 7
     with pytest.raises(UnsupportedFormatError):
         has_output_format("xml")
 

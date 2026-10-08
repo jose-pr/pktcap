@@ -229,9 +229,15 @@ with `CaptureWriter`. A capture format takes the frame or datagram itself; a
 record format takes a **record**: plain data (`dict`, `list`, `str`, `int`,
 `float`, `bool`, `None`) describing it.
 
-**`OUTPUT_FORMATS`** — `("pcap", "pcapng", "json", "yaml", "toml", "ini")`,
-and **`RECORD_FORMATS`** — the last four. `yaml` needs the `yaml` extra and
-`toml` the `toml` extra; a format whose extra is missing stays in both tuples.
+**`OUTPUT_FORMATS`** — `("pcap", "pcapng", "json", "yaml", "toml", "ini", "text")`,
+and **`RECORD_FORMATS`** — `json`, `yaml`, `toml` and `ini`. `text` is a line a
+person reads, not a record: `dumps_record` and `loads_record` refuse it, as they
+refuse `pcap`. `yaml` needs the `yaml` extra and `toml` the `toml` extra; a
+format whose extra is missing stays in both tuples.
+
+**`frame_summary(frame) -> str`** — one escaped line for a `DissectedFrame`,
+what the `text` format writes. Each layer may have a `summary()` method.
+`pktcap/_formats/AGENTS.md`.
 
 **`has_output_format(name) -> bool`** — whether that format can be written on
 this installation. `UnsupportedFormatError` for a name that is no format.
@@ -248,7 +254,7 @@ record, `MissingExtraError` when it cannot be read here; the rules are in
 — the record of a `CapturedDatagram` and of a `DissectedFrame`; what each holds
 is in `pktcap/_formats/AGENTS.md`, under "What a record is".
 
-**`CaptureWriter`** — one writer for all six: a growing file, or one file per
+**`CaptureWriter`** — one writer for all seven: a growing file, or one file per
 record under a name pattern. It takes a `CapturedDatagram` or a
 `DissectedFrame`; a capture format writes the item itself and a record format
 the record given, or `datagram_record` or `frame_record` of the item. Its

@@ -217,6 +217,17 @@ assert_type(
     pktcap.ReplayResult,
 )
 
+# -- a line a person reads ------------------------------------------------
+
+for summarised in pktcap.read_dissected("x.pcap"):
+    assert_type(pktcap.frame_summary(summarised), str)
+    for summarised_layer in summarised.layers:
+        assert_type(str(summarised_layer), str)
+assert_type(pktcap.UDPLayer(1, 2, 3, 4).summary(), str)
+assert_type(pktcap.TCPLayer(1, 2, 3, 4, 0, 5, 6, 7, b"").summary(), str)
+with pktcap.CaptureWriter("out.txt", "text") as text_writer:
+    assert_type(text_writer.format, str)
+
 # -- copying --------------------------------------------------------------
 
 with pktcap.CaptureWriter("out.json") as copy_target:

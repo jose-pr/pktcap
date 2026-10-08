@@ -1,7 +1,8 @@
 """The output formats, by name (internal).
 
-A closed set: ``pcap``, which writes datagrams, and the record formats, each
-of which writes one record as text. One private module per record format; the
+A closed set: the capture formats, which write frames and datagrams, the
+record formats, each of which writes one record as text, and ``text``, which
+writes a line a person reads. One private module per record format; the
 contract they share is :class:`RecordFormat`.
 """
 
@@ -22,6 +23,7 @@ __all__ = [
     "OUTPUT_FORMATS",
     "RECORD_FORMATS",
     "RecordFormat",
+    "TEXT_FORMAT",
     "dumps_record",
     "has_output_format",
     "infer_format",
@@ -39,8 +41,12 @@ _RECORD_FORMATS: Dict[str, RecordFormat] = {
 
 #: The formats that write a record as text, by name.
 RECORD_FORMATS: Tuple[str, ...] = tuple(_RECORD_FORMATS)
+#: The format that writes a line for a person. It is not a record format: it
+#: holds no mapping, so it cannot be read back.
+TEXT_FORMAT = "text"
+_TEXT_SUFFIXES = ((".txt", TEXT_FORMAT), (".log", TEXT_FORMAT))
 #: Every format a :class:`CaptureWriter` writes, by name.
-OUTPUT_FORMATS: Tuple[str, ...] = CAPTURE_FORMATS + RECORD_FORMATS
+OUTPUT_FORMATS: Tuple[str, ...] = CAPTURE_FORMATS + RECORD_FORMATS + (TEXT_FORMAT,)
 
 
 def _unsupported(name: object, known: Tuple[str, ...]) -> UnsupportedFormatError:
@@ -73,7 +79,7 @@ def infer_format(
         return _normalised(name, OUTPUT_FORMATS)
     if isinstance(target, (str, os.PathLike)):
         text = os.fspath(target).lower()
-        endings = list(_CAPTURE_SUFFIXES)
+        endings = list(_CAPTURE_SUFFIXES) + list(_TEXT_SUFFIXES)
         for fmt in _RECORD_FORMATS.values():
             endings += [(suffix, fmt.name) for suffix in fmt.suffixes]
         matches = [
@@ -95,7 +101,7 @@ def has_output_format(name: str) -> bool:
     ``UnsupportedFormatError``.
     """
     lowered = _normalised(name, OUTPUT_FORMATS)
-    if lowered in CAPTURE_FORMATS:
+    if lowered in CAPTURE_FORMATS or lowered == TEXT_FORMAT:
         return True
     try:
         _RECORD_FORMATS[lowered].require()

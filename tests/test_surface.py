@@ -72,6 +72,7 @@ EXPECTED = [
     "frame_filter_for",
     "frame_filter_keys",
     "frame_record",
+    "frame_summary",
     "load_plugins",
     "loads_record",
     "capture_config_path",

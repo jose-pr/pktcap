@@ -13,6 +13,7 @@ from netimps import join_host
 
 from ._captured import CapturedDatagram
 from ._dissect import DissectedFrame
+from ._layers import layer_name
 
 __all__ = ["datagram_record", "frame_record"]
 
@@ -53,10 +54,7 @@ def _plain(value: object) -> Any:
 
 
 def _layer_record(layer: object) -> Dict[str, Any]:
-    name = type(layer).__name__
-    if name.endswith("Layer") and len(name) > 5:
-        name = name[:-5]
-    record: Dict[str, Any] = {"layer": name.lower()}
+    record: Dict[str, Any] = {"layer": layer_name(layer)}
     as_dict = getattr(layer, "_asdict", None)
     if callable(as_dict):  # a named tuple, as the built-in layers are
         fields = as_dict()

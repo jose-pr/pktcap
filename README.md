@@ -207,7 +207,7 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `read_datagrams`, `CapturedDatagram` | the UDP datagram view |
 | `read_tcp_streams`, `TCPReassembler`, `TCPStreamData`, `TCPStreamStats` | TCP streams: each direction's octets in order, within bounds |
 | `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
-| `CaptureWriter`, `dumps_record`, `loads_record`, `datagram_record`, `frame_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format, and read a record back |
+| `CaptureWriter`, `dumps_record`, `loads_record`, `datagram_record`, `frame_record`, `frame_summary`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format (text is a line a person reads), and read a record back |
 | `copy_frames`, `CopyResult`, `command_hook` | copy a source of dissected frames, filtered, into a writer, and run a program for each frame written |
 | `load_plugins`, `LoadedPlugin`, `capture_config_path` | load the plugins a user names into a registry |
 | `parse_capture_filter`, `compile_capture_filter`, `FilterClause`, `frame_filter`, `frame_filter_for`, `frame_filter_keys`, `FRAME_FILTER_KEYS` | the filter expression, the keys of the built-in layers, and the layers and keys a registry declares |
