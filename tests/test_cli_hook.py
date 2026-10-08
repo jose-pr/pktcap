@@ -140,8 +140,9 @@ def test_fail_fast_ends_the_capture_on_a_python_function_too(
 def test_a_python_hook_is_found_where_the_interpreter_finds_it_and_nowhere_else(
     tmp_path, monkeypatch, capsys
 ):
-    """The working directory is not added to the module path: a module that
-    only the current directory holds is not found."""
+    """``main`` and the ``pktcap`` executable do not add the working directory
+    to the module path: a module that only the current directory holds is not
+    found. (``python -m pktcap`` does, as ``-m`` always puts it on the path.)"""
     (tmp_path / "localmod.py").write_bytes(b"def keep(frame):\n    pass\n")
     monkeypatch.chdir(tmp_path)
     argv = ["capture", "--listen", "127.0.0.1:0", "--hook", "localmod:keep"]
@@ -196,16 +197,23 @@ class ServedRoot(Pktcap):
     _subcommands_ = [Served]
 
 
-def test_a_tool_call_cannot_name_a_hook(tmp_path):
+def test_a_tool_call_cannot_name_a_hook(tmp_path, monkeypatch, caplog):
+    program = python_hook(
+        monkeypatch, tmp_path, "mark", '(HERE / "ran").write_text("ran")\n'
+    )
     marker = tmp_path / "ran"
     result = call_tool(
         ServedRoot,
         "pktcap.capture",
-        {"listen": ["127.0.0.1:0"], "count": 1, "hook": str(marker)},
+        {"listen": ["127.0.0.1:0"], "count": 1, "hook": program},
     )
     assert result["isError"] is True
     assert "cannot name a hook" in result["content"][0]["text"]
     assert not marker.exists()
+    # The same program, named on a command line, writes the marker: it is the
+    # refusal that kept it from running.
+    status, _ = run(["--count", "1", "--hook", program, "--format", "text"], caplog)
+    assert status == 0 and marker.exists()
 
 
 def test_the_failures_of_a_python_function_are_logged_at_the_rate_a_program_is(

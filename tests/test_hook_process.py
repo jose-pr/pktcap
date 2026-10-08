@@ -214,3 +214,51 @@ def test_taskkill_is_found_under_systemroot_whatever_the_key_case(monkeypatch):
 
     monkeypatch.setenv("SystemRoot", r"D:\Elsewhere")
     assert taskkill_path() == os.path.join(r"D:\Elsewhere", "System32", "taskkill.exe")
+
+
+def test_an_empty_entry_of_path_is_not_the_working_directory(tmp_path, monkeypatch):
+    directory, name = planted(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(directory)
+    monkeypatch.setenv("PATH", os.pathsep.join(["", str(elsewhere)]))
+    with pytest.raises(ValueError, match="not on PATH"):
+        command_hook(name)
+
+
+# Starts a child and waits: the child's parent is alive when the tree is ended.
+STARTS_A_CHILD = r"""
+import os, subprocess, sys, time
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+(HERE / "child.pid").write_text(str(child.pid))
+(HERE / "parent.pid").write_text(str(os.getpid()))
+time.sleep(120)
+"""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the job object is Windows'")
+def test_taskkill_ends_the_tree_where_a_job_cannot_be_made(tmp_path, monkeypatch):
+    from pktcap._copy import _process
+
+    class NoJob:
+        def __init__(self):
+            raise OSError("no job object here")
+
+    monkeypatch.setattr(_process, "Job", NoJob)
+    program = python_hook(monkeypatch, tmp_path, "sleeper", STARTS_A_CHILD)
+    hook = command_hook(program, timeout=8.0)
+    pids = []
+    try:
+        hook(frame())
+        pids = [
+            int((tmp_path / name).read_text())
+            for name in ("child.pid", "parent.pid")
+            if (tmp_path / name).exists()
+        ]
+        assert len(pids) == 2, "the hook had not started its child in time"
+        for pid in pids:
+            assert wait_until_dead(pid), "process %d outlived its hook" % pid
+    finally:
+        for pid in pids:
+            kill(pid)
+    assert hook.failures == 1

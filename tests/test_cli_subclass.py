@@ -361,6 +361,7 @@ def test_endpoints_and_stop_and_default_port_are_the_subclasses(demo, calls, cap
         sender.sendto(b"x", ("127.0.0.1", published["port"]))
     thread.join(WAIT)
     assert result["status"] == 0 and calls.count("endpoints") == 1
+    assert "stop" in calls  # asked although the command gave no --duration
     assert len(capsys.readouterr().out.splitlines()) == 1
 
 
@@ -372,9 +373,17 @@ def test_stop_ends_a_capture_whose_source_is_quiet(demo, capsys):
         def _stop(self):
             return True
 
-    started = time.monotonic()
-    assert status_of(Quiet, ["--listen", "127.0.0.1", "--duration", "60"]) == 0
-    assert time.monotonic() - started < 5
+    outcome = {}
+
+    def go():
+        outcome["status"] = status_of(Quiet, ["--listen", "127.0.0.1"])
+
+    # No --duration: the override alone ends it. A daemon thread, so a capture
+    # that ignores the override does not hold the process.
+    thread = threading.Thread(target=go, daemon=True)
+    thread.start()
+    thread.join(WAIT)
+    assert not thread.is_alive() and outcome["status"] == 0
     assert "0 frames read, 0 written" in capsys.readouterr().err
 
 
