@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `TCPReassembler(*, max_streams=1024, max_buffered=16777216,
+  idle_timeout=300.0)` puts TCP streams back together from dissected frames:
+  `add(frame)` returns the `TCPStreamData` the frame made deliverable, each
+  direction's octets in order with an `offset`, the octets given up on before
+  them (`missing`), a connection number (`stream`) and an `end` marker;
+  `flush()` gives what is still held at the end of a capture; `stats` is a
+  `TCPStreamStats`. Sequence numbers wrap, the first captured copy of an
+  octet wins, a FIN or an in-sequence RST ends a direction or a connection, and
+  a SYN that is not a retransmission starts a new stream on the same
+  addresses. The checksum is not verified and a segment in an IP fragment that
+  was not reassembled is ignored.
 - `DissectorRegistry.register_layer(layer, *, name=None, keys=None,
   replace=False)`, `unregister_layer(name)` and `layers()` declare the class
   of a layer a dissector returns, and optionally the filter keys over it.

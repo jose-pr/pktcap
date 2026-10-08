@@ -199,6 +199,7 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `EthernetLayer`, `VLANLayer`, `LinuxCookedLayer`, `LoopbackLayer`, `IPv4Layer`, `IPv6Layer`, `IPv6ExtensionLayer`, `IPv6FragmentLayer`, `UDPLayer`, `TCPLayer` | the records the built-in dissectors make |
 | `Dissector`, `Dissected`, `Fragment`, `Selector`, `DissectorRegistry`, `default_registry`, `register_dissector`, `check_dissector` | write, register and check a dissector |
 | `read_datagrams`, `CapturedDatagram` | the UDP datagram view |
+| `TCPReassembler`, `TCPStreamData`, `TCPStreamStats` | TCP streams: each direction's octets in order, within bounds |
 | `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
 | `CaptureWriter`, `dumps_record`, `datagram_record`, `frame_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format |
 | `copy_frames`, `CopyResult` | copy a source of dissected frames, filtered, into a writer |
@@ -306,7 +307,7 @@ are refused.
 | Ethernet with 802.1Q and QinQ tags, Linux cooked v1 and v2, BSD loopback, raw IP | yes |
 | IPv4, IPv6 extension and fragment headers, IP fragments reassembled | yes; IPv4 options and extension-header contents are kept as octets |
 | UDP and TCP headers | yes; TCP options are kept as octets |
-| TCP streams, reassembled across segments | no: a segment's payload is what follows its header |
+| TCP streams, reassembled across segments | yes, within bounds: each direction's octets in order; no dissector reads a stream |
 | checksums, verified | no: none is checked |
 | ARP, ICMP and every protocol above UDP and TCP | no built-in dissector: the frame ends there with the rest as its payload, until one is registered |
 | other capture file formats | no |

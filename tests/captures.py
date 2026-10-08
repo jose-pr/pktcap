@@ -50,6 +50,33 @@ def tcp(
     )
 
 
+def tcp_frame(
+    src,
+    dst,
+    sport,
+    dport,
+    sequence,
+    payload=b"",
+    *,
+    flags=0x18,
+    acknowledgment=0,
+    ident=1,
+):
+    """An Ethernet frame holding one TCP segment over IPv4, or over IPv6 when
+    ``src`` is an IPv6 address."""
+    segment = tcp(
+        sport,
+        dport,
+        payload,
+        flags=flags,
+        sequence=sequence,
+        acknowledgment=acknowledgment,
+    )
+    if ":" in src:
+        return ethernet(ipv6(src, dst, segment, next_header=6), v6=True)
+    return ethernet(ipv4(src, dst, segment, protocol=6, ident=ident))
+
+
 def ipv4(
     src, dst, body, *, ident=1, offset=0, more=False, protocol=17, total=None, ihl=5
 ):

@@ -215,6 +215,25 @@ assert_type(copied, pktcap.CopyResult)
 assert_type(copied.read, int)
 assert_type(copied.refused, int)
 
+# -- TCP streams ----------------------------------------------------------
+
+reassembler = pktcap.TCPReassembler(max_streams=8, max_buffered=1024, idle_timeout=5.0)
+for dissected in pktcap.read_dissected(source):
+    streamed = reassembler.add(dissected)
+    assert_type(streamed, Tuple[pktcap.TCPStreamData, ...])
+    for chunk in streamed:
+        assert_type(chunk.time, float)
+        assert_type(chunk.source, Tuple[str, int])
+        assert_type(chunk.destination, Tuple[str, int])
+        assert_type(chunk.data, bytes)
+        assert_type(chunk.offset, int)
+        assert_type(chunk.missing, int)
+        assert_type(chunk.stream, int)
+        assert_type(chunk.end, bool)
+assert_type(reassembler.flush(), Tuple[pktcap.TCPStreamData, ...])
+assert_type(reassembler.stats, pktcap.TCPStreamStats)
+assert_type(reassembler.stats.held, int)
+
 # -- capturing live -------------------------------------------------------
 
 with pktcap.LiveCapture("eth0", timeout=0.5) as capture:

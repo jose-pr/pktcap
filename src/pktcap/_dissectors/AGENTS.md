@@ -49,6 +49,18 @@ the whole unit from the frame that completes it. The limits are the
 reassembly ceilings of the top header (65,535 octets and 1,024 pieces per
 unit, 256 units at once, 30 seconds).
 
+IP fragments are reassembled, of any protocol: a frame that is a piece ends at
+its IP (or IPv6 fragment) layer with the piece as payload; the frame that
+completes the datagram has `reassembled=True` and the layers read from the
+whole. `reassemble=False` keeps no state: a first fragment is dissected from
+the octets it carries, a later one stops at the fragment. A fragment that
+overlaps another discards its whole datagram, in IPv4 as in IPv6 (RFC 5722
+requires it for IPv6). The same fragment seen twice, octet for octet, is
+ignored: a capture taken on a bridge shows a frame twice.
+
+**`LINKTYPES`** holds `0` NULL, `1` ETHERNET, `12`, `14` and `101` RAW, `108`
+LOOP, `113` LINUX_SLL, `228` IPV4, `229` IPV6 and `276` LINUX_SLL2.
+
 What a dissector must do, and what happens when it does not:
 
 - **Check every length before using it.** `data` may be empty.
@@ -206,9 +218,10 @@ What they leave alone:
 - **IPv4 options, IPv6 extension-header contents and TCP options are not
   decoded.** The IPv4 ones are skipped; the other two are kept as octets
   (`IPv6ExtensionLayer.data`, `TCPLayer.options`).
-- **TCP streams are not reassembled**: a segment's payload is what follows
-  its header, in the order the frames were captured, retransmissions
-  included.
+- **The walk does not reassemble TCP streams**: a segment's payload is what
+  follows its header, in the order the frames were captured, retransmissions
+  included. `TCPReassembler` (`pktcap/_streams/AGENTS.md`) puts the streams
+  back together from the dissected frames.
 - **An 802.3 frame** (the type field is a length, under 1,536) ends at
   `EthernetLayer`: LLC and SNAP are not read.
 - **Octets past the length an IP header states** are link-layer padding and

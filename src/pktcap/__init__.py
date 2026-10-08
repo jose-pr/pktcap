@@ -75,6 +75,7 @@ from ._plugins._config import capture_config_path
 from ._plugins._load import LoadedPlugin, load_plugins
 from ._records import datagram_record, frame_record
 from ._replay import ReplayResult, ReplaySource, replay, replay_schedule, replay_to
+from ._streams import TCPReassembler, TCPStreamData, TCPStreamStats
 from ._writer import PcapngWriter, PcapWriter
 
 __all__ = [
@@ -118,6 +119,9 @@ __all__ = [
     "ReplaySource",
     "Selector",
     "TCPLayer",
+    "TCPReassembler",
+    "TCPStreamData",
+    "TCPStreamStats",
     "UDPLayer",
     "UnsupportedFormatError",
     "VLANLayer",

@@ -18,7 +18,7 @@ Install with `pip install pktcap`, which brings `netimps`. The `yaml` extra
 `pktcap.__version__` — the package version string, the same value the
 installed distribution's metadata carries.
 
-Three topics keep their detail in a header beside their code, also inside the
+Topics with much detail keep it in a header beside their code, inside the
 installed package (`importlib.resources.files("pktcap")`):
 
 | Header | Covers |
@@ -27,6 +27,7 @@ installed package (`importlib.resources.files("pktcap")`):
 | `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
 | `pktcap/_plugins/AGENTS.md` | layers and the filter keys a registry holds for them, how a filter reads a layer's fields, and loading plugins by name |
 | `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay`, `convert` and `plugins`, every option, what each prints, its statuses |
+| `pktcap/_streams/AGENTS.md` | `TCPReassembler`, `TCPStreamData`, `TCPStreamStats`: the rules for putting TCP streams back together, and the bounds |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
 **Any valid capture is read.** Every frame of a pcap or pcapng file comes
@@ -122,14 +123,10 @@ limit that is not positive.
   registered dissector does.
 - **`FrameDissector.stats`** — a `DissectStats` snapshot of the counters;
   `FrameDissector.unsupported_linktypes` says which link types it counted.
-- **IP fragments are reassembled**, of any protocol: a frame that is a piece
-  ends at its IP (or IPv6 fragment) layer with the piece as payload; the frame
-  that completes the datagram has `reassembled=True` and the layers read from
-  the whole. `reassemble=False` keeps no state: a first fragment is dissected
-  from the octets it carries, a later one stops at the fragment.
-- **A fragment that overlaps another discards its whole datagram**, in IPv4 as
-  in IPv6 (RFC 5722 requires it for IPv6). The same fragment seen twice, octet
-  for octet, is ignored: a capture taken on a bridge shows a frame twice.
+- **IP fragments are reassembled**, of any protocol; the frame that completes
+  a datagram has `reassembled=True`, and `reassemble=False` keeps no state.
+  An overlap discards the datagram. The rules are in
+  `pktcap/_dissectors/AGENTS.md`.
 
 **`DissectedFrame(frame, layers, payloads, error=None, reassembled=False)`** —
 a named tuple: a captured frame and what was read from it.
@@ -156,14 +153,12 @@ a named tuple: a captured frame and what was read from it.
   are kept and its octets are the payload.
 
 **`DissectStats(frames, malformed, failed, unsupported, fragments, dropped, pending)`**
-— a named tuple of counts, one per `FrameDissector.stats`: `frames` is the frames
-given to `dissect`, `malformed` those a dissector could not read, `failed` those
-a dissector broke on, `unsupported` those of a link type nothing dissects. Each
-counter is in `pktcap/_dissectors/AGENTS.md`.
+— a named tuple of counts, one per `FrameDissector.stats`: frames given to
+`dissect`, those a dissector could not read or broke on, and those of a link
+type nothing dissects. Each counter is in `pktcap/_dissectors/AGENTS.md`.
 
 **`LINKTYPES`** — a read-only mapping from the `LINKTYPE_` numbers with a
-built-in dissector to a name: `0` NULL, `1` ETHERNET, `12`, `14` and `101`
-RAW, `108` LOOP, `113` LINUX_SLL, `228` IPV4, `229` IPV6, `276` LINUX_SLL2.
+built-in dissector to a name (the list is in `pktcap/_dissectors/AGENTS.md`).
 A frame of any other link type is read and returned undissected; register a
 dissector under `("linktype", number)` to dissect it.
 
@@ -189,8 +184,13 @@ arrival, and a full table holds at most about 250 KiB for each reassembly in
 flight.
 
 **TCP is read a segment at a time.** `TCPLayer` is the header and
-`payload_of(TCPLayer)` the segment's octets; streams are not reassembled, so a
-message split across segments is for the caller to put together.
+`payload_of(TCPLayer)` the segment's octets. A message split across segments
+is put together by **`TCPReassembler`**, fed the dissected frames of a capture
+in order: it hands out **`TCPStreamData`**, each direction's octets in order,
+with an offset, the count of octets given up on before them, a connection
+number and an end marker, and counts what it met in **`TCPStreamStats`**.
+Connections, held octets, pieces and silence are bounded; the signatures,
+the rules and the bounds are in `pktcap/_streams/AGENTS.md`.
 
 ## The UDP datagram view
 

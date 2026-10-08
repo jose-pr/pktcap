@@ -189,8 +189,8 @@ class UDPLayer(NamedTuple):
 
 
 class TCPLayer(NamedTuple):
-    """A TCP header. The segment's payload follows it; streams are not
-    reassembled.
+    """A TCP header. The segment's payload follows it; :class:`TCPReassembler`
+    puts the streams back together.
 
     :ivar source_port: the source port.
     :ivar destination_port: the destination port.

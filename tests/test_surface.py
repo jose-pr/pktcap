@@ -50,6 +50,9 @@ EXPECTED = [
     "ReplaySource",
     "Selector",
     "TCPLayer",
+    "TCPReassembler",
+    "TCPStreamData",
+    "TCPStreamStats",
     "UDPLayer",
     "UnsupportedFormatError",
     "VLANLayer",
@@ -129,6 +132,8 @@ NAMED_TUPLES = (
     "LoopbackLayer",
     "ReplayResult",
     "TCPLayer",
+    "TCPStreamData",
+    "TCPStreamStats",
     "UDPLayer",
     "VLANLayer",
 )
