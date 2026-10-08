@@ -36,6 +36,11 @@ def _tcp(sport, dport, payload):
     return header + options + payload
 
 
+def _segment(sequence, payload):
+    header = struct.pack("!HHIIBBHHH", 50000, 80, sequence, 2, 5 << 4, 0x18, 4096, 0, 0)
+    return _ethernet(_ipv4(header + payload, protocol=6))
+
+
 def _ipv4(body, ident=1, offset=0, more=False, protocol=17):
     flags = (0x2000 if more else 0) | (offset // 8)
     return (
@@ -109,7 +114,21 @@ def _inputs():
         )
         for i in range(FRAMES)
     ]
+    # One stream: a SYN, then 100-octet segments in order, or each pair of
+    # them swapped.
+    dissector = pktcap.FrameDissector()
+    syn = struct.pack("!HHIIBBHHH", 50000, 80, 999, 0, 5 << 4, 0x02, 4096, 0, 0)
+    ordered = [_segment(1000 + 100 * i, bytes(100)) for i in range(FRAMES)]
+    swapped = [ordered[i ^ 1] for i in range(FRAMES)]
+    segments = {
+        name: [
+            dissector.dissect(pktcap.CapturedFrame(float(i), 1, frame))
+            for i, frame in enumerate([_ethernet(_ipv4(syn, protocol=6))] + frames)
+        ]
+        for name, frames in (("in_order", ordered), ("out_of_order", swapped))
+    }
     return {
+        "segments": segments,
         "pcap": _pcap(whole),
         "pcapng": _pcapng(whole),
         "ipv6": _pcap(v6),
@@ -147,6 +166,16 @@ def metrics(inputs):
         dissector = pktcap.FrameDissector()
         for frame in inputs["tiny"]:
             dissector.dissect(frame)
+
+    def stream(name):
+        def run():
+            reassembler = pktcap.TCPReassembler()
+            for frame in inputs["segments"][name]:
+                reassembler.add(frame)
+            reassembler.flush()
+            assert reassembler.stats.delivered == 100 * FRAMES
+
+        return run
 
     registry = pktcap.DissectorRegistry()
     registry.register("udp", 69, _dissect_payload)
@@ -204,6 +233,8 @@ def metrics(inputs):
             1 for _ in pktcap.read_datagrams(io.BytesIO(inputs["fragments"]))
         ),
         "dissect/1000-fragments-of-one-datagram": tiny_fragments,
+        "TCPReassembler.add/in-order-2000": stream("in_order"),
+        "TCPReassembler.add/pairs-swapped-2000": stream("out_of_order"),
         "PcapWriter.write/2000": write,
         "PcapngWriter.write_frame/2000": write_frames,
         "dumps_record/datagram-json-2000": records,

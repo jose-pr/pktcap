@@ -32,6 +32,8 @@ repeated `--samples` times (15 by default) after one warm-up call.
 | `read_datagrams/ethernet-ipv4-2000` | the same frames through the UDP datagram view |
 | `read_datagrams/fragments-3x666` | 666 datagrams of 4,096 octets, each in three fragments |
 | `dissect/1000-fragments-of-one-datagram` | 1,000 eight-octet fragments of one datagram that never completes: the shape that is quadratic when each fragment is compared with all the others |
+| `TCPReassembler.add/in-order-2000` | 2,000 segments of 100 octets of one TCP stream, already dissected, in order, and the flush |
+| `TCPReassembler.add/pairs-swapped-2000` | the same segments with each pair swapped, so every other segment waits for the one before it |
 | `PcapWriter.write/2000` | writing 2,000 datagrams under synthesised headers, checksums included |
 | `PcapngWriter.write_frame/2000` | writing 2,000 captured frames back as pcapng |
 | `dumps_record/datagram-json-2000` | the default record of 2,000 datagrams as JSON lines |
