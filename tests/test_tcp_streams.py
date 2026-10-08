@@ -5,6 +5,7 @@ Every test builds TCP segments with the builders in ``captures.py``, has a real
 the octets the test cut the segments from.
 """
 
+import io
 import random
 
 import pytest
@@ -16,6 +17,8 @@ from pktcap import (
     TCPReassembler,
     TCPStreamData,
     TCPStreamStats,
+    CaptureFormatError,
+    read_tcp_streams,
 )
 
 A = ("10.0.0.1", 5000)
@@ -857,6 +860,145 @@ def test_mutated_segments_never_raise_and_never_pass_the_bounds(seed):
     ):
         assert getattr(stats, counter) > 0, counter
     assert any(i.end for i in wire.items) and any(i.missing for i in wire.items)
+
+
+# -- a capture in one call -----------------------------------------------------
+
+
+def _segment(sequence, data=b"", flags=PSH, *, src=A, dst=B, ack=0):
+    return build.tcp_frame(
+        src[0], dst[0], src[1], dst[1], sequence, data, flags=flags, acknowledgment=ack
+    )
+
+
+def _exchange():
+    """A handshake, a request cut in two and sent out of order, a reply, and
+    a FIN from each side."""
+    return [
+        _segment(999, flags=SYN),
+        _segment(4999, flags=SYN | ACK, src=B, dst=A, ack=1000),
+        _segment(1000, flags=ACK, ack=5000),
+        _segment(1005, b"world"),
+        _segment(1000, b"hello"),
+        _segment(5000, b"reply", flags=PSH | ACK, src=B, dst=A, ack=1010),
+        _segment(1010, flags=FIN | ACK, ack=5005),
+        _segment(5005, flags=FIN | ACK, src=B, dst=A, ack=1011),
+    ]
+
+
+def test_the_items_of_an_exchange_come_in_capture_order():
+    capture = build.pcap(_exchange())
+    items = list(read_tcp_streams(io.BytesIO(capture)))
+    assert [(i.source, i.data, i.offset, i.end) for i in items] == [
+        (A, b"helloworld", 0, False),
+        (B, b"reply", 0, False),
+        (A, b"", 10, True),
+        (B, b"", 5, True),
+    ]
+    assert [i.time for i in items] == [
+        1_000_004.0,
+        1_000_005.0,
+        1_000_006.0,
+        1_000_007.0,
+    ]
+    consistent(items)
+
+
+def test_a_pcap_and_a_pcapng_of_one_exchange_give_the_same_items():
+    frames = _exchange()
+    from_pcap = list(read_tcp_streams(io.BytesIO(build.pcap(frames))))
+    from_pcapng = list(read_tcp_streams(io.BytesIO(build.pcapng(frames))))
+    assert from_pcap == from_pcapng and len(from_pcap) == 4
+
+
+def test_a_path_is_read_like_a_stream(tmp_path):
+    path = tmp_path / "exchange.pcap"
+    path.write_bytes(build.pcap(_exchange()))
+    assert list(read_tcp_streams(str(path))) == list(read_tcp_streams(path))
+    assert len(list(read_tcp_streams(path))) == 4
+
+
+def test_a_capture_that_ends_inside_a_hole_yields_the_held_octets_last():
+    frames = [
+        _segment(999, flags=SYN),
+        _segment(1000, b"ab"),
+        _segment(1010, b"tail"),
+    ]
+    items = list(read_tcp_streams(io.BytesIO(build.pcap(frames))))
+    assert view(items) == [(b"ab", 0, 0, 0, False), (b"tail", 10, 8, 0, False)]
+
+
+def test_a_capture_with_no_tcp_and_an_empty_one_yield_nothing():
+    udp = build.ethernet(build.ipv4(A[0], B[0], build.udp(1, 2, b"x")))
+    assert list(read_tcp_streams(io.BytesIO(build.pcap([udp])))) == []
+    assert list(read_tcp_streams(io.BytesIO(build.pcap([])))) == []
+
+
+def test_a_damaged_container_raises_after_the_items_before_the_damage():
+    frames = [
+        _segment(999, flags=SYN),
+        _segment(1000, b"ab"),
+        _segment(1010, b"tail"),
+        _segment(1014, b"more"),
+    ]
+    data = build.pcap(frames)
+    items = []
+    with pytest.raises(CaptureFormatError):
+        for item in read_tcp_streams(io.BytesIO(data[:-10])):
+            items.append(item)
+    # What the frames before the damage held comes out before the error.
+    assert view(items) == [(b"ab", 0, 0, 0, False), (b"tail", 10, 8, 0, False)]
+    with pytest.raises(CaptureFormatError):
+        list(read_tcp_streams(io.BytesIO(b"not a capture at all")))
+
+
+class _Counting(io.BytesIO):
+    def __init__(self, data):
+        super().__init__(data)
+        self.reads = 0
+
+    def read(self, size=-1):
+        self.reads += 1
+        return super().read(size)
+
+
+def test_nothing_is_read_before_the_first_item_and_a_caller_that_stops_leaves_the_rest():
+    frames = [_segment(999, flags=SYN)] + [
+        _segment(1000 + index, b"x") for index in range(3000)
+    ]
+    data = build.pcap(frames)
+    stream = _Counting(data)
+    items = read_tcp_streams(stream)
+    assert stream.reads == 0
+    first = next(items)
+    assert first.data == b"x" and stream.reads > 0
+    assert stream.tell() < len(data) // 4
+    items.close()
+
+
+def test_a_reassembler_and_a_dissector_of_the_wrong_type_are_refused_before_a_read():
+    stream = _Counting(build.pcap(_exchange()))
+    for options in ({"reassembler": object()}, {"dissector": object()}):
+        with pytest.raises(TypeError):
+            read_tcp_streams(stream, **options)
+        assert stream.reads == 0
+    with pytest.raises(TypeError):
+        read_tcp_streams(stream, TCPReassembler())  # options are keyword-only
+
+
+def test_the_reassembler_and_the_dissector_given_hold_the_counters():
+    reassembler = TCPReassembler(max_streams=2)
+    dissector = FrameDissector()
+    frames = _exchange()
+    items = list(
+        read_tcp_streams(
+            io.BytesIO(build.pcap(frames)), reassembler=reassembler, dissector=dissector
+        )
+    )
+    assert len(items) == 4
+    assert dissector.stats.frames == len(frames)
+    assert reassembler.stats.segments == len(frames) and reassembler.stats.streams == 1
+    assert reassembler.stats.delivered == len(b"helloworld") + len(b"reply")
 
 
 # -- arguments ---------------------------------------------------------------

@@ -233,6 +233,13 @@ for dissected in pktcap.read_dissected(source):
 assert_type(reassembler.flush(), Tuple[pktcap.TCPStreamData, ...])
 assert_type(reassembler.stats, pktcap.TCPStreamStats)
 assert_type(reassembler.stats.held, int)
+assert_type(pktcap.read_tcp_streams(source), Iterator[pktcap.TCPStreamData])
+assert_type(
+    pktcap.read_tcp_streams(
+        "x.pcap", reassembler=reassembler, dissector=dissector, max_frame_size=1500
+    ),
+    Iterator[pktcap.TCPStreamData],
+)
 
 # -- capturing live -------------------------------------------------------
 

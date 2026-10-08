@@ -184,13 +184,13 @@ arrival, and a full table holds at most about 250 KiB for each reassembly in
 flight.
 
 **TCP is read a segment at a time.** `TCPLayer` is the header and
-`payload_of(TCPLayer)` the segment's octets. A message split across segments
-is put together by **`TCPReassembler`**, fed the dissected frames of a capture
-in order: it hands out **`TCPStreamData`**, each direction's octets in order,
-with an offset, the count of octets given up on before them, a connection
-number and an end marker, and counts what it met in **`TCPStreamStats`**.
-Connections, held octets, pieces and silence are bounded; the signatures,
-the rules and the bounds are in `pktcap/_streams/AGENTS.md`.
+`payload_of(TCPLayer)` the segment's octets. **`TCPReassembler`**, fed the
+dissected frames of a capture in order, hands out **`TCPStreamData`**: each
+direction's octets in order, with an offset, a count of octets given up on, a
+connection number and an end marker; it counts what it met in
+**`TCPStreamStats`**, and **`read_tcp_streams`** does both from a capture.
+Everything a capture controls is bounded; the signatures, rules and bounds
+are in `pktcap/_streams/AGENTS.md`.
 
 ## The UDP datagram view
 

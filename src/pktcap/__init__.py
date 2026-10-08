@@ -75,7 +75,12 @@ from ._plugins._config import capture_config_path
 from ._plugins._load import LoadedPlugin, load_plugins
 from ._records import datagram_record, frame_record
 from ._replay import ReplayResult, ReplaySource, replay, replay_schedule, replay_to
-from ._streams import TCPReassembler, TCPStreamData, TCPStreamStats
+from ._streams import (
+    TCPReassembler,
+    TCPStreamData,
+    TCPStreamStats,
+    read_tcp_streams,
+)
 from ._writer import PcapngWriter, PcapWriter
 
 __all__ = [
@@ -143,6 +148,7 @@ __all__ = [
     "read_datagrams",
     "read_dissected",
     "read_frames",
+    "read_tcp_streams",
     "register_dissector",
     "replay",
     "replay_schedule",

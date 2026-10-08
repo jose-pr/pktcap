@@ -199,7 +199,7 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `EthernetLayer`, `VLANLayer`, `LinuxCookedLayer`, `LoopbackLayer`, `IPv4Layer`, `IPv6Layer`, `IPv6ExtensionLayer`, `IPv6FragmentLayer`, `UDPLayer`, `TCPLayer` | the records the built-in dissectors make |
 | `Dissector`, `Dissected`, `Fragment`, `Selector`, `DissectorRegistry`, `default_registry`, `register_dissector`, `check_dissector` | write, register and check a dissector |
 | `read_datagrams`, `CapturedDatagram` | the UDP datagram view |
-| `TCPReassembler`, `TCPStreamData`, `TCPStreamStats` | TCP streams: each direction's octets in order, within bounds |
+| `read_tcp_streams`, `TCPReassembler`, `TCPStreamData`, `TCPStreamStats` | TCP streams: each direction's octets in order, within bounds |
 | `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
 | `CaptureWriter`, `dumps_record`, `datagram_record`, `frame_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format |
 | `copy_frames`, `CopyResult` | copy a source of dissected frames, filtered, into a writer |

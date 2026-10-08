@@ -74,6 +74,7 @@ EXPECTED = [
     "read_datagrams",
     "read_dissected",
     "read_frames",
+    "read_tcp_streams",
     "register_dissector",
     "replay",
     "replay_schedule",

@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   one gives up the longest wait and never drops octets, except that a forgotten
   connection drops what it held. The checksum is not verified and a segment in
   an IP fragment that was not reassembled is ignored.
+- `read_tcp_streams(source, *, reassembler=None, dissector=None,
+  max_frame_size=262144)` reads the TCP streams of a capture in one call:
+  `read_dissected` through `TCPReassembler.add`, then `flush()` at the end.
 - `DissectorRegistry.register_layer(layer, *, name=None, keys=None,
   replace=False)`, `unregister_layer(name)` and `layers()` declare the class
   of a layer a dissector returns, and optionally the filter keys over it.

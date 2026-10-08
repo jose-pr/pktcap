@@ -60,6 +60,20 @@ segment in an IP fragment that was not reassembled); connections forgotten at
 `max_streams` or for age; connections in the table; octets held out of order
 at the moment.
 
+**`read_tcp_streams(source, *, reassembler=None, dissector=None, max_frame_size=262144) -> Iterator[TCPStreamData]`**
+— `read_dissected` through `TCPReassembler.add`, then `flush()` when the capture
+ends: the one-call form, as `read_datagrams` is for UDP.
+
+- `source` is a path or a binary stream, as for `read_frames`.
+- `reassembler` is a `TCPReassembler` to use for its options and its `stats`,
+  and `dissector` a `FrameDissector` as for `read_dissected`; a new one of each
+  by default. A wrong type is a `TypeError` at the call, before anything is
+  read.
+- Nothing is read before the first item is asked for, and a caller that stops
+  early leaves the rest unread.
+- Raises `CaptureFormatError` for a damaged container, after every item the
+  frames before the damage made deliverable and what was still held.
+
 ## The rules
 
 1. **A connection** is the two socket addresses, in either order. Its two
