@@ -137,7 +137,7 @@ def test_several_values_bind_several_sockets_in_the_order_written(caplog):
 def test_a_datagram_from_an_interface_a_socket_does_not_serve_is_counted_in_the_summary(
     caplog, capsys
 ):
-    from netimps import get_interfaces
+    from netimps import get_interfaces, has_device_binding
 
     loopback = get_interface("127.0.0.1").index
     others = [i for i in get_interfaces() if i.index and i.index != loopback]
@@ -148,6 +148,11 @@ def test_a_datagram_from_an_interface_a_socket_does_not_serve_is_counted_in_the_
     probe.close()
     if not has_pktinfo:
         pytest.skip("this host reports no arrival interface")
+    if has_device_binding():
+        # Measured 2026-10-09 under WSL (Fedora 44): the kernel delivers to a
+        # socket bound to an adapter only what arrives there, so nothing reaches
+        # the endpoint to be dropped and counted.
+        pytest.skip("the socket is bound to the adapter: nothing else reaches it")
     argv = ["capture", "--count", "1", "--format", "text"]
     argv += ["--listen", "%s:0" % others[0].name, "--listen", "127.0.0.1:0"]
     status, _ = listen_and_send(

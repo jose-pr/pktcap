@@ -429,3 +429,16 @@ def test_a_destination_without_a_port_is_refused_when_the_class_has_no_default(
     argv = ["-i", str(trace), "--to", "127.0.0.1"]
     with pytest.raises(ValueError, match="needs a port"):
         run(Replay, argv)
+
+
+def test_the_worked_subclass_of_the_header_runs(trace, capsys):
+    """The Python block of ``cli/AGENTS.md`` is executed, and the class it
+    defines converts a capture as the header says."""
+    header = pathlib.Path(pktcap.cli.__file__).with_name("AGENTS.md")
+    text = header.read_text(encoding="utf-8")
+    block = text.split("```python\n", 1)[1].split("\n```", 1)[0]
+    namespace = {}
+    exec(compile(block, "cli/AGENTS.md", "exec"), namespace)
+    assert status_of(namespace["Listing"], ["-i", str(trace)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 3 and all("10.0.0.5:50000" in line for line in lines)
