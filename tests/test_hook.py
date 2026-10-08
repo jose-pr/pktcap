@@ -262,10 +262,11 @@ def test_standard_error_is_bounded_in_the_error_and_the_log(
         with pytest.raises(CaptureHookError) as raised:
             command_hook(program, fail_fast=True)(frame())
 
-    assert len(str(raised.value)) < 1000
+    # The bound is on the tail of the error output, not on the path.
+    assert len(str(raised.value)) < len(program) + 520
     assert str(raised.value).endswith("TAIL")
     assert "\x1b" not in str(raised.value) and "\\x1b" in str(raised.value)
-    assert all(len(r.getMessage()) < 1000 for r in caplog.records)
+    assert all(len(r.getMessage()) < len(program) + 520 for r in caplog.records)
     assert all("\x1b" not in r.getMessage() for r in caplog.records)
 
 
@@ -309,7 +310,7 @@ def test_a_failure_is_logged_once_per_interval_with_a_bounded_line(
     lines = [r.getMessage() for r in caplog.records if "failed" in r.getMessage()]
     assert len(lines) == 2 and hook.failures == 4
     assert "4 failures" in lines[1]
-    assert all("\n" not in line and len(line) < 600 for line in lines)
+    assert all("\n" not in line and len(line) < len(program) + 520 for line in lines)
 
 
 # -- the time limit ------------------------------------------------------------------

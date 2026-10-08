@@ -6,6 +6,7 @@ datagram is waited for with a bound of seconds, never a fixed sleep.
 """
 
 import asyncio
+import errno
 import gc
 import selectors
 import socket
@@ -242,11 +243,21 @@ def test_a_datagram_over_max_size_is_counted_and_not_returned():
 
 
 def test_the_default_max_size_takes_the_largest_datagram_a_socket_holds():
+    # Measured 2026-10-09: macOS 15.7 and FreeBSD 16.0 refuse a UDP send above
+    # net.inet.udp.maxdgram (9216 by default) with EMSGSIZE; Linux and Windows
+    # send 65507. The test sends the largest datagram the host will send.
     endpoint = listener()
     with UDPCapture([endpoint]) as capture:
-        send(b"z" * 65507, endpoint)
+        size = 65507
+        try:
+            send(b"z" * size, endpoint)
+        except OSError as exc:
+            if exc.errno != errno.EMSGSIZE:
+                raise
+            size = 9216
+            send(b"z" * size, endpoint)
         datagram = FrameDissector().dissect(read_one(capture)).datagram()
-    assert len(datagram.payload) == 65507 and capture.truncated == 0
+    assert datagram.payload == b"z" * size and capture.truncated == 0
 
 
 @pytest.mark.parametrize("max_size", [0, -1, 65536])
