@@ -78,6 +78,22 @@ at the moment.
    and a copy that disagrees is counted in `conflicts`. Receivers differ here;
    the capture's own order is the one rule that needs no knowledge of the
    receiver.
+6. **A hole is waited for, within bounds.** Octets beyond a hole are held.
+   The hole is given up, and what is held is delivered with the number of
+   octets missing before it, when: the other side acknowledges past the hole
+   (rule 7); a bound is reached (below); the direction or the connection ends;
+   or the capture ends (`flush()`).
+7. **An acknowledgment from the other side proves receipt.** A segment with
+   ACK set is read against the other direction of its connection. When its
+   acknowledgment number is ahead of that direction's next expected octet and
+   not beyond the furthest octet seen from that sender, every hole before it
+   is given up and what is held up to it is delivered, in the frame that
+   carried the acknowledgment and before that frame's own octets. One that
+   falls inside a hole gives up only the part before it. An acknowledgment
+   beyond everything seen from the sender changes nothing and is counted in
+   `ignored`: it cannot be told from a forged one, and believing it would let
+   one segment make every later octet look like a retransmission. The
+   acknowledgment of a FIN covers the FIN.
 8. **FIN ends a direction** at its position; octets claimed beyond it are
    dropped. **RST ends the connection**, both directions, unless its sequence
    number is behind what was already delivered, when it is ignored. A reset in
@@ -90,5 +106,27 @@ at the moment.
     fragment that was not reassembled is ignored.
 
 A zero-length segment with no SYN, FIN or RST delivers nothing and starts no
-connection. A SYN takes one sequence number before its data and a FIN one
-after it.
+connection, and is still read for its acknowledgment. A SYN takes one sequence
+number before its data and a FIN one after it. A SYN-ACK whose acknowledgment
+contradicts the SYN the connection started with is ignored.
+
+## Bounds
+
+Every amount a capture controls has a ceiling. Reaching the last three loses
+the wait and never the octets; only the first two drop held octets.
+
+| What the capture controls | Ceiling | At the ceiling |
+| --- | --- | --- |
+| connections tracked | `max_streams` (1,024) | the least recently active is forgotten, its held octets dropped, `evicted` |
+| capture time a connection may be silent | `idle_timeout` (300 s) | forgotten when its addresses are next seen, which start a new `stream`; `evicted` |
+| octets held out of order over all connections | `max_buffered` (16,777,216), each held piece charged its length plus 64 | the direction that has waited longest gives up its holes and delivers, until the total fits |
+| pieces held in one direction | 1,024 | that direction gives up its earliest hole |
+| one piece too large for `max_buffered` on its own | `max_buffered` | delivered at once behind a given-up hole |
+
+Silence is `abs(time - last)`: a jump either way past the timeout counts, since
+a capture controls its clock and a jump back cannot be told from a gap. A time
+of exactly `0.0` (a pcapng simple packet block has none) neither expires a
+connection nor keeps it alive.
+
+A segment costs a binary search and a walk over the held pieces it covers, at
+most 1,024; held octets are joined once, when a run is delivered.

@@ -526,6 +526,339 @@ def test_any_order_and_any_repetition_of_a_streams_segments_gives_the_same_octet
     assert stats.delivered == len(truth)
 
 
+# -- an acknowledgment proves receipt -----------------------------------------
+
+
+def _hole_at_ten(wire):
+    """A direction A with two octets delivered and ``tail`` held at 10."""
+    handshake(wire)
+    wire.send(1000, b"ab")
+    wire.send(1010, b"tail")
+
+
+def test_an_acknowledgment_past_a_hole_delivers_what_is_held_before_the_frames_own_octets():
+    wire = Wire()
+    _hole_at_ten(wire)
+    assert wire.stats.held == 4
+    got = wire.send(5000, b"reply", src=B, dst=A, flags=PSH | ACK, ack=1014)
+    assert view(got) == [(b"tail", 10, 8, 0, False), (b"reply", 0, 0, 0, False)]
+    assert (got[0].source, got[1].source) == (A, B)
+    assert wire.stats.missing == 8 and wire.stats.held == 0
+    consistent(wire.items)
+
+
+def test_an_acknowledgment_inside_a_hole_gives_up_only_the_part_before_it():
+    wire = Wire()
+    _hole_at_ten(wire)
+    assert wire.send(5000, src=B, dst=A, flags=ACK, ack=1006) == ()
+    assert wire.stats.missing == 4 and wire.stats.held == 4
+    # The rest of the hole is still waited for: the octets it holds come out
+    # when they are filled, with the four given up reported before them.
+    assert view(wire.send(1006, b"cdef")) == [(b"cdeftail", 6, 4, 0, False)]
+    consistent(wire.items)
+    assert wire.stats.missing == 4
+
+
+def test_an_acknowledgment_up_to_the_start_of_a_held_run_releases_it():
+    wire = Wire()
+    _hole_at_ten(wire)
+    assert view(wire.send(5000, src=B, dst=A, flags=ACK, ack=1010)) == [
+        (b"tail", 10, 8, 0, False)
+    ]
+
+
+def test_an_acknowledgment_beyond_everything_seen_changes_nothing_and_is_counted():
+    wire = Wire()
+    _hole_at_ten(wire)
+    before = wire.stats
+    assert wire.send(5000, src=B, dst=A, flags=ACK, ack=1015) == ()
+    assert wire.send(5000, src=B, dst=A, flags=ACK, ack=1000 + (1 << 30)) == ()
+    after = wire.stats
+    assert after.ignored == before.ignored + 2
+    assert (after.held, after.missing) == (before.held, before.missing)
+    # Believing it would make every later octet a retransmission.
+    assert view(wire.send(1002, b"cdefghij")) == [(b"cdefghijtail", 2, 0, 0, False)]
+    assert wire.stats.retransmitted == 0
+
+
+def test_an_acknowledgment_that_covers_nothing_new_is_not_counted():
+    wire = Wire()
+    _hole_at_ten(wire)
+    wire.send(5000, src=B, dst=A, flags=ACK, ack=1002)  # exactly the next octet
+    wire.send(5000, src=B, dst=A, flags=ACK, ack=1000)  # behind it
+    wire.send(5000, src=B, dst=A, flags=ACK, ack=900)
+    assert wire.stats.ignored == 0 and wire.stats.missing == 0
+
+
+def test_an_acknowledgment_of_a_direction_never_seen_is_not_read_against_anything():
+    wire = Wire()
+    wire.send(1000, b"data", flags=PSH | ACK, ack=777)
+    assert wire.stats.ignored == 0 and wire.stats.streams == 1
+
+
+def test_an_acknowledgment_of_a_fin_behind_a_hole_ends_the_direction():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"ab")
+    wire.send(1010, flags=FIN)
+    got = wire.send(5000, src=B, dst=A, flags=ACK, ack=1011)
+    assert view(got) == [(b"", 10, 8, 0, True)]
+
+
+def test_an_acknowledgment_wraps_with_the_sequence_number():
+    wire = Wire()
+    first = 0xFFFFFFFC
+    wire.send(first - 1, flags=SYN)
+    wire.send(first, b"ab")
+    wire.send(first + 10, b"tail")  # 2**32 - 4 + 10 wraps to 6
+    got = wire.send(5000, src=B, dst=A, flags=ACK, ack=first + 14)
+    assert view(got) == [(b"tail", 10, 8, 0, False)]
+
+
+# -- the table of connections --------------------------------------------------
+
+
+def test_five_thousand_connections_leave_the_most_the_table_holds():
+    wire = Wire()
+    for index in range(5000):
+        wire.send(1, b"x", src=("10.1.%d.%d" % (index // 250, index % 250), 9), dst=B)
+    stats = wire.stats
+    assert stats.pending == 1024 and stats.streams == 5000
+    assert stats.evicted == 5000 - 1024 and stats.delivered == 5000
+
+
+def test_the_connection_forgotten_is_the_least_recently_active():
+    wire = Wire(max_streams=3)
+    peers = [("10.0.1.%d" % n, 7) for n in range(5)]
+    for peer in peers[:3]:
+        wire.send(1, b"a", src=peer, dst=B)
+    wire.send(2, b"b", src=peers[0], dst=B)  # the first is the most recent
+    wire.send(1, b"c", src=peers[3], dst=B)  # one more: peers[1] is forgotten
+    assert wire.stats.evicted == 1
+    assert view(wire.send(3, b"d", src=peers[0], dst=B)) == [(b"d", 2, 0, 0, False)]
+    got = wire.send(2, b"e", src=peers[1], dst=B)
+    assert view(got) == [(b"e", 0, 0, 4, False)]  # a stream of its own, new
+
+
+def test_a_forgotten_connection_drops_what_it_held_and_the_budget_with_it():
+    wire = Wire(max_streams=1)
+    handshake(wire)
+    wire.send(1010, b"held")
+    assert wire.stats.held == 4
+    wire.send(1, b"z", src=("10.0.9.9", 1), dst=B)
+    assert wire.stats.held == 0 and wire.stats.evicted == 1
+    wire.flush()
+    assert b"held" not in wire.octets(A)
+
+
+def test_a_connection_silent_past_the_timeout_restarts_as_a_new_stream():
+    wire = Wire(idle_timeout=10.0)
+    wire.send(1000, b"a", time=100.0)
+    assert wire.send(1001, b"b", time=105.0)[0].stream == 0
+    got = wire.send(1002, b"c", time=200.0)
+    assert view(got) == [(b"c", 0, 0, 1, False)]
+    assert wire.stats.evicted == 1 and wire.stats.streams == 2
+
+
+def test_the_idle_timeout_is_checked_when_the_addresses_are_next_seen():
+    wire = Wire(idle_timeout=10.0)
+    wire.send(1000, b"a", time=100.0)
+    wire.send(1, b"z", src=("10.0.9.9", 1), dst=B, time=500.0)
+    assert wire.stats.pending == 2 and wire.stats.evicted == 0
+
+
+def test_a_time_of_zero_neither_expires_a_connection_nor_keeps_it_alive():
+    wire = Wire(idle_timeout=10.0)
+    wire.send(1000, b"a", time=100.0)
+    # A pcapng simple packet block has no time: it says nothing about silence.
+    assert wire.send(1001, b"b", time=0.0)[0].stream == 0
+    # Nor did it refresh the connection: 109 is measured from 100, not from 0.
+    assert wire.send(1002, b"c", time=109.0)[0].stream == 0
+    assert wire.send(1003, b"d", time=500.0)[0].stream == 1
+    first = Wire(idle_timeout=10.0)
+    first.send(1000, b"a", time=0.0)
+    assert first.send(1001, b"b", time=1.7e9)[0].stream == 0
+
+
+def test_a_time_that_jumps_either_way_past_the_timeout_counts_as_silence():
+    # A file controls the clock, so a jump backwards cannot be told from a
+    # long gap; a small step back, as in a merged capture, is not one.
+    wire = Wire(idle_timeout=10.0)
+    wire.send(1000, b"a", time=100.0)
+    assert wire.send(1001, b"b", time=95.0)[0].stream == 0
+    assert wire.send(1002, b"c", time=40.0)[0].stream == 1
+
+
+# -- the budget of held octets --------------------------------------------------
+
+
+def _hold(wire, port, size=300, *, hole=10):
+    peer = ("10.0.7.%d" % port, 4000 + port)
+    wire.send(1, flags=SYN, src=peer, dst=B)
+    return peer, wire.send(2 + hole, b"x" * size, src=peer, dst=B)
+
+
+def test_octets_held_over_all_connections_never_pass_max_buffered():
+    wire = Wire(max_buffered=1000)
+    peers = []
+    for port in range(2):
+        peers.append(_hold(wire, port)[0])
+    assert wire.stats.held == 600  # 2 x (300 + 64) = 728, within 1000
+    peer, got = _hold(wire, 2)
+    # The third would make 1,092: the direction that has waited longest,
+    # the first, gives up its hole and delivers.
+    assert view(got) == [(b"x" * 300, 10, 10, 0, False)]
+    assert got[0].source == peers[0]
+    assert wire.stats.held == 600 and wire.stats.missing == 10
+
+
+def test_each_held_piece_is_charged_its_length_plus_sixty_four():
+    wire = Wire(max_buffered=1000)
+    handshake(wire)
+    for index in range(1, 200):
+        wire.send(1000 + 2 * index, b"x")
+        # 65 per piece: more than 15 pieces cannot be held.
+        assert wire.stats.held * 65 <= 1000
+    assert wire.stats.missing > 0
+
+
+def test_the_direction_that_has_waited_longest_is_the_one_that_gives_up():
+    wire = Wire(max_buffered=1000)
+    old, _ = _hold(wire, 0, 200)
+    _hold(wire, 1, 200)
+    # A third that overflows the budget: the first to wait gives up, not the
+    # biggest and not the one that overflowed it.
+    _, got = _hold(wire, 2, 500)
+    assert [item.source for item in got] == [old]
+    assert wire.stats.held == 700 and wire.stats.pending == 3
+
+
+def test_a_piece_larger_than_the_budget_is_delivered_at_once_behind_a_hole():
+    wire = Wire(max_buffered=100)
+    handshake(wire)
+    wire.send(1000, b"ab")
+    got = wire.send(1010, b"B" * 200)
+    assert view(got) == [(b"B" * 200, 10, 8, 0, False)]
+    assert wire.stats.held == 0 and wire.stats.missing == 8
+
+
+def test_a_piece_larger_than_the_budget_costs_no_other_direction_its_wait():
+    wire = Wire(max_buffered=300)
+    other, _ = _hold(wire, 0, 50)
+    peer, got = _hold(wire, 1, 400)
+    assert [item.source for item in got] == [peer]
+    assert wire.stats.held == 50 and wire.stats.missing == 10
+
+
+def test_holes_before_a_piece_larger_than_the_budget_are_given_up_in_order():
+    wire = Wire(max_buffered=100)
+    handshake(wire)
+    wire.send(1000, b"ab")
+    wire.send(1004, b"cd")
+    got = wire.send(1010, b"B" * 200)
+    assert view(got) == [(b"cd", 4, 2, 0, False), (b"B" * 200, 10, 4, 0, False)]
+    consistent(wire.items)
+
+
+def test_a_piece_larger_than_the_budget_that_overlaps_a_held_one_keeps_the_first_copy():
+    wire = Wire(max_buffered=100)
+    handshake(wire)
+    wire.send(1004, b"cdef")
+    got = wire.send(1002, b"AB" + b"CDEF" + b"g" * 200)
+    assert b"".join(i.data for i in got) == b"AB" + b"cdef" + b"g" * 200
+    assert wire.stats.conflicts == 4
+
+
+def test_no_more_than_a_thousand_and_twenty_four_pieces_are_held_in_one_direction():
+    wire = Wire()
+    handshake(wire)
+    most = 0
+    for index in range(1, 10001):
+        wire.send(1000 + 2 * index, b"x")
+        most = max(most, wire.stats.held)
+        assert wire.stats.held <= 1024
+    assert most == 1024
+    # The wait is lost and the octets are not: every one comes out.
+    wire.flush()
+    assert len(wire.octets()) == 10000
+    consistent(wire.items)
+    assert wire.stats.delivered == 10000 and wire.stats.held == 0
+
+
+def test_the_work_per_segment_does_not_grow_with_the_pieces_held():
+    import time as clock
+
+    def cost(count):
+        wire = Wire()
+        frames = [wire.frame(1000 + 2 * i, b"x") for i in range(1, count + 1)]
+        best = float("inf")
+        for _ in range(9):
+            reassembler = TCPReassembler()
+            reassembler.add(wire.frame(999, flags=SYN))
+            started = clock.perf_counter()
+            for frame in frames:
+                reassembler.add(frame)
+            best = min(best, clock.perf_counter() - started)
+        assert reassembler.stats.held == count
+        return best
+
+    # Eight times the pieces is 8 times the work when each costs the same
+    # (8.2 measured), and far more when each one re-sorts or re-joins the rest:
+    # a ratio is the same on a slow machine as on a fast one.
+    assert cost(1000) < 16 * cost(125)
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_mutated_segments_never_raise_and_never_pass_the_bounds(seed):
+    rng = random.Random(seed)
+    wire = Wire(max_streams=2, max_buffered=1024, idle_timeout=500.0)
+    hosts = [("10.0.%d.%d" % (n, n), 1000 + n) for n in range(3)]
+    flags = [PSH, PSH | ACK, ACK, SYN, SYN | ACK, FIN, FIN | ACK, RST]
+    weights = [30, 30, 20, 2, 2, 3, 3, 1]
+    after = {}  # the sequence number each direction would continue at
+    for _ in range(4000):
+        src, dst = rng.sample(hosts, 2)
+        base = after.setdefault((src, dst), rng.randrange(1 << 32))
+        roll = rng.random()
+        if roll < 0.03:
+            number = rng.randrange(1 << 32)
+        elif roll < 0.5:
+            number = base + rng.randrange(0, 400)
+        else:
+            number = base - rng.randrange(0, 60)
+        data = bytes(rng.choice(b"ab") for _ in range(rng.choice([0, 1, 5, 40, 200])))
+        after[(src, dst)] = number + len(data)
+        wire.send(
+            number,
+            data,
+            rng.choices(flags, weights)[0],
+            src=src,
+            dst=dst,
+            ack=rng.choice([number, base + rng.randrange(900), rng.randrange(1 << 32)]),
+            time=rng.choice([None, None, None, 0.0, wire.clock + rng.uniform(-80, 80)]),
+        )
+        stats = wire.stats
+        assert stats.held <= 1024 and stats.pending <= 2
+    wire.flush()
+    stats = wire.stats
+    assert stats.held == 0 and stats.pending == 0
+    consistent(wire.items)
+    assert stats.delivered == sum(len(i.data) for i in wire.items)
+    # Octets of a forgotten connection are given up and never reported.
+    assert stats.missing >= sum(i.missing for i in wire.items)
+    # The run met every rule, not only the quiet ones.
+    for counter in (
+        "out_of_order",
+        "retransmitted",
+        "conflicts",
+        "ignored",
+        "evicted",
+        "missing",
+    ):
+        assert getattr(stats, counter) > 0, counter
+    assert any(i.end for i in wire.items) and any(i.missing for i in wire.items)
+
+
 # -- arguments ---------------------------------------------------------------
 
 

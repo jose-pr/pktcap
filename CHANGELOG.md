@@ -33,8 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `TCPStreamStats`. Sequence numbers wrap, the first captured copy of an
   octet wins, a FIN or an in-sequence RST ends a direction or a connection, and
   a SYN that is not a retransmission starts a new stream on the same
-  addresses. The checksum is not verified and a segment in an IP fragment that
-  was not reassembled is ignored.
+  addresses. An acknowledgment from the other side that covers a hole gives
+  it up at once; one beyond everything seen changes nothing. Connections
+  (`max_streams`), capture time of silence (`idle_timeout`), octets held out of
+  order over all connections (`max_buffered`, each held piece charged its
+  length plus 64) and pieces held in one direction (1,024) are bounded; reaching
+  one gives up the longest wait and never drops octets, except that a forgotten
+  connection drops what it held. The checksum is not verified and a segment in
+  an IP fragment that was not reassembled is ignored.
 - `DissectorRegistry.register_layer(layer, *, name=None, keys=None,
   replace=False)`, `unregister_layer(name)` and `layers()` declare the class
   of a layer a dissector returns, and optionally the filter keys over it.
