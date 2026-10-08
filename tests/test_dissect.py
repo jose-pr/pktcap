@@ -303,8 +303,8 @@ def test_addresses_that_never_repeat_cannot_make_the_kept_texts_grow_without_end
 
 
 def test_a_registry_that_answers_get_itself_is_the_one_the_walk_asks():
-    """The walk reads a registry's table directly, one lookup a layer. A
-    subclass that answers ``get`` is asked instead, for every layer."""
+    """A subclass that answers ``get`` is asked for every layer: a walk that
+    read the registry's table directly, to save the call, would pass it by."""
     asked = []
 
     class Recording(DissectorRegistry):

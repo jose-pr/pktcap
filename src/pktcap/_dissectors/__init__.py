@@ -102,13 +102,6 @@ class DissectorRegistry:
         no dissector is the ordinary end of a dissection, not an error."""
         return self._dissectors.get((kind, value))
 
-    def _lookup(self) -> Callable[[Selector], Optional[Dissector]]:
-        """``get`` for a selector already built: what the frame walk asks once
-        a layer. The table's own lookup, unless a subclass answers ``get``."""
-        if type(self).get is DissectorRegistry.get:
-            return self._dissectors.get
-        return lambda selector: self.get(*selector)
-
     def selectors(self) -> Tuple[Selector, ...]:
         """Every selector with a dissector, sorted."""
         return tuple(sorted(self._dissectors))

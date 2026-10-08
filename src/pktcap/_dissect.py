@@ -231,9 +231,9 @@ class FrameDissector:
     def dissect(self, frame: CapturedFrame) -> DissectedFrame:
         """``frame`` with every layer a registered dissector could read."""
         self._frames += 1
-        lookup = self._registry._lookup()
+        lookup = self._registry.get
         selector: Selector = ("linktype", frame.linktype)
-        dissector = lookup(selector)
+        dissector = lookup(*selector)
         if dissector is None:
             self._unsupported += 1
             counted = self._by_linktype
@@ -254,10 +254,9 @@ class FrameDissector:
             steps += 1
             try:
                 result = dissector(data)
-                if not isinstance(result, Dissected):
-                    raise TypeError("a dissector returns a Dissected with bytes")
-                layer, payload, following, fragment = result
-                if not isinstance(payload, bytes):
+                if not isinstance(result, Dissected) or not isinstance(
+                    result.payload, bytes
+                ):
                     raise TypeError("a dissector returns a Dissected with bytes")
             except ValueError as exc:
                 self._malformed += 1
@@ -272,31 +271,31 @@ class FrameDissector:
                 )
                 self._log_failure(selector, exc)
                 break
-            data = payload
-            if layer is not None:
-                layers.append(layer)
+            data = result.payload
+            if result.layer is not None:
+                layers.append(result.layer)
                 payloads.append(data)
-            if fragment is not None:
+            if result.fragment is not None:
                 self._fragments += 1
                 if not self._reassemble:
-                    if fragment.offset:
+                    if result.fragment.offset:
                         break  # the middle of a datagram: no header to read
                 else:
                     whole = self._table.add(
-                        self._unit(layers, fragment.key),
+                        self._unit(layers, result.fragment.key),
                         frame.time,
-                        fragment.offset,
+                        result.fragment.offset,
                         data,
-                        fragment.last,
+                        result.fragment.last,
                     )
                     if whole is None:
                         break
                     data, reassembled = whole, True
-                    if layer is not None:
+                    if result.layer is not None:
                         payloads[-1] = whole
             dissector = None
-            for selector in following:
-                dissector = lookup(selector)
+            for selector in result.next:
+                dissector = lookup(*selector)
                 if dissector is not None:
                     break
         return DissectedFrame(frame, tuple(layers), tuple(payloads), error, reassembled)
