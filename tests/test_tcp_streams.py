@@ -400,6 +400,37 @@ def test_a_hole_between_the_last_held_octets_and_the_fin_is_reported_before_the_
     assert wire.stats.missing == 28 == sum(i.missing for i in wire.items)
 
 
+def test_a_fin_ends_the_direction_where_held_octets_begin_beyond_it():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1004, b"zz")  # held at offset 4: exactly where the FIN below sits
+    assert view(wire.send(1000, b"tail", FIN)) == [(b"tail", 0, 0, 0, True)]
+    assert wire.stats.ignored == 1 and wire.stats.held == 0
+    assert wire.send(1006, b"and more") == ()
+    assert wire.flush() == ()
+    assert wire.octets() == b"tail" and wire.stats.ignored == 2
+
+
+def test_a_fin_cuts_a_held_piece_that_straddles_its_position():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1002, b"zzzz")  # held at [2, 6); the FIN below sits at 4
+    assert view(wire.send(1000, b"tail", FIN)) == [(b"tazz", 0, 0, 0, True)]
+    assert wire.stats.ignored == 1 and wire.stats.held == 0
+    assert wire.send(1004, b"zz") == ()
+    assert wire.octets() == b"tazz"
+
+
+def test_a_fin_on_a_segment_larger_than_the_budget_cuts_what_is_held_beyond_it():
+    wire = Wire(max_buffered=100)
+    handshake(wire)
+    wire.send(1040, b"z" * 10)  # held at [40, 50)
+    got = wire.send(1006, b"x" * 40, FIN)  # [6, 46): too large to wait for
+    assert view(got) == [(b"x" * 34 + b"z" * 6, 6, 6, 0, True)]
+    assert wire.stats.held == 0 and wire.stats.ignored == 1
+    assert wire.send(1046, b"more") == ()
+
+
 @pytest.mark.parametrize("seed", range(40))
 def test_every_octet_given_up_is_reported_in_an_item(seed):
     """With no connection forgotten, the octets the counters call missing are
@@ -503,6 +534,32 @@ def test_a_syn_ack_that_contradicts_the_connection_is_ignored():
     wire.send(4999, flags=SYN | ACK, src=B, dst=A, ack=1000)
     assert view(wire.send(5000, b"hi", src=B, dst=A)) == [(b"hi", 0, 0, 0, False)]
     assert wire.stats.streams == 1
+
+
+def test_a_syn_ack_may_acknowledge_the_octets_the_syn_carried():
+    wire = Wire()
+    wire.send(999, b"GET", SYN)
+    got = wire.send(4999, b"HTTP/", SYN | ACK, src=B, dst=A, ack=1003)
+    assert view(got) == [(b"HTTP/", 0, 0, 0, False)]
+    assert wire.stats.ignored == 0
+    wire.send(1003, b" /", PSH | ACK, ack=5005)
+    wire.send(5005, b"1.1 200", PSH | ACK, src=B, dst=A, ack=1005)
+    assert wire.octets(A) == b"GET /" and wire.octets(B) == b"HTTP/1.1 200"
+    assert wire.stats.ignored == 0 and wire.stats.missing == 0
+    assert wire.stats.streams == 1
+
+
+def test_a_syn_ack_acknowledging_beyond_what_the_syn_carried_is_ignored():
+    wire = Wire()
+    wire.send(999, b"GET", SYN)
+    assert wire.send(4999, b"x", SYN | ACK, src=B, dst=A, ack=1004) == ()
+    assert wire.send(4999, b"x", SYN | ACK, src=B, dst=A, ack=999) == ()
+    assert wire.stats.ignored == 2
+    # Across the wrap the number is still within the octets carried.
+    wrap = Wire()
+    wrap.send(0xFFFFFFFE, b"abc", SYN)  # octets are numbered 0xFFFFFFFF, 0, 1
+    wrap.send(4999, b"y", SYN | ACK, src=B, dst=A, ack=2)
+    assert wrap.stats.ignored == 0 and wrap.octets(B) == b"y"
 
 
 def test_a_bare_acknowledgment_with_no_connection_starts_nothing():
@@ -768,6 +825,19 @@ def test_a_time_that_jumps_either_way_past_the_timeout_counts_as_silence():
     wire.send(1000, b"a", time=100.0)
     assert wire.send(1001, b"b", time=95.0)[0].stream == 0
     assert wire.send(1002, b"c", time=40.0)[0].stream == 1
+
+
+def test_a_time_that_is_not_a_number_says_nothing_as_a_time_of_zero_does():
+    wire = Wire(idle_timeout=10.0)
+    wire.send(1000, b"a", time=100.0)
+    assert wire.send(1001, b"b", time=float("nan"))[0].stream == 0
+    # It did not become the connection's last time: 105 is measured from 100.
+    assert wire.send(1002, b"c", time=105.0)[0].stream == 0
+    assert wire.send(1003, b"d", time=float("nan"))[0].stream == 0
+    assert wire.stats.evicted == 0 and wire.stats.streams == 1
+    wire.send(1010, b"held", time=106.0)
+    wire.send(1020, b"e", time=float("nan"))
+    assert [i.time for i in wire.flush()][-1] == 106.0
 
 
 # -- the budget of held octets --------------------------------------------------
@@ -1175,6 +1245,12 @@ def test_a_limit_that_is_not_positive_is_refused(option, value):
 def test_a_timeout_that_is_not_a_number_of_seconds_is_refused():
     with pytest.raises(ValueError):
         TCPReassembler(idle_timeout=float("nan"))
+
+
+@pytest.mark.parametrize("value", [10**400, -(10**400)])
+def test_a_timeout_no_float_holds_is_a_value_error(value):
+    with pytest.raises(ValueError):
+        TCPReassembler(idle_timeout=value)
 
 
 @pytest.mark.parametrize(

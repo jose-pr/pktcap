@@ -39,7 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   order over all connections (`max_buffered`, each held piece charged its
   length plus 64) and pieces held in one direction (1,024) are bounded; reaching
   one gives up the longest wait and never drops octets, except that a forgotten
-  connection drops what it held. The checksum is not verified and a segment in
+  connection drops what it held. A SYN-ACK may acknowledge the octets a TCP
+  Fast Open SYN carried; a FIN cuts the octets held beyond it before the
+  octets of its own segment are placed; a frame time that is not a number
+  says nothing, as a time of 0.0 does. The checksum is not verified and a segment in
   an IP fragment that was not reassembled is ignored.
 - `read_tcp_streams(source, *, reassembler=None, dissector=None,
   max_frame_size=262144)` reads the TCP streams of a capture in one call:

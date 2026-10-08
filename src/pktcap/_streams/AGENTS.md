@@ -22,7 +22,8 @@ untrusted, so every amount it controls is bounded.
 — feed it the `DissectedFrame` objects of a capture in capture order. Not safe
 to share between threads. It raises nothing for a frame. `TypeError` for
 something that is not a `DissectedFrame` and for an option of the wrong type,
-`ValueError` for a limit that is not positive.
+`ValueError` for a limit that is not positive and for an `idle_timeout` too
+large for a float.
 
 - **`TCPReassembler.add(frame) -> Tuple[TCPStreamData, ...]`** — one frame; what
   it made deliverable, in the order it became so (a frame can release the
@@ -112,7 +113,7 @@ ends: the one-call form, as `read_datagrams` is for UDP.
    one segment make every later octet look like a retransmission. The
    acknowledgment of a FIN covers the FIN.
 8. **FIN ends a direction** at its position; octets claimed beyond it are
-   dropped. **RST ends the connection**, both directions, unless its sequence
+   dropped, those held as well as those of the segment that carries the FIN. **RST ends the connection**, both directions, unless its sequence
    number is behind what was already delivered, when it is ignored. A reset in
    sequence is taken at its word: held octets come out with their `missing`,
    and the next segments on those addresses start a new stream.
@@ -124,8 +125,11 @@ ends: the one-call form, as `read_datagrams` is for UDP.
 
 A zero-length segment with no SYN, FIN or RST delivers nothing and starts no
 connection, and is still read for its acknowledgment. A SYN takes one sequence
-number before its data and a FIN one after it. A SYN-ACK whose acknowledgment
-contradicts the SYN the connection started with is ignored.
+number before its data and a FIN one after it. A SYN-ACK is the answer to the
+connection's SYN when its acknowledgment number is the SYN's number plus one,
+or up to that plus the octets the SYN carried (TCP Fast Open, RFC 7413
+section 4.2); any other acknowledgment contradicts the connection and the
+SYN-ACK is ignored.
 
 ## Bounds
 
@@ -144,8 +148,8 @@ connection was forgotten first: `stats.missing` counts those too.
 
 Silence is `abs(time - last)`: a jump either way past the timeout counts, since
 a capture controls its clock and a jump back cannot be told from a gap. A time
-of exactly `0.0` (a pcapng simple packet block has none) neither expires a
-connection nor keeps it alive.
+of exactly `0.0` (a pcapng simple packet block has none), and a time that is
+not a number, neither expires a connection nor keeps it alive.
 
 A segment costs a binary search and a walk over the held pieces it covers, at
 most 1,024; held octets are joined once, when a run is delivered.

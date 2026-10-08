@@ -100,9 +100,13 @@ class TCPReassembler(Engine):
             raise TypeError("idle_timeout must be a number")
         if not idle_timeout > 0:
             raise ValueError("idle_timeout must be positive")
+        try:
+            idle = float(idle_timeout)
+        except OverflowError:
+            raise ValueError("idle_timeout is too large for a float") from None
         super().__init__(max_buffered)
         self._max_streams = max_streams
-        self._idle = float(idle_timeout)
+        self._idle = idle
         self._table: "OrderedDict[_Key, _Connection]" = OrderedDict()
 
     def _pending(self) -> int:
@@ -126,6 +130,8 @@ class TCPReassembler(Engine):
             self._ignored += 1
             return ()
         time = frame.time
+        if time != time:  # not a number: says nothing, as a time of 0.0 does
+            time = 0.0
         if time != 0.0:  # a pcapng simple packet block has no time
             self._now = time
         key: _Key = (
@@ -249,7 +255,10 @@ class TCPReassembler(Engine):
             return _JOIN if own else _NEW
         if theirs is not None:
             if tcp.ack and theirs.syn is not None:
-                answers = tcp.acknowledgment == (theirs.syn + 1) & MASK
+                # A SYN-ACK acknowledges the SYN and, for Fast Open, the
+                # octets the SYN carried (RFC 7413 section 4.2).
+                carried = (tcp.acknowledgment - theirs.syn - 1) & MASK
+                answers = carried <= theirs.top
                 return _JOIN if answers else _IGNORE
             if theirs.top > 0:
                 return _NEW

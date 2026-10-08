@@ -167,6 +167,10 @@ class Engine:
             direction.syn = tcp.sequence  # the SYN of a direction seen without it
         offset = direction.offset_of((tcp.sequence + syn) & MASK)
         position = offset + len(data)  # where a FIN sits
+        if fin:
+            # Settled before the octets are placed, so that nothing held at or
+            # beyond it is delivered with them.
+            self._fin(direction, position)
         if offset < 0 and data:
             cut = min(-offset, len(data))
             self._ignored += 1  # octets before the start are not delivered
@@ -187,8 +191,6 @@ class Engine:
             if offset > direction.next:
                 self._out_of_order += 1
             self._place(direction, offset, data, time, out)
-        if fin:
-            self._fin(direction, position)
         self._settle(direction, time, out)
 
     def _fin(self, direction: Direction, position: int) -> None:
