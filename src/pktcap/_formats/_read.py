@@ -49,6 +49,12 @@ def read(format: str, parse: Callable[[], Any]) -> Dict[str, Any]:
         failure = Refusal("the %s text is nested too deeply" % label)
     except MemoryError:
         raise
+    except ValueError as caught:
+        if "integer string conversion" in str(caught):
+            # The interpreter's own limit on the digits of an integer.
+            failure = Refusal("the %s text holds a number too long to convert" % label)
+        else:
+            failure = Refusal("the text is not valid %s" % label)
     except Exception:
         # Each parsing library has its own exceptions, and none promises a
         # closed set for hostile text.

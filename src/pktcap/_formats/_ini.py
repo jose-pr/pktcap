@@ -47,12 +47,6 @@ def _value(raw: str) -> Any:
         return json_loads(raw, NotJSON())
     except (json.JSONDecodeError, NotJSON):
         return raw
-    except Refusal:
-        raise
-    except RecursionError:
-        raise Refusal("an INI value is nested too deeply") from None
-    except ValueError:
-        raise Refusal("an INI value is a number too long to read") from None
 
 
 def _sections(text: str) -> "configparser.RawConfigParser":

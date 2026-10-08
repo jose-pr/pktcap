@@ -103,7 +103,8 @@ class TOMLFormat(RecordFormat):
             try:
                 value = module.loads(text)
             except module.TOMLDecodeError as caught:
-                twice = "twice" in str(caught) or "overwrite" in str(caught)
+                message = str(caught)
+                twice = any(w in message for w in ("twice", "overwrite", "Duplicate"))
                 raise Refusal(
                     (
                         "a TOML key or table is written twice"
