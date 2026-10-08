@@ -30,6 +30,10 @@ Documentation: <https://jose-pr.github.io/pktcap/>.
   in one you build and pass.
 - **A UDP datagram view** on top, for a protocol library that only wants
   addresses, ports and payload, with IP fragments reassembled.
+- **Puts TCP streams back together** — each direction's octets in order, with
+  the count of octets the capture missed, from `read_tcp_streams` or a
+  `TCPReassembler` fed dissected frames; every rule a passive reader has to
+  choose is stated, and connections, held octets, pieces and silence are bounded.
 - **Treats a capture as untrusted input** — every length, count and offset a
   file or a frame states has a ceiling checked before anything is allocated:
   a 48-octet file claiming a 1 GiB record costs under 1 MiB and one

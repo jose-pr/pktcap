@@ -144,3 +144,37 @@ connection nor keeps it alive.
 
 A segment costs a binary search and a walk over the held pieces it covers, at
 most 1,024; held octets are joined once, when a run is delivered.
+
+## Not done
+
+- **No stream dissector**: a registered dissector is still given one
+  segment's octets, never a stream's, and no command writes streams.
+- **No checksum is verified**, and the urgent pointer is ignored.
+- **VLAN and interface do not tell connections apart**: the same two socket
+  addresses on two VLANs are one connection.
+
+## Example
+
+The streams of a capture, one call:
+
+```python
+import pktcap
+
+for item in pktcap.read_tcp_streams("trace.pcap"):
+    host, port = item.source
+    print(item.stream, "%s:%d" % (host, port), item.offset, item.missing, item.data, item.end)
+```
+
+The same with the pieces, to choose the options or to feed frames that do not
+come from a file:
+
+```python
+reassembler = pktcap.TCPReassembler(max_streams=256, idle_timeout=60.0)
+dissector = pktcap.FrameDissector()
+chunks = []
+for frame in pktcap.read_frames("trace.pcap"):
+    chunks.extend(reassembler.add(dissector.dissect(frame)))
+chunks.extend(reassembler.flush())
+print(b"".join(chunk.data for chunk in chunks if chunk.source[1] == 50000))
+print(reassembler.stats.missing)
+```

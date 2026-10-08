@@ -9,6 +9,31 @@ says *what changed*; this says *what it costs and how it was checked*.
 Nothing has been released. The package is prepared at version 0.1.0; no tag
 exists and nothing has been published.
 
+### TCP stream reassembly
+
+`TCPReassembler` and `read_tcp_streams` put each direction of a TCP connection
+back together. How it was checked:
+
+- `tests/test_tcp_streams.py` builds segments with the suite's own builders,
+  has a real `FrameDissector` read them and compares the octets handed out with
+  the octets the segments were cut from: every ordering of a stream's segments
+  with repeats and re-cuts (60 seeded cases), each rule, and each of the five
+  bounds (connections, silence, octets held, pieces held, a piece larger than
+  the budget) and the guard on acknowledgments, each with a test that fails
+  when the bound is removed. A seeded fuzz of mutated segments never raises
+  and never passes the bounds.
+- `tests/conformance/` replays what tshark 4.6.8's `follow,tcp,raw` said about
+  twelve built captures and the seven existing ones that hold TCP: the same
+  octets in each direction, with the same gaps. pktcap differs in three cases,
+  each by a rule it states: octets beyond a hole that is never acknowledged
+  (given up when the capture ends), and what follows a reset in sequence (a new
+  stream). They are listed in the README and asserted.
+- A mutation of each rule and each bound (67 in all) makes a test fail.
+
+`benchmarks/run.py` measures the reassembler on 2,000 segments of one stream,
+in order and with each pair swapped. No figure is recorded here: a local run
+is a sanity check and the metrics have not been run on the hosted runners.
+
 ### Benchmark baseline
 
 `benchmarks/results/0.1.0-win_arm64-py3.14.json` and `...-py3.9.json`, the

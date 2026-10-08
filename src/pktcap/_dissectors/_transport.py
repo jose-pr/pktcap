@@ -1,7 +1,8 @@
 """The transport-layer dissectors (internal): UDP and TCP.
 
 The layouts are those of RFC 768 and RFC 9293. TCP is read a segment at a
-time: its header and the octets after it. Streams are not put back together.
+time: its header and the octets after it. Streams are put back together by
+``TCPReassembler``, from the frames this walk dissects.
 """
 
 from __future__ import annotations

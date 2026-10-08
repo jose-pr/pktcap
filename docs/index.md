@@ -51,6 +51,9 @@ pktcap.register_dissector("udp", 7, dissect_echo)
 
 - [Dissectors](dissectors.md): the contract, the registry, and what each
   built-in dissector reads and leaves alone.
+- [TCP streams](streams.md): `TCPReassembler` and `read_tcp_streams`: each
+  direction's octets in order, the rules for what a passive reader cannot
+  know, and the bounds.
 - [Output formats](formats.md): `CaptureWriter`, and what each record format
   writes.
 - [Command line](cli.md): the `pktcap` command, `capture`, `replay` and
