@@ -18,7 +18,7 @@ import time
 from typing import NamedTuple
 
 import pytest
-from netimps import UDPEndpoint, bind, get_interface
+from netimps import UDPEndpoint, bind, get_interface, set_buffer_size
 
 import pktcap
 from pktcap import (
@@ -686,6 +686,11 @@ def test_the_asynchronous_queue_stops_the_readers_so_the_kernel_drops_the_rest()
     what is sent is left to the kernel's buffer, which drops it. With no bound
     the readers would keep taking every datagram off the socket."""
     endpoint = listener()
+    # The kernel's buffer is made small, so that it cannot hold what the
+    # readers leave: macOS gives a UDP socket about 768 KiB by default
+    # (measured 2026-10-09: 1480 of 2000 500-octet datagrams were kept), which
+    # holds most of what this sends.
+    set_buffer_size(endpoint.socket, receive=16384)
     sent = 2000
 
     async def run():

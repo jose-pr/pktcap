@@ -16,7 +16,7 @@ import pytest
 
 pytest.importorskip("duho")
 
-from netimps import UDPEndpoint, bind, get_interface  # noqa: E402
+from netimps import UDPEndpoint, bind, get_free_port, get_interface  # noqa: E402
 
 from pktcap.cli import Capture, main  # noqa: E402
 
@@ -127,11 +127,22 @@ def test_an_adapter_name_binds_a_socket_limited_to_that_adapter(caplog):
 
 
 def test_several_values_bind_several_sockets_in_the_order_written(caplog):
+    # Three ports of the one loopback address every host has: macOS and
+    # FreeBSD configure 127.0.0.1 alone (measured 2026-10-09), so 127.0.0.2
+    # cannot be bound there. The ports are free when asked for and may be taken
+    # a moment later, which the status would then say.
+    ports = []
+    while len(ports) < 3:
+        port = get_free_port("127.0.0.1")
+        if port not in ports:
+            ports.append(port)
+    first, second, third = ports
     argv = ["capture", "--count", "1", "--format", "text"]
-    argv += ["--listen", "127.0.0.1:0", "--listen", "127.0.0.2:0,127.0.0.3:0"]
+    argv += ["--listen", "127.0.0.1:%d" % first]
+    argv += ["--listen", "127.0.0.1:%d,127.0.0.1:%d" % (second, third)]
     status, addresses = listen_and_send(argv + SAFETY, caplog, [b"x"], wanted=3)
     assert status == 0
-    assert [host for host, _ in addresses] == ["127.0.0.1", "127.0.0.2", "127.0.0.3"]
+    assert addresses == [("127.0.0.1", port) for port in ports]
 
 
 def test_a_datagram_from_an_interface_a_socket_does_not_serve_is_counted_in_the_summary(
