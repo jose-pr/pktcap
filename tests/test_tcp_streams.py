@@ -1656,6 +1656,60 @@ def test_joined_octets_are_handed_out_as_bytes_the_first_copy_of_an_overlap_wins
     assert type(held.items[-1].data) is bytes
 
 
+@pytest.mark.parametrize("seed", range(300))
+def test_one_direction_agrees_with_a_dictionary_of_the_first_captured_octets(seed):
+    """The simplest model there is, written apart from the code: with no SYN,
+    no FIN and the bounds far away, offset 0 is the first octet of the first
+    segment captured, the first captured copy of every later octet is the one
+    delivered, and octets before the start never are. Segments overlap,
+    repeat, disagree, follow one another and start near the wrap."""
+    rng = random.Random(seed)
+    base = rng.choice([0, 1, 0x7FFFFFF0, 0xFFFFFF00, MASK, rng.randrange(1 << 32)])
+    length = rng.randrange(1, 600)
+    truth = bytes(rng.randrange(256) for _ in range(length))
+    segments, cursor = [], rng.randrange(0, length)
+    for _ in range(rng.randrange(1, 80)):
+        start = cursor if rng.random() < 0.5 else rng.randrange(-20, length)
+        size = rng.randrange(1, 40)
+        if start >= 0:
+            body = bytearray(truth[start : start + size])
+        else:
+            body = bytearray(rng.randrange(256) for _ in range(-start))
+            body += truth[: max(size + start, 0)]
+        if not body:
+            continue
+        cursor = start + len(body)
+        if rng.random() < 0.25:
+            body[rng.randrange(len(body))] ^= 0xFF  # a copy that disagrees
+        segments.append((start, bytes(body)))
+    if not segments:
+        return
+    first = segments[0][0]
+    model = {}
+    for start, body in segments:
+        for index, octet in enumerate(body):
+            position = start + index - first
+            if position >= 0:
+                model.setdefault(position, octet)
+    wire = Wire()
+    for start, body in segments:
+        wire.send(base + start, body, ACK)
+    wire.flush()
+    consistent(wire.items)
+    got = {}
+    for item in wire.items:
+        assert type(item.data) is bytes
+        for index, octet in enumerate(item.data):
+            assert item.offset + index not in got  # nothing is delivered twice
+            got[item.offset + index] = octet
+    assert got == model
+    stats = wire.stats
+    assert stats.held == 0 and stats.pending == 0 and stats.dropped == 0
+    assert stats.delivered == len(model)
+    assert stats.missing == max(model) + 1 - len(model)
+    assert stats.missing == sum(item.missing for item in wire.items)
+
+
 def test_the_work_to_join_segments_does_not_grow_with_what_is_held():
     import time as clock
 

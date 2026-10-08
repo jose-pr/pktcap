@@ -30,30 +30,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   direction's octets in order with an `offset`, the octets given up on before
   them (`missing`), a connection number (`stream`) and an `end` marker;
   `flush()` gives what is still held at the end of a capture; `stats` is a
-  `TCPStreamStats`. Sequence numbers wrap, the first captured copy of an
-  octet wins, a FIN or an in-sequence RST ends a direction or a connection, and
-  a SYN that is not a retransmission starts a new stream on the same
-  addresses. An acknowledgment from the other side that covers a hole gives
-  it up at once; one beyond everything seen changes nothing. Connections
-  (`max_streams`), capture time of silence (`idle_timeout`), octets held out of
-  order over all connections (`max_buffered`, each held piece charged its
-  length plus 64) and pieces held in one direction (1,024; a piece is a run of
-  held octets, so segments that follow one another are one) are bounded;
-  reaching one gives up the longest wait and never drops octets, except that a
-  forgotten connection drops what it held, counted in `TCPStreamStats.dropped`;
-  a connection every direction of which has ended gives up its place first.
-  A SYN-ACK may acknowledge the octets a TCP Fast Open SYN carried; a FIN cuts
-  the octets held beyond it before the octets of its own segment are placed; a
-  frame time that is not a number says nothing, as a time of 0.0 does. A
-  segment is as long as its IP header says: the octets a snap length cut are
-  given up at once, reported in `missing`, and place a FIN and an
-  acknowledgment as the whole segment would. The checksum is not verified and
-  a segment in an IP fragment that was not reassembled is ignored. A
-  segment, FIN or reset that starts more than 16,777,216 octets beyond the
-  furthest octet believed from its sender is set aside until the sender's next
-  segment follows on from it, so one forged or corrupted sequence number moves
-  nothing; a SYN that is not the connection's own is set aside until a
-  segment confirms it, so one forged SYN ends no connection.
+  `TCPStreamStats` of twelve counters. A reader of a capture is passive, so
+  each choice it has to make is a stated rule:
+  - Sequence numbers wrap and offsets do not; octets already delivered are
+    final; of two copies not yet delivered the first captured wins.
+  - A hole is waited for. It is given up, and what was held is delivered with
+    the count of octets missing, when the other side acknowledges past it,
+    when a bound is reached, or when the direction, the connection or the
+    capture ends. An acknowledgment beyond everything seen from the sender
+    changes nothing.
+  - A FIN ends a direction and an in-sequence reset ends the connection. A
+    SYN on a live connection that is not the connection's own is set aside
+    until a segment confirms it, so one forged SYN ends nothing; on a
+    connection that has ended it starts a new stream at once. A SYN-ACK may
+    acknowledge the octets a TCP Fast Open SYN carried.
+  - A segment, FIN or reset more than 16,777,216 octets beyond the furthest
+    octet believed from its sender is set aside until the sender's next
+    segment follows on from it, so one forged or corrupted sequence number
+    moves nothing.
+  - A segment is as long as its IP header says: the octets a snap length cut
+    are given up at once and reported in `missing`.
+  - Not done: the checksum is not verified, a segment in an IP fragment that
+    was not reassembled is ignored, VLAN and interface do not tell
+    connections apart, and no dissector is given a stream.
+
+  Everything a capture controls is bounded: connections (`max_streams`),
+  capture time of silence (`idle_timeout`), octets held out of order over all
+  connections (`max_buffered`, each held piece charged its length plus 64) and
+  pieces held in one direction (1,024, a piece being a run of held octets).
+  Reaching the last two gives up the longest wait and drops nothing; a
+  forgotten connection drops what it held, counted in `dropped`.
 - `read_tcp_streams(source, *, reassembler=None, dissector=None,
   max_frame_size=262144)` reads the TCP streams of a capture in one call:
   `read_dissected` through `TCPReassembler.add`, then `flush()` at the end.

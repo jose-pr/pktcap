@@ -35,7 +35,10 @@ back together. How it was checked:
   each by a rule it states: octets beyond a hole that is never acknowledged
   (given up when the capture ends), and what follows a reset in sequence (a new
   stream). They are listed in the README and asserted.
-- A mutation of each rule and each bound (104 in all) makes a test fail.
+- A model written apart from the code, a dictionary of the first captured
+  copy of each octet, agrees with one direction's items on 300 seeded streams
+  of segments that overlap, repeat, disagree and start near the wrap.
+- A mutation of each rule and each bound (106 in all) makes a test fail.
 
 `benchmarks/run.py` measures the reassembler on 2,000 segments of one stream,
 in order and with each pair swapped. No figure is recorded here: a local run
@@ -115,11 +118,11 @@ from the same file, and run a control before believing a regression.
 
 ### Validation
 
-- Tests: 1,419 passed and 4 skipped on Windows on ARM64 (Python 3.14 and 3.9);
-  1,420 passed and 3 skipped on Intel macOS (Python 3.9) and on FreeBSD
+- Tests: 2,033 passed and 4 skipped on Windows on ARM64 (Python 3.14 and 3.9);
+  2,034 passed and 3 skipped on Intel macOS (Python 3.9) and on FreeBSD
   (Python 3.11). The skips are live capture, which is Linux only, and the
   configuration file's ownership checks, which need POSIX permissions or root.
-- The hosted matrix, 18 jobs, green at `12a69b3` (run 37722279335): Python 3.9
+- The hosted matrix, 18 jobs, green: Python 3.9
   to 3.14 on ubuntu, 3.9 and 3.14 on windows and macos, the dependency floors,
   an install with no extra on each system, and lint with `mypy --strict` for
   `--platform linux`, `darwin` and `win32`. netimps comes from PyPI.
