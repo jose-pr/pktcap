@@ -25,6 +25,7 @@ __all__ = [
     "dumps_record",
     "has_output_format",
     "infer_format",
+    "loads_record",
     "record_format",
 ]
 
@@ -120,3 +121,22 @@ def dumps_record(record: Mapping[str, Any], format: str = "json") -> str:
     if not isinstance(record, Mapping):
         raise TypeError("a record is a mapping")
     return fmt.dumps(record)
+
+
+def loads_record(text: str, format: str = "json") -> Dict[str, Any]:
+    """The one record ``text`` holds, as written by :func:`dumps_record`.
+
+    :param text: the content (never a file name) of one record.
+    :param format: one of :data:`RECORD_FORMATS`.
+    :raises UnsupportedFormatError: no record format of that name.
+    :raises MissingExtraError: the format cannot be read on this installation
+        (``yaml`` without PyYAML; ``toml`` on Python before 3.11 without
+        ``tomli``); it is an ``ImportError`` and its message names the extra.
+    :raises TypeError: ``text`` is not a ``str``.
+    :raises RecordFormatError: ``text`` is not one record in that format. The
+        message says what is wrong and where and never quotes the text.
+    """
+    fmt = record_format(format)
+    if not isinstance(text, str):
+        raise TypeError("the text of a record is a str")
+    return fmt.loads(text)

@@ -42,6 +42,7 @@ from ._exceptions import (
     LiveCaptureError,
     MissingExtraError,
     PktcapError,
+    RecordFormatError,
     UnsupportedFormatError,
 )
 from ._filter import FilterClause, compile_capture_filter, parse_capture_filter
@@ -50,6 +51,7 @@ from ._formats import (
     RECORD_FORMATS,
     dumps_record,
     has_output_format,
+    loads_record,
 )
 from ._frame_filter import (
     FRAME_FILTER_KEYS,
@@ -120,6 +122,7 @@ __all__ = [
     "PcapngWriter",
     "PktcapError",
     "RECORD_FORMATS",
+    "RecordFormatError",
     "ReplayResult",
     "ReplaySource",
     "Selector",
@@ -141,6 +144,7 @@ __all__ = [
     "frame_filter_keys",
     "frame_record",
     "load_plugins",
+    "loads_record",
     "capture_config_path",
     "has_live_capture",
     "has_output_format",

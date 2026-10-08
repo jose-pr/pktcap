@@ -11,9 +11,9 @@ Everything is imported from `pktcap` directly. Every module under `pktcap`
 
 Install with `pip install pktcap`, which brings `netimps`. The `yaml` extra
 (`pip install "pktcap[yaml]"`) adds `PyYAML` and the `toml` extra adds
-`tomli-w`, each for the output format of that name, and the `cli` extra
-(`pip install "pktcap[cli]"`) adds `duho` for the `pktcap` command. Importing
-`pktcap` needs none of them. Python 3.9 or newer.
+`tomli-w` (and `tomli` before Python 3.11), each for the record format of that
+name, and the `cli` extra (`pip install "pktcap[cli]"`) adds `duho` for the
+`pktcap` command. Importing `pktcap` needs none of them. Python 3.9 or newer.
 
 `pktcap.__version__` — the package version string, the same value the
 installed distribution's metadata carries.
@@ -219,17 +219,13 @@ capture from one of a link type nothing dissects.
   because the capture's snap length cut the frame. **Check it before reading a
   short payload as a short message.**
 
-## Writing a capture
+## Writing a capture, and writing or reading a record
 
 **`PcapWriter(target)`** and **`PcapngWriter(target)`** write a capture that
-tcpdump and Wireshark read, from frames or from datagrams; the whole contract
-is in `pktcap/_formats/AGENTS.md`, with `CaptureWriter`.
-
-## Writing in a named format
-
-A capture format takes the frame or datagram itself; a record format takes a
-**record**: plain data (`dict`, `list`, `str`, `int`, `float`, `bool`,
-`None`) describing it.
+tcpdump and Wireshark read; their contract is in `pktcap/_formats/AGENTS.md`,
+with `CaptureWriter`. A capture format takes the frame or datagram itself; a
+record format takes a **record**: plain data (`dict`, `list`, `str`, `int`,
+`float`, `bool`, `None`) describing it.
 
 **`OUTPUT_FORMATS`** — `("pcap", "pcapng", "json", "yaml", "toml", "ini")`,
 and **`RECORD_FORMATS`** — the last four. `yaml` needs the `yaml` extra and
@@ -241,6 +237,11 @@ this installation. `UnsupportedFormatError` for a name that is no format.
 **`dumps_record(record, format="json") -> str`** — one record as text, ending
 in a newline. `MissingExtraError` when the format's extra is missing.
 
+**`loads_record(text, format="json") -> Dict[str, Any]`** — the one record in
+`text`: the inverse of `dumps_record`. `RecordFormatError` when it is not one
+record, `MissingExtraError` when it cannot be read here; the rules are in
+`pktcap/_formats/AGENTS.md`.
+
 **`datagram_record(datagram) -> Dict[str, Any]`** and **`frame_record(frame) -> Dict[str, Any]`**
 — the record of a `CapturedDatagram` and of a `DissectedFrame`; what each holds
 is in `pktcap/_formats/AGENTS.md`, under "What a record is".
@@ -249,10 +250,9 @@ is in `pktcap/_formats/AGENTS.md`, under "What a record is".
 record under a name pattern. It takes a `CapturedDatagram` or a
 `DissectedFrame`; a capture format writes the item itself and a record format
 the record given, or `datagram_record` or `frame_record` of the item. Its
-signature, the name pattern, the file budget and every check are in
-`pktcap/_formats/AGENTS.md`, with **`copy_frames`** and its result
-`CopyResult`: a source of dissected frames, filtered, into one of these
-writers.
+signature, name pattern, file budget and checks are in
+`pktcap/_formats/AGENTS.md`, with **`copy_frames`** and its result `CopyResult`:
+a source of dissected frames, filtered, into one of these writers.
 
 ## Filtering
 
@@ -451,17 +451,17 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `CaptureFilterError` | `PktcapError`, `ValueError` | a capture-filter expression that cannot be parsed or compiled |
 | `UnsupportedFormatError` | `PktcapError`, `ValueError` | an output format that does not exist, or that a file name does not tell |
 | `MissingExtraError` | `PktcapError`, `ImportError` | a format that exists and whose extra is not installed |
+| `RecordFormatError` | `PktcapError`, `ValueError` | text that is not one record in its format: `format` and `lineno`; the message never quotes the text |
 | `DissectError` | `PktcapError`, `ValueError` | raised **by a dissector** for octets that are not its layer. A caller of `FrameDissector` never sees it: it becomes the frame's `error` |
 | `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
 | `CapturePluginError` | `PktcapError`, `ValueError` | a plugin the user named that cannot be loaded: `plugin` and `source` say which, and from where |
 | `CaptureConfigError` | `PktcapError`, `ValueError` | a configuration file, or `PKTCAP_CONFIG`, that is malformed or not trusted: `path` and `lineno` |
 
-`MissingExtraError(message, *, format, extra)` has `format` (the format's name,
-`"toml"`) and `extra` (the extra to install, `"toml"`), and its message names
-the extra: a caller that offers the format under its own extra words its own.
-A process that may not open a packet socket gets the kernel's
-`PermissionError`. `OSError` from opening, reading or writing a file or a
-socket is let through as it is.
+`MissingExtraError(message, *, format, extra)` has `format` (`"toml"`) and
+`extra` (the extra to install, `"toml"`), and its message names the extra: a
+caller that offers the format under its own extra words its own. A process
+that may not open a packet socket gets the kernel's `PermissionError`, and
+`OSError` from a file or a socket is let through as it is.
 
 `CaptureFormatError.offset` is how many octets of the input had been read when
 the problem was found, or `None`; the message ends with it and never quotes the

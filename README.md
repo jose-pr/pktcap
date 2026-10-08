@@ -64,8 +64,8 @@ Requires Python 3.9 or newer. `netimps` is the one dependency.
 
 | Extra | Adds | Needed for |
 | --- | --- | --- |
-| `yaml` | `PyYAML` | the `yaml` output format |
-| `toml` | `tomli-w` | the `toml` output format |
+| `yaml` | `PyYAML` | writing and reading records as YAML |
+| `toml` | `tomli-w`, and `tomli` before Python 3.11 | writing records as TOML, and reading them before 3.11 |
 | `cli` | `duho` | the `pktcap` command |
 
 Importing `pktcap` needs none of them; a format whose extra is missing raises
@@ -136,7 +136,9 @@ with pktcap.PcapngWriter("copy.pcapng") as writer:  # any frame, as it was captu
     for captured in pktcap.read_frames("trace.pcap"):
         writer.write_frame(captured)
 
-print(pktcap.dumps_record(pktcap.datagram_record(frames[0].datagram()), "ini"))
+text = pktcap.dumps_record(pktcap.datagram_record(frames[0].datagram()), "ini")
+print(text)
+print(pktcap.loads_record(text, "ini"))  # the record, read back
 ```
 
 Replay it, at the recorded pace: UDP payloads to a destination you name, or
@@ -205,13 +207,13 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `read_datagrams`, `CapturedDatagram` | the UDP datagram view |
 | `read_tcp_streams`, `TCPReassembler`, `TCPStreamData`, `TCPStreamStats` | TCP streams: each direction's octets in order, within bounds |
 | `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
-| `CaptureWriter`, `dumps_record`, `datagram_record`, `frame_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format |
+| `CaptureWriter`, `dumps_record`, `loads_record`, `datagram_record`, `frame_record`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format, and read a record back |
 | `copy_frames`, `CopyResult` | copy a source of dissected frames, filtered, into a writer |
 | `load_plugins`, `LoadedPlugin`, `capture_config_path` | load the plugins a user names into a registry |
 | `parse_capture_filter`, `compile_capture_filter`, `FilterClause`, `frame_filter`, `frame_filter_for`, `frame_filter_keys`, `FRAME_FILTER_KEYS` | the filter expression, the keys of the built-in layers, and the layers and keys a registry declares |
 | `replay_schedule`, `replay`, `replay_to`, `ReplayResult`, `ReplaySource` | replay a capture |
 | `LiveCapture`, `sniff_frames`, `sniff`, `has_live_capture` | live capture on Linux |
-| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `MissingExtraError`, `DissectError`, `LiveCaptureError`, `CapturePluginError`, `CaptureConfigError` | the exceptions |
+| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `MissingExtraError`, `RecordFormatError`, `DissectError`, `LiveCaptureError`, `CapturePluginError`, `CaptureConfigError` | the exceptions |
 
 The reference with every signature, bound and gotcha is the API header that
 ships inside the package, `pktcap/AGENTS.md`, also at

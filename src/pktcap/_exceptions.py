@@ -21,6 +21,7 @@ __all__ = [
     "CaptureFilterError",
     "UnsupportedFormatError",
     "MissingExtraError",
+    "RecordFormatError",
     "LiveCaptureError",
     "DissectError",
     "CapturePluginError",
@@ -92,6 +93,41 @@ class MissingExtraError(PktcapError, ImportError):
 
     def __reduce__(self) -> Tuple[Any, ...]:
         return (_restore_missing_extra, (self.args[0], self.format, self.extra))
+
+
+def _restore_record_error(
+    message: str, format: str, lineno: Optional[int]
+) -> "RecordFormatError":
+    return RecordFormatError(message, format=format, lineno=lineno)
+
+
+class RecordFormatError(PktcapError, ValueError):
+    """Text that is not one record in the format it is read as.
+
+    Raised by :func:`pktcap.loads_record` for text that does not parse, that
+    is not one document with a mapping at its top, that repeats a key, or that
+    holds what a record cannot (a NaN in JSON, a tag that is not plain data,
+    a nesting past the recursion limit). The message says what is wrong and
+    where, and never quotes the text; the reader's own exception is not
+    chained.
+
+    :ivar format: the format's name, as in ``RECORD_FORMATS`` (``"yaml"``).
+    :ivar lineno: the 1-based line of the problem, or ``None`` when the
+        reader keeps none.
+    """
+
+    def __init__(
+        self, message: str, *, format: str, lineno: Optional[int] = None
+    ) -> None:
+        super().__init__(
+            message if lineno is None else "%s (at line %d)" % (message, lineno)
+        )
+        self._problem = message
+        self.format = format
+        self.lineno = lineno
+
+    def __reduce__(self) -> Tuple[Any, ...]:
+        return (_restore_record_error, (self._problem, self.format, self.lineno))
 
 
 class DissectError(PktcapError, ValueError):

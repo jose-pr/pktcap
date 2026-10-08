@@ -2,11 +2,10 @@
 
 Header-file-style reference for writing captures with the `pktcap` package:
 `PcapWriter` and `PcapngWriter`, `CaptureWriter` in a named format, and what
-each record format writes, exactly, so the output can be read back without
-reading the source. It ships inside the
-package and is self-contained; the top header is `pktcap/AGENTS.md`.
-Development documentation lives with the source at
-<https://github.com/jose-pr/pktcap>.
+each record format writes and `loads_record` reads, exactly, so the output can
+be read back without reading the source. It ships inside the package and is
+self-contained; the top header is `pktcap/AGENTS.md`. Development
+documentation lives with the source at <https://github.com/jose-pr/pktcap>.
 
 This directory (`pktcap/_formats/`) is private and not an import path: every
 name below is imported from `pktcap`.
@@ -81,17 +80,16 @@ context manager.
   normalisation added or removed. A growing file gets the format's separator
   before the text and nothing after it: none for `json`, `---` and a line feed
   for `yaml`; text that ends in a line feed gives a `json` line and a `yaml`
-  document each. A per-record file is the text
-  and nothing else. `item` still gives `{timestamp}`, and `names` the caller's
-  fields. `ValueError` for `text` with `pcap` or `pcapng`, with a `record`
-  (two sources for one record), or that UTF-8 cannot encode; `TypeError` for a
-  `text` that is not a `str`. Nothing is written, and no index used, then.
+  document each. A per-record file is the text and nothing else. `item` still
+  gives `{timestamp}`, and `names` the caller's fields. `ValueError` for
+  `text` with `pcap` or `pcapng`, with a `record` (two sources for one
+  record), or that UTF-8 cannot encode; `TypeError` for a `text` that is not
+  a `str`. Nothing is written, and no index used, then.
 - **Nothing is opened until the first `write`**, and each record is flushed.
   Without `append` an existing file is replaced then; `append=True` adds to
   it (`json` and `yaml` stay valid streams; a capture cannot be appended to).
   The directories above a growing file are made then, as for a per-record
   file; building the writer touches nothing.
-- `toml` and `ini` hold one record per file, so they need `per_record=True`.
 - **`per_record=True`**: `target` is a file-name pattern in `str.format`
   syntax, and each record goes to its own file, directories created as
   needed. The writer fills `{timestamp}` (the item's time in UTC,
@@ -100,14 +98,15 @@ context manager.
   `fields=("xid", "client_id")` and gives their values in
   `write(..., names={"xid": ..., "client_id": ...})`.
 - **`CaptureWriter.close() -> None`** — complete on return, harmless twice.
-- `CaptureWriter.format` is the format's name; `.written` counts what was
-  written and `.refused` the records a full budget turned away.
-- The checks made when the writer is built, each a `ValueError` unless
-  noted: a pattern that is malformed or uses anything but bare field names
-  (`{}`, `{0}`, `{xid.real}`); a pattern field that is neither built in nor in
-  `fields`; a `fields` entry that is built in; a stream of `toml` or `ini`;
-  `append` with a capture format; `per_record` with a stream; a missing extra
-  (`MissingExtraError`); a text stream (`TypeError`).
+  `.format` is the format's name; `.written` counts what was written and
+  `.refused` the records a full budget turned away.
+- The checks made when the writer is built, each a `ValueError` unless noted: a
+  pattern that is malformed or uses anything but bare field names (`{}`, `{0}`,
+  `{xid.real}`); a pattern field that is neither built in nor in `fields`; a
+  `fields` entry that is built in; a stream of `toml` or `ini` (one record per
+  file: they need `per_record=True`); `append` with a capture format;
+  `per_record` with a stream; a missing extra (`MissingExtraError`); a text
+  stream (`TypeError`).
 - `write` raises `ValueError` for a closed writer or a field with no value,
   `TypeError` for an item of another type, and what `dumps_record` or the
   capture writer raise; nothing is written.
@@ -124,12 +123,12 @@ replaced by `_` and leading and trailing `.` and `_` removed (`unknown` when
 nothing is left), so it cannot hold a path separator or be `..`; a part of
 the path that a field value made a name Windows would open as a device (`NUL`,
 `COM1.x`), a directory or the file, gets a leading `_` on every platform, and
-a part the pattern spells out is kept as written. The
-cut keeps two long values that start alike apart: the cleaned value is cut to
-its first 55 characters, trailing `.` and `_` removed, and followed by `-` and
-the first 8 hexadecimal digits of the SHA-256 of the value as given (UTF-8),
-64 characters at most; a value of 64 or fewer is untouched. A time
-outside any calendar is written as `t<seconds>`.
+a part the pattern spells out is kept as written. The cut keeps two long
+values that start alike apart: the cleaned value is cut to its first 55
+characters, trailing `.` and `_` removed, and followed by `-` and the first 8
+hexadecimal digits of the SHA-256 of the value as given (UTF-8), 64 characters
+at most; a value of 64 or fewer is untouched. A time outside any calendar is
+written as `t<seconds>`.
 
 ## Copying frames into a writer
 
@@ -162,10 +161,8 @@ call (the writer's own `refused` is for its whole life).
 ## What a record is
 
 A mapping of text keys to plain data: `dict`, `list`, `str`, `int`, `float`,
-`bool`, `None`. A protocol library makes it from one of its messages; this
+`bool`, `None`, made by a protocol library from one of its messages; this
 library never looks inside. Any `Mapping` is accepted at the top level.
-`datagram_record` and `frame_record` make the record of a datagram or of a
-dissected frame for a caller with no protocol of its own.
 
 **`datagram_record(datagram) -> Dict[str, Any]`** — the record of a
 `CapturedDatagram` for a caller with no protocol to decode it: `time`,
@@ -187,12 +184,12 @@ named format, ending in a newline. `format` is one of `RECORD_FORMATS`
 
 Raises, the same for every format:
 
-- `UnsupportedFormatError` for a name that is no record format (`"pcap"`
-  and `"pcapng"` included: they write frames and datagrams, through
-  `CaptureWriter`, `PcapWriter` or `PcapngWriter`);
+- `UnsupportedFormatError` for a name that is no record format (`"pcap"` and
+  `"pcapng"` included: `CaptureWriter`, `PcapWriter` and `PcapngWriter` write
+  those);
 - `MissingExtraError` (an `ImportError`, with `format` and `extra`) when the
-  format's extra is not installed, as
-  `YAML output needs the 'yaml' extra: pip install "pktcap[yaml]"`;
+  format's extra is not installed: `YAML output needs the 'yaml' extra: pip
+  install "pktcap[yaml]"`;
 - `TypeError` when `record` is not a mapping or holds a value the format
   cannot represent, `ValueError` for a value it must refuse. **The message
   never quotes the record**, and no exception of the library that does the
@@ -200,26 +197,63 @@ Raises, the same for every format:
 
 **Every format writes printable ASCII.** Text from the wire may hold terminal
 control sequences and octets that are no character in any encoding; each
-format escapes them, so a record can be printed and a console encoding never
-matters.
+format escapes them, so a console encoding never matters.
+
+## Reading a record
+
+**`loads_record(text, format="json") -> Dict[str, Any]`** — the one record
+`text` holds, the inverse of `dumps_record`. `text` is the content, never a
+file name (`TypeError` unless a `str`), and is untrusted: nothing but these
+is raised.
+
+- `UnsupportedFormatError` and `MissingExtraError` as for `dumps_record`; to
+  *read*, `yaml` needs PyYAML and `toml` needs `tomli` before Python 3.11,
+  nothing from 3.11 (`tomllib`). The `toml` extra holds `tomli-w` and, before
+  3.11, `tomli`.
+- **`RecordFormatError(message, *, format, lineno=None)`** for text that is
+  not one record; `lineno` is the 1-based line, when known. **The message
+  never quotes the text**; nothing is chained.
+
+**One record** is one document with a mapping at the top. Empty text, a list,
+a scalar and more than one document are refused (a leading `---` is not);
+whitespace alone is the empty record in `toml` and `ini`, which write it.
+
+**Refused though a looser reader takes it:** a key written twice; in JSON
+`NaN` and the infinities (`1e999` too); in YAML a tag the safe loader does not
+know, a merge key `<<`, a value that is not plain data (`!!set`, a date) or
+that contains itself; in TOML a date or time; nesting past the recursion
+limit; a number too long to convert. A YAML alias reads as the object it
+names, costing the document's size and not its expansion; `!!binary` reads as
+`bytes`.
+
+**INI reading** inverts the layout of `ini` below: names are percent-decoded,
+case is kept, nothing is interpolated, `[DEFAULT]` is ordinary, `=` or `:`
+separates a value, `#` and `;` begin a comment. **A value that is not JSON is
+its text** (`op = BOOTREQUEST`, `NaN`). No section, or text before the first,
+is an error.
+
+**The law** `loads_record(dumps_record(r, f), f) == r` holds except: a non-text
+key comes back as text in `json` and `ini`; in `ini` the empty name is
+unreadable and `{"record": {...}}` alone reads as its contents; in `toml` a
+lone surrogate is U+FFFD; a NaN is not equal to itself; a tuple is a list.
 
 ## The formats
 
-| Name | File endings | Extra | Several records in one file | Written by |
-| --- | --- | --- | --- | --- |
-| `json` | `.json`, `.jsonl`, `.ndjson` | none | yes, one per line | the standard library |
-| `yaml` | `.yaml`, `.yml` | `yaml` | yes, one document each | PyYAML, `safe_dump` |
-| `toml` | `.toml` | `toml` | no | tomli-w |
-| `ini` | `.ini` | none | no | this library |
+| Name | File endings | Extra | Several records in one file | Written by | Read by |
+| --- | --- | --- | --- | --- | --- |
+| `json` | `.json`, `.jsonl`, `.ndjson` | none | yes, one per line | the standard library | the standard library |
+| `yaml` | `.yaml`, `.yml` | `yaml` | yes, one document each | PyYAML, `safe_dump` | PyYAML, `SafeLoader` |
+| `toml` | `.toml` | `toml` | no | tomli-w | `tomllib`, else `tomli` |
+| `ini` | `.ini` | none | no | this library | `configparser` |
 
 ### `json`
 
 One line per record: `json.dumps` with its default separators, keys in the
 record's order. Every character outside ASCII and every control character is a
-`\u` escape. `NaN` and the infinities are a `ValueError`, as is a record that
-contains itself or is nested past the interpreter's recursion limit. A key
-that is not text follows `json.dumps`: a number, `True`, `False` or `None`
-becomes its text, anything else is a `TypeError`.
+`\u` escape. `NaN`, the infinities, a record that contains itself and one
+nested past the recursion limit are a `ValueError`. A key that is not text
+follows `json.dumps`: a number, `True`, `False` or `None` becomes its text,
+anything else is a `TypeError`.
 
 ### `yaml`
 
@@ -228,46 +262,37 @@ and control characters escaped inside double quotes. PyYAML's safe dumper is
 the only one used: no Python tag is ever written. In a file of several
 records each document is led by `---`, the first one included, so a file
 that is appended to stays one valid stream; a file of one record has no
-marker. `bytes` is written as `!!binary`.
+marker. `bytes` is `!!binary`.
 
 ### `toml`
 
 One document per record. TOML has no null: a record holding `None` anywhere
 is a `TypeError`. Keys must be text. Characters outside ASCII are written as
 `\uXXXX` or `\UXXXXXXXX`; half of a surrogate pair, which is not a character,
-is written as U+FFFD. There is no separator between TOML documents, so a file
-holds exactly one record.
+is written as U+FFFD.
 
 ### `ini`
 
-One file per record, laid out by one rule:
+One file per record: a top-level key whose value is a mapping becomes a
+section of that name, its items the options; every other top-level key becomes
+an option of the section `[record]`, which comes first.
 
-- a top-level key whose value is a mapping becomes a section of that name, and
-  the mapping's items its options;
-- every other top-level key becomes an option of the section `[record]`, which
-  comes first.
-
-```ini
-[record]
-op = "BOOTREQUEST"
-xid = 305441741
-
-[options]
-53 = "DHCPDISCOVER"
+```python
+record = {"op": "BOOTREQUEST", "xid": 305441741, "options": {"53": "DHCPDISCOVER"}}
+text = pktcap.dumps_record(record, "ini")  # [record] op = ... [options] 53 = ...
+assert pktcap.loads_record(text, "ini") == record
 ```
 
-- **Each value is JSON on one line**, so it reads back with its type:
-  `json.loads` of each value restores the record. A mapping below the second
-  level is a JSON object.
+- **Each value is JSON on one line**, so it reads back with its type; a
+  mapping below the second level is a JSON object.
 - **A caller chooses its own sections** by passing a record whose top-level
   values are all mappings: `{"message": {...}, "options": {...}}` writes
   `[message]` and `[options]` and no `[record]`.
 - A section or option name outside `A-Z a-z 0-9 _ . -` is percent-encoded
   (`a b` is written `a%20b`), so no bracket, separator, comment mark or line
-  break from the wire reaches the file. A name spelling `DEFAULT` in any case
-  has its first letter encoded, since `configparser` reads that section as
-  defaults.
-- Names keep their case: read the file with a reader that does too
-  (`configparser` with `optionxform = str`) and without interpolation.
+  break from the wire reaches the file; `DEFAULT` in any case has its first
+  letter encoded, since `configparser` reads that section as defaults. Names
+  keep their case (`optionxform = str`), and the file is read without
+  interpolation.
 - `ValueError` for two names that would be one section or one option, and for
   a record that has both top-level values and a mapping named `record`.

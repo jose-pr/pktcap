@@ -46,6 +46,7 @@ EXPECTED = [
     "PcapngWriter",
     "PktcapError",
     "RECORD_FORMATS",
+    "RecordFormatError",
     "ReplayResult",
     "ReplaySource",
     "Selector",
@@ -67,6 +68,7 @@ EXPECTED = [
     "frame_filter_keys",
     "frame_record",
     "load_plugins",
+    "loads_record",
     "capture_config_path",
     "has_live_capture",
     "has_output_format",
@@ -95,6 +97,8 @@ POSITIONAL = {
     "copy_frames": 2,
     # What to write and the format to write it in, as `json.dump(obj, fp)`.
     "dumps_record": 2,
+    # The text to read and the format it is in, as `json.loads` and `dumps_record`.
+    "loads_record": 2,
     "CaptureWriter": 2,
     # What was captured and the record made of it.
     "CaptureWriter.write": 2,

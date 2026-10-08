@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import configparser
+import json
 import re
 from typing import Any, Dict, List, Mapping
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from ._contract import RecordFormat
-from ._json import json_text
+from ._json import NotJSON, json_loads, json_text
+from ._read import Refusal, read
 
 __all__ = ["INIFormat"]
 
@@ -26,6 +29,83 @@ def _name(key: object) -> str:
     if text.upper() == "DEFAULT":  # configparser reads that section as defaults
         text = "%%%02X%s" % (ord(text[0]), text[1:])
     return text
+
+
+def _unname(name: str) -> str:
+    """The key a section or option name stands for: its percent escapes
+    decoded, a sequence that is not UTF-8 refused."""
+    try:
+        return unquote(name, errors="strict")
+    except UnicodeDecodeError:
+        raise Refusal("an INI name holds a percent escape that is not UTF-8") from None
+
+
+def _value(raw: str) -> Any:
+    """An option's value: JSON when it is JSON, else its text, so a file
+    somebody wrote by hand reads."""
+    try:
+        return json_loads(raw, NotJSON())
+    except (json.JSONDecodeError, NotJSON):
+        return raw
+    except Refusal:
+        raise
+    except RecursionError:
+        raise Refusal("an INI value is nested too deeply") from None
+    except ValueError:
+        raise Refusal("an INI value is a number too long to read") from None
+
+
+def _sections(text: str) -> "configparser.RawConfigParser":
+    # default_section="" names no section a header can spell, so `[DEFAULT]`
+    # is an ordinary section and no option is inherited.
+    parser = configparser.RawConfigParser(
+        strict=True, interpolation=None, default_section=""
+    )
+    parser.optionxform = str  # type: ignore[assignment,method-assign]
+    try:
+        parser.read_string(text)
+    except configparser.DuplicateSectionError as caught:
+        raise Refusal("an INI section is written twice", caught.lineno) from None
+    except configparser.DuplicateOptionError as caught:
+        raise Refusal(
+            "an INI option is written twice in a section", caught.lineno
+        ) from None
+    except configparser.MissingSectionHeaderError as caught:
+        raise Refusal(
+            "the INI text has a line before its first section", caught.lineno
+        ) from None
+    except configparser.ParsingError as caught:
+        lineno = caught.errors[0][0] if caught.errors else None
+        raise Refusal("an INI line is no section, option or comment", lineno) from None
+    return parser
+
+
+def _document(text: str) -> Dict[str, Any]:
+    if not text:
+        raise Refusal("the INI text is empty")
+    parser = _sections(text)
+    if not parser.sections():
+        if text.strip():
+            raise Refusal("the INI text holds no section")
+        return {}  # what the writer writes for a record with nothing in it
+    record: Dict[str, Any] = {}
+    for section in parser.sections():
+        options: Dict[str, Any] = {}
+        for name, raw in parser.items(section):
+            key = _unname(name)
+            if key in options:
+                raise Refusal("an INI option is written twice in a section")
+            options[key] = _value(raw)
+        if section == _MAIN_SECTION:
+            top: Dict[str, Any] = options
+        else:
+            key = _unname(section)
+            top = {key: options}
+        for key in top:
+            if key in record:
+                raise Refusal("an INI top-level key is written twice")
+        record.update(top)
+    return record
 
 
 class INIFormat(RecordFormat):
@@ -76,3 +156,6 @@ class INIFormat(RecordFormat):
         if name in options:
             raise ValueError("INI cannot hold two options of one name in a section")
         options[name] = json_text(value, "INI")
+
+    def loads(self, text: str) -> Dict[str, Any]:
+        return read("ini", lambda: _document(text))

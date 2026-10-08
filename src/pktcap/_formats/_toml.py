@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping
+from typing import Any, Dict, Mapping, Optional
 
 from ._contract import RecordFormat, missing_extra
+from ._read import Refusal, check_plain, read
 
 __all__ = ["TOMLFormat"]
+
+_SCALARS = (str, int, float, bool)
+#: The position tomli and tomllib end a message with, when they keep none.
+_AT_LINE = re.compile(r"\(at line (\d+), column \d+\)\Z")
 
 _NOT_ASCII = re.compile(r"[^\x00-\x7e]")
 
@@ -19,6 +24,30 @@ def _escape(match: "re.Match[str]") -> str:
         # write one: the replacement character stands in for it.
         code = 0xFFFD
     return "\\u%04X" % code if code <= 0xFFFF else "\\U%08X" % code
+
+
+def _toml_module() -> Any:
+    """``tomllib`` where the interpreter has it, else ``tomli``, else the
+    error that names the extra."""
+    try:
+        import tomllib  # type: ignore[import-not-found,unused-ignore]
+
+        return tomllib
+    except ImportError:
+        pass
+    try:
+        import tomli  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        raise missing_extra("toml", "toml", "input") from None
+    return tomli
+
+
+def _lineno(caught: Exception) -> Optional[int]:
+    lineno = getattr(caught, "lineno", None)
+    if isinstance(lineno, int):
+        return lineno
+    found = _AT_LINE.search(str(caught))
+    return int(found.group(1)) if found else None
 
 
 class TOMLFormat(RecordFormat):
@@ -61,3 +90,30 @@ class TOMLFormat(RecordFormat):
         # the one place a TOML document accepts these escapes.
         text = _NOT_ASCII.sub(_escape, text)
         return text if text.endswith("\n") else text + "\n"
+
+    def require_loads(self) -> None:
+        _toml_module()
+
+    def loads(self, text: str) -> Dict[str, Any]:
+        module = _toml_module()
+
+        def parse() -> Any:
+            if not text:
+                raise Refusal("the TOML text is empty")
+            try:
+                value = module.loads(text)
+            except module.TOMLDecodeError as caught:
+                twice = "twice" in str(caught) or "overwrite" in str(caught)
+                raise Refusal(
+                    (
+                        "a TOML key or table is written twice"
+                        if twice
+                        else "the text is not valid TOML"
+                    ),
+                    _lineno(caught),
+                )
+            # A date or a time is TOML's own type, not plain data.
+            check_plain(value, _SCALARS, "TOML")
+            return value
+
+        return read("toml", parse)

@@ -24,6 +24,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `loads_record(text, format="json")` reads one record back from the text
+  `dumps_record` writes, in the same four formats, as its inverse: for every
+  record `dumps_record` takes, `loads_record(dumps_record(r, f), f) == r`,
+  with the exceptions the formats force, which the header lists (a key that
+  was not text comes back as text in JSON and INI, a lone surrogate is U+FFFD
+  in TOML, and a few more). Text that is not one record raises the new
+  `RecordFormatError(message, *, format, lineno=None)`, a `PktcapError` and a
+  `ValueError`, whose message never quotes the text and which chains nothing.
+  The text is untrusted: a key written twice, `NaN` and the infinities in
+  JSON, a YAML tag that is not plain, a YAML merge key, a date in TOML or
+  YAML, and nesting past the recursion limit are refused, and a YAML alias
+  costs the size of the document and not what it expands to. In INI a value
+  that is not JSON is its text, so a file written by hand reads. YAML needs
+  the `yaml` extra; TOML is read with `tomllib` from Python 3.11 and needs
+  `tomli` before it, which the `toml` extra now installs there.
 - `TCPReassembler(*, max_streams=1024, max_buffered=16777216,
   idle_timeout=300.0)` puts TCP streams back together from dissected frames:
   `add(frame)` returns the `TCPStreamData` the frame made deliverable, each

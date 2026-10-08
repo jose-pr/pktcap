@@ -104,6 +104,8 @@ with pktcap.CaptureWriter("x_{xid}.toml", per_record=True, fields=("xid",)) as o
     assert_type(output.format, str)
     assert_type(output.refused, int)
 assert_type(pktcap.dumps_record({"a": [1, 2]}, "json"), str)
+assert_type(pktcap.loads_record('{"a": 1}'), Dict[str, Any])
+assert_type(pktcap.loads_record("a = 1\n", "toml"), Dict[str, Any])
 assert_type(pktcap.datagram_record(datagram), Dict[str, Any])
 assert_type(pktcap.frame_record(dissected), Dict[str, Any])
 assert_type(pktcap.OUTPUT_FORMATS, Tuple[str, ...])
@@ -255,6 +257,9 @@ assert_type(pktcap.has_live_capture(), bool)
 
 error = pktcap.CaptureFormatError("x", offset=3)
 assert_type(error.offset, Optional[int])
+bad_record = pktcap.RecordFormatError("x", format="json", lineno=3)
+assert_type(bad_record.format, str)
+assert_type(bad_record.lineno, Optional[int])
 missing = pktcap.MissingExtraError("x", format="toml", extra="toml")
 assert_type(missing.format, str)
 assert_type(missing.extra, str)
@@ -262,3 +267,7 @@ try:
     pktcap.dumps_record({}, "toml")
 except ImportError as caught:
     assert_type(caught, ImportError)
+try:
+    pktcap.loads_record("", "ini")
+except ValueError as caught:
+    assert_type(caught, ValueError)

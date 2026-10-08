@@ -31,6 +31,7 @@ from pktcap import (
     LoopbackLayer,
     MissingExtraError,
     PktcapError,
+    RecordFormatError,
     ReplayResult,
     TCPLayer,
     UDPLayer,
@@ -113,6 +114,7 @@ BUILTIN = {
     CaptureFilterError: ValueError,
     UnsupportedFormatError: ValueError,
     MissingExtraError: ImportError,
+    RecordFormatError: ValueError,
     DissectError: ValueError,
     LiveCaptureError: OSError,
     CapturePluginError: ValueError,
@@ -164,3 +166,17 @@ def test_a_missing_extra_error_keeps_what_is_missing_through_a_pickle():
     assert (clone.format, clone.extra) == ("toml", "toml")
     with pytest.raises(TypeError):
         MissingExtraError("no data")  # type: ignore[call-arg]
+
+
+def test_a_record_format_error_keeps_its_format_and_line_through_a_pickle():
+    error = RecordFormatError("the text is not valid TOML", format="toml", lineno=7)
+    assert str(error) == "the text is not valid TOML (at line 7)"
+    assert (error.format, error.lineno) == ("toml", 7)
+    clone = pickle.loads(pickle.dumps(error))
+    assert type(clone) is RecordFormatError and str(clone) == str(error)
+    assert (clone.format, clone.lineno) == ("toml", 7)
+    unplaced = RecordFormatError("a key is written twice", format="json")
+    assert (unplaced.lineno, str(unplaced)) == (None, "a key is written twice")
+    assert pickle.loads(pickle.dumps(unplaced)).lineno is None
+    with pytest.raises(TypeError):
+        RecordFormatError("no format")  # type: ignore[call-arg]
