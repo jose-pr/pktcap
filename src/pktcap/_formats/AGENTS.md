@@ -221,9 +221,9 @@ whitespace alone is the empty record in `toml` and `ini`, which write it.
 `NaN` and the infinities (`1e999` too); in YAML a tag the safe loader does not
 know, a merge key `<<`, a value that is not plain data (`!!set`, a date) or
 that contains itself; in TOML a date or time; nesting past the recursion
-limit; a number too long to convert. A YAML alias reads as the object it
-names, costing the document's size and not its expansion; `!!binary` reads as
-`bytes`.
+limit; a number too long to convert; a YAML alias, which makes a short text
+stand for a structure of any size (the writer writes none: an object a record
+holds twice is written twice). `!!binary` reads as `bytes`.
 
 **INI reading** inverts the layout of `ini` below: names are percent-decoded,
 case is kept, nothing is interpolated, `[DEFAULT]` is ordinary, `=` or `:`

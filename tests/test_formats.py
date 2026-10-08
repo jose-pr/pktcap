@@ -195,7 +195,7 @@ def test_only_the_named_import_is_caught(monkeypatch):
     def broken(*args, **kwargs):
         raise RuntimeError("a defect in the dependency")
 
-    monkeypatch.setattr(yaml, "safe_dump", broken)
+    monkeypatch.setattr(yaml, "dump", broken)
     with pytest.raises(RuntimeError, match="a defect in the dependency"):
         dumps_record({"a": 1}, "yaml")
 

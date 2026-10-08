@@ -339,28 +339,33 @@ def aliases(levels, fan):
     return "\n".join(lines) + "\n"
 
 
-def test_a_thousand_aliases_to_one_anchor_read_as_one_object():
-    text = "a: &a [x, y]\nb: [%s]\n" % ", ".join(["*a"] * 1000)
-    back = loads_record(text, "yaml")
-    assert len(back["b"]) == 1000
-    assert all(item is back["a"] for item in back["b"])
+def test_an_alias_is_refused_however_few_there_are():
+    """A reader that took aliases would hand back a small object that costs
+    whoever walks it the whole expansion. None is read, and the line is told."""
+    error = verdict("a: &a [x, y]\nb: *a\n", "yaml")
+    assert isinstance(error, RecordFormatError) and error.lineno == 2
+    many = "a: &a [x, y]\nb: [%s]\n" % ", ".join(["*a"] * 1000)
+    assert isinstance(verdict(many, "yaml"), RecordFormatError)
+    assert loads_record("a: &a [x, y]\nb: [x, y]\n", "yaml") == {
+        "a": ["x", "y"],
+        "b": ["x", "y"],
+    }
 
 
-def test_aliases_that_expand_to_billions_cost_the_size_of_the_document():
+def test_aliases_that_would_expand_to_billions_are_refused_at_the_first():
     text = aliases(levels=12, fan=10)  # 10**12 items if expanded
     assert len(text) < 2000
     tracemalloc.start()
     try:
         started = time.monotonic()
-        back = loads_record(text, "yaml")
+        error = verdict(text, "yaml")
         elapsed = time.monotonic() - started
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
-    # An expansion would take terabytes; the document's own objects take a
-    # few hundred kilobytes at most.
+    # An expansion would take terabytes; refusing costs the first two lines.
+    assert isinstance(error, RecordFormatError)
     assert peak < 2_000_000 and elapsed < 5
-    assert back["l11"][0] is back["l10"] and back["l1"][9] is back["l0"]
 
 
 def test_a_chain_of_merge_keys_is_refused_before_it_can_double():

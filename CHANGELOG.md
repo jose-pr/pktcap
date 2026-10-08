@@ -33,9 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `RecordFormatError(message, *, format, lineno=None)`, a `PktcapError` and a
   `ValueError`, whose message never quotes the text and which chains nothing.
   The text is untrusted: a key written twice, `NaN` and the infinities in
-  JSON, a YAML tag that is not plain, a YAML merge key, a date in TOML or
-  YAML, and nesting past the recursion limit are refused, and a YAML alias
-  costs the size of the document and not what it expands to. In INI a value
+  JSON, a YAML tag that is not plain, a YAML merge key, a YAML alias, a date
+  in TOML or YAML, and nesting past the recursion limit are refused. The YAML
+  writer writes no anchor and no alias: an object a record holds twice is
+  written twice. In INI a value
   that is not JSON is its text, so a file written by hand reads. YAML needs
   the `yaml` extra; TOML is read with `tomllib` from Python 3.11 and needs
   `tomli` before it, which the `toml` extra now installs there.

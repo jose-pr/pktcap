@@ -394,13 +394,14 @@ def test_a_yaml_merge_key_is_refused():
     refused("a: {<<: [{x: 1}, {y: 2}]}\n", "yaml")
 
 
-def test_yaml_aliases_read_as_the_object_they_name():
+def test_an_object_a_record_holds_twice_is_written_twice_in_yaml():
+    """No anchor and no alias is written, so what is written is read back."""
     record_list = [1, 2]
     text = dumps_record({"a": record_list, "b": record_list}, "yaml")
-    assert "*id001" in text
+    assert "&" not in text and "*" not in text
     back = loads_record(text, "yaml")
     assert back == {"a": [1, 2], "b": [1, 2]}
-    assert back["a"] is back["b"]
+    assert back["a"] is not back["b"]
 
 
 def test_a_yaml_value_that_contains_itself_is_refused():
@@ -645,7 +646,7 @@ SAYS = [
     ("yaml", "a: 1\nb: 2020-01-01\n", "not plain data", None),
     ("yaml", "2020-01-01: x\n", "not plain data", None),
     ("yaml", "a: 1\nb: \x00\n", "forbids", 2),
-    ("yaml", "a: &x [*x]\n", "contains itself", None),
+    ("yaml", "a: &x [*x]\n", "alias", 1),
     ("yaml", "a: [\n", "not valid YAML", 2),
     ("toml", "", "is empty", None),
     ("toml", "a = 1\na = 2\n", "written twice", 2),

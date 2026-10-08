@@ -27,6 +27,15 @@ def _safe_loader() -> Any:
     import yaml
 
     class RecordLoader(yaml.SafeLoader):
+        def compose_node(self, parent: Any, index: Any) -> Any:
+            # An alias makes a short text stand for a structure of any size:
+            # reading it costs little, and whoever then walks the record
+            # pays for the whole expansion. The writer writes none.
+            if self.check_event(yaml.AliasEvent):  # type: ignore[no-untyped-call,unused-ignore]
+                event = self.peek_event()  # type: ignore[no-untyped-call,unused-ignore]
+                raise Refusal("a YAML alias is not read", event.start_mark.line + 1)
+            return super().compose_node(parent, index)  # type: ignore[no-untyped-call,unused-ignore]
+
         def flatten_mapping(self, node: Any) -> None:
             # A merge key copies the mapping it names into this one, and a
             # chain of them doubles at every link: the text grows linearly
@@ -113,8 +122,14 @@ class YAMLFormat(RecordFormat):
         self.require()
         import yaml
 
+        class Dumper(yaml.SafeDumper):
+            # An object a record holds twice is written twice: an anchor and
+            # an alias are not plain data, and the reader refuses them.
+            def ignore_aliases(self, data: Any) -> bool:
+                return True
+
         try:
-            text: str = yaml.safe_dump(dict(record), sort_keys=False)
+            text: str = yaml.dump(dict(record), Dumper=Dumper, sort_keys=False)
         except yaml.YAMLError:
             # PyYAML's message quotes the object it could not represent.
             raise TypeError(

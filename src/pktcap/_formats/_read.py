@@ -70,34 +70,22 @@ def check_plain(root: Any, scalars: Tuple[type, ...], label: str) -> None:
     """Refuse a value that is not plain data: raises :class:`Refusal`.
 
     A container is ``dict`` or ``list``; ``scalars`` are the other types that
-    may be a value or a key. A container reached twice (an alias) is checked
-    once, so the work is the size of the document and not of what its aliases
-    would expand to; one that contains itself is refused. Iterative, so the
-    depth of a document costs no recursion.
+    may be a value or a key. The value is a tree: a reader whose format has
+    aliases refuses them before it gets here, so each container is met once
+    and the work is the size of the document. Iterative, so the depth of a
+    document costs no recursion.
     """
     if not isinstance(root, (dict, list)):
         raise Refusal("the %s document is not a mapping" % label)
-    #: id of a container -> 1 while it is being walked, 2 once it has been.
-    state: Dict[int, int] = {id(root): 1}
-    stack = [(root, _children(root))]
-    _check_keys(root, scalars, label)
+    stack = [root]
     while stack:
-        node, children = stack[-1]
-        for child in children:
+        node = stack.pop()
+        _check_keys(node, scalars, label)
+        for child in _children(node):
             if isinstance(child, (dict, list)):
-                seen = state.get(id(child))
-                if seen == 1:
-                    raise Refusal("a %s value contains itself" % label)
-                if seen is None:
-                    state[id(child)] = 1
-                    _check_keys(child, scalars, label)
-                    stack.append((child, _children(child)))
-                    break
+                stack.append(child)
             elif not isinstance(child, scalars):
                 raise Refusal("a %s value is not plain data" % label)
-        else:
-            state[id(node)] = 2
-            stack.pop()
 
 
 def _check_keys(node: Any, scalars: Tuple[type, ...], label: str) -> None:
