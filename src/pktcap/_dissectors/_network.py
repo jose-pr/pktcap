@@ -9,6 +9,7 @@ which the frame dissector cuts off at its own ceiling.
 
 from __future__ import annotations
 
+import functools
 import ipaddress
 import socket
 import struct
@@ -22,7 +23,14 @@ __all__ = ["NETWORK_DISSECTORS"]
 
 _MAPPED_PREFIX = bytes(10) + b"\xff\xff"
 
+#: How many IPv6 addresses keep their text. A capture names few hosts and
+#: every frame names two, and writing one costs about 2.5 microseconds against
+#: 0.1 for finding it (CPython 3.14 on Windows ARM64, 2026-10-08). The bound is
+#: what a capture of addresses that never repeat can make this hold.
+_IPV6_TEXTS = 1024
 
+
+@functools.lru_cache(maxsize=_IPV6_TEXTS)
 def _ipv6_text(packed: bytes) -> str:
     # The rule of netimps.format_address, kept here for speed: a v4-mapped
     # address is written ::ffff:1.2.3.4 on every Python (str() writes the hex

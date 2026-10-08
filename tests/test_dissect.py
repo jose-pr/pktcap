@@ -280,6 +280,45 @@ def test_a_frame_of_nothing_but_headers_costs_what_the_ceiling_costs():
     assert len(frame.layers) == 31 and stats.malformed == 1
 
 
+def test_addresses_that_never_repeat_cannot_make_the_kept_texts_grow_without_end():
+    """An IPv6 address keeps its text, since a capture names few hosts. A capture
+    whose every frame names two new ones stops at the bound, and each is still
+    written as it would have been."""
+    import importlib
+    import ipaddress
+
+    # The one private name here: the count of kept texts is not public.
+    kept = importlib.import_module("pktcap._dissectors._network")._ipv6_text
+    dissector = FrameDissector()
+    for number in range(1500):
+        source = ipaddress.IPv6Address((0x20010DB8 << 96) | (number * 2 + 1))
+        target = ipaddress.IPv6Address((0x20010DB8 << 96) | (number * 2 + 2))
+        frame = dissector.dissect(
+            CapturedFrame(0.0, 101, build.ipv6(str(source), str(target), UDP))
+        )
+        assert frame.datagram().source == (str(source), 50000)
+        assert frame.datagram().destination == (str(target), 69)
+    assert kept.cache_info().maxsize == 1024
+    assert kept.cache_info().currsize <= 1024
+
+
+def test_a_registry_that_answers_get_itself_is_the_one_the_walk_asks():
+    """The walk reads a registry's table directly, one lookup a layer. A
+    subclass that answers ``get`` is asked instead, for every layer."""
+    asked = []
+
+    class Recording(DissectorRegistry):
+        def get(self, kind, value):
+            asked.append((kind, value))
+            if (kind, value) == ("udp", 69):
+                return _tftp
+            return super().get(kind, value)
+
+    frame, _ = dissect(101, V4, Recording())
+    assert kinds(frame)[-1] is dict
+    assert asked[0] == ("linktype", 101) and ("udp", 69) in asked
+
+
 @pytest.mark.parametrize("linktype", sorted(LINKTYPES) + [105])
 def test_a_mutated_frame_never_raises(linktype):
     """Seeded fuzz: whatever a frame holds, `dissect` returns the frame."""

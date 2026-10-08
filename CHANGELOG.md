@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Dissecting a frame costs less. An IPv6 address keeps its text (the 1,024 a
+  process used last), since a capture names few hosts and every frame names
+  two; and the walk reads the registry's table once a layer without a call
+  through `DissectorRegistry.get`. A subclass that answers `get` itself is
+  still the one asked. What a caller gets back is the same.
 - A field value used in a per-record file name and longer than 64 characters
   is cut to 55 and ends in `-` and 8 hexadecimal digits of the SHA-256 of the
   whole value, so two long values that start alike name two files. Before, the
