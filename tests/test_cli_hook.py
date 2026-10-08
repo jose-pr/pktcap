@@ -243,7 +243,7 @@ def test_a_python_function_is_not_bounded_by_the_hook_timeout():
 
 @pytest.mark.skipif(sys.platform != "win32", reason="a drive letter is Windows'")
 def test_a_drive_relative_path_is_a_program_not_a_module_and_function(capsys):
-    argv = ["capture", "--listen", "127.0.0.1:0", "--hook", "C:no-such-hook-here.exe"]
+    argv = ["capture", "--listen", "127.0.0.1:0", "--hook", "C:no_such_hook_here.exe"]
     assert main(argv) == 2
     err = capsys.readouterr().err
     assert "does not exist" in err and "no module" not in err
