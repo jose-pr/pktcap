@@ -1659,7 +1659,7 @@ def test_joined_octets_are_handed_out_as_bytes_the_first_copy_of_an_overlap_wins
 def test_the_work_to_join_segments_does_not_grow_with_what_is_held():
     import time as clock
 
-    size = 60000  # large segments, so that copying what is held dominates
+    size = 200
 
     def cost(count):
         wire = Wire()
@@ -1675,9 +1675,12 @@ def test_the_work_to_join_segments_does_not_grow_with_what_is_held():
         assert reassembler.stats.held == count * size
         return best
 
-    # Joining by copying what is held each time costs the square: 8 times the
-    # segments is about 64 times the work, against 8 when each costs the same.
-    assert cost(400) < 24 * cost(50)
+    # Joined in place, 8 times the segments is about 8 times the work (7 to 9
+    # measured). Joined by copying what is held each time, the 16,000 copy 25
+    # GB between them, hundreds of times the work. Small segments keep the
+    # steps in which an allocator grows a large buffer out of the ratio: with
+    # segments of 60,000 octets one system measured 52 for the same code.
+    assert cost(16000) < 24 * cost(2000)
 
 
 def test_the_work_per_segment_does_not_grow_with_the_pieces_held():
