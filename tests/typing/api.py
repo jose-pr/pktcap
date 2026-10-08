@@ -8,7 +8,18 @@ stating the result a caller gets, so a public annotation that degrades to
 
 import io
 import pathlib
-from typing import Any, Callable, Dict, Iterator, Mapping, NamedTuple, Optional, Tuple
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Tuple,
+)
 
 from netimps import UDPEndpoint
 from typing_extensions import assert_type
@@ -254,6 +265,38 @@ assert_type(
     Iterator[pktcap.DissectedFrame],
 )
 assert_type(pktcap.has_live_capture(), bool)
+
+# -- capturing from a socket ----------------------------------------------
+
+datagram = pktcap.CapturedDatagram(1.0, ("10.0.0.5", 1), ("10.0.0.1", 2), b"x")
+assert_type(pktcap.datagram_frame(datagram, interface=3, ident=7), pktcap.CapturedFrame)
+udp_endpoints: List[UDPEndpoint] = []
+udp_capture = pktcap.UDPCapture(udp_endpoints, timeout=0.5, max_size=1500)
+assert_type(udp_capture.read(), Optional[pktcap.CapturedFrame])
+assert_type(udp_capture.truncated, int)
+udp_capture.close()
+with pktcap.UDPCapture(udp_endpoints) as entered:
+    assert_type(entered, pktcap.UDPCapture)
+for udp_frame in pktcap.UDPCapture(udp_endpoints):
+    assert_type(udp_frame, pktcap.CapturedFrame)
+assert_type(
+    pktcap.sniff_udp(udp_endpoints, stop=lambda: True, dissector=dissector),
+    Iterator[pktcap.DissectedFrame],
+)
+assert_type(
+    pktcap.asniff_udp(udp_endpoints, dissector=dissector),
+    AsyncIterator[pktcap.DissectedFrame],
+)
+
+
+async def read_from_sockets() -> None:
+    assert_type(
+        await pktcap.UDPCapture(udp_endpoints).aread(), Optional[pktcap.CapturedFrame]
+    )
+    await pktcap.UDPCapture(udp_endpoints).aclose()
+    async for streamed in pktcap.asniff_udp(udp_endpoints):
+        assert_type(streamed, pktcap.DissectedFrame)
+
 
 error = pktcap.CaptureFormatError("x", offset=3)
 assert_type(error.offset, Optional[int])

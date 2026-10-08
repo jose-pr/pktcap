@@ -54,12 +54,15 @@ EXPECTED = [
     "TCPReassembler",
     "TCPStreamData",
     "TCPStreamStats",
+    "UDPCapture",
     "UDPLayer",
     "UnsupportedFormatError",
     "VLANLayer",
+    "asniff_udp",
     "check_dissector",
     "compile_capture_filter",
     "copy_frames",
+    "datagram_frame",
     "datagram_record",
     "default_registry",
     "dumps_record",
@@ -83,6 +86,7 @@ EXPECTED = [
     "replay_to",
     "sniff",
     "sniff_frames",
+    "sniff_udp",
 ]
 
 #: Positional parameters a callable may take: the thing it acts on, and one

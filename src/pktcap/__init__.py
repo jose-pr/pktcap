@@ -83,7 +83,8 @@ from ._streams import (
     TCPStreamStats,
     read_tcp_streams,
 )
-from ._writer import PcapngWriter, PcapWriter
+from ._sources import UDPCapture, asniff_udp, sniff_udp
+from ._writer import PcapngWriter, PcapWriter, datagram_frame
 
 __all__ = [
     "CaptureConfigError",
@@ -130,12 +131,15 @@ __all__ = [
     "TCPReassembler",
     "TCPStreamData",
     "TCPStreamStats",
+    "UDPCapture",
     "UDPLayer",
     "UnsupportedFormatError",
     "VLANLayer",
+    "asniff_udp",
     "check_dissector",
     "compile_capture_filter",
     "copy_frames",
+    "datagram_frame",
     "datagram_record",
     "default_registry",
     "dumps_record",
@@ -159,6 +163,7 @@ __all__ = [
     "replay_to",
     "sniff",
     "sniff_frames",
+    "sniff_udp",
 ]
 
 __version__ = _version("pktcap")

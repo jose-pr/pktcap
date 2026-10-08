@@ -21,7 +21,7 @@ from netimps import IPAddress, SocketAddress, split_zone, unmap
 
 from ._captured import CapturedDatagram, CapturedFrame
 
-__all__ = ["PcapWriter", "PcapngWriter"]
+__all__ = ["PcapWriter", "PcapngWriter", "datagram_frame"]
 
 _Self = TypeVar("_Self", bound="_CaptureFileWriter")
 
@@ -116,6 +116,39 @@ def _ip_packet(
     return (
         struct.pack("!IHBB", 0x60000000, length, 17, 64) + packed_src + packed_dst + udp
     )
+
+
+def datagram_frame(
+    datagram: CapturedDatagram, *, interface: Optional[int] = None, ident: int = 0
+) -> CapturedFrame:
+    """A datagram seen at a socket as the raw-IP frame (link type 101) a
+    dissector reads: the octets the writers put in a capture for it.
+
+    The IP header is made up, as it is in a capture file: version, TTL 64, no
+    fragmentation, ``ident`` as the identification, valid checksums. A v4-mapped
+    pair of addresses is an IPv4 packet, a pair of one IPv4 and one IPv6 address
+    an IPv6 packet, and a zone is not on the wire. Dissected, the frame gives
+    ``datagram`` back with those hosts.
+
+    :param interface: the number of the interface it arrived on, or ``None``.
+    :param ident: the IPv4 identification, kept to 16 bits.
+    :raises ValueError: a host that is not an address, a port outside 0-65535,
+        a payload over 65,507 octets (IPv4) or 65,527 (IPv6), a time out of
+        range, or an ``interface`` outside 0 to 2**32 - 1.
+    :raises TypeError: an argument of the wrong type.
+    """
+    if not isinstance(datagram, CapturedDatagram):
+        raise TypeError("datagram must be a CapturedDatagram")
+    if interface is not None:
+        if isinstance(interface, bool) or not isinstance(interface, int):
+            raise TypeError("interface must be an int or None")
+        if not 0 <= interface < _MAX_SECONDS:
+            raise ValueError("interface %d is outside 0 to 2**32 - 1" % interface)
+    if isinstance(ident, bool) or not isinstance(ident, int):
+        raise TypeError("ident must be an int")
+    _stamp(datagram.time)
+    packet = _ip_packet(datagram.source, datagram.destination, datagram.payload, ident)
+    return CapturedFrame(datagram.time, _LINKTYPE_RAW, packet, interface)
 
 
 def _frame_octets(frame: CapturedFrame) -> bytes:

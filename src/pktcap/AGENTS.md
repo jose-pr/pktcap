@@ -28,6 +28,7 @@ installed package (`importlib.resources.files("pktcap")`):
 | `pktcap/_plugins/AGENTS.md` | layers and the filter keys a registry holds for them, how a filter reads a layer's fields, and loading plugins by name |
 | `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay`, `convert` and `plugins`, every option, what each prints, its statuses |
 | `pktcap/_streams/AGENTS.md` | `TCPReassembler`, `TCPStreamData`, `TCPStreamStats`: the rules for putting TCP streams back together, and the bounds |
+| `pktcap/_sources/AGENTS.md` | capturing live from an interface, and from UDP sockets: `LiveCapture`, `sniff_frames`, `sniff`, `UDPCapture`, `sniff_udp`, `asniff_udp`, `datagram_frame` |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
 
 **Any valid capture is read.** Every frame of a pcap or pcapng file comes
@@ -369,54 +370,18 @@ datagrams passed over.
 for an option of the wrong type, a `deliver` that is not callable or an item
 with no `time`.
 
-## Capturing live
+## Capturing live, and from a socket
 
-**Linux only**, through an `AF_PACKET` socket, and the process needs the
-`CAP_NET_RAW` capability (root, or `setcap cap_net_raw+ep` on the
-interpreter). Everywhere else, and wherever a capture tool is preferred, pipe
-one in: `tcpdump -i eth0 -U -w - | your-program` and
-`read_dissected(sys.stdin.buffer)`. Capturing never sends anything.
+Frames also come from an interface, on Linux with `CAP_NET_RAW`, and from UDP
+sockets the caller bound, on every platform with no privilege. Both are
+passive, and the detail is in `pktcap/_sources/AGENTS.md`.
 
-**`has_live_capture() -> bool`** — whether this platform has `AF_PACKET`. It
-says nothing about permission.
-
-**`LiveCapture(interface=None, *, timeout=1.0)`** — every packet on one
-interface, or on all of them when `interface` is `None`. A context manager;
-constructing one opens nothing.
-
-- `interface` is `netimps.InterfaceLike`: a name, a `netimps.Interface`, or
-  anything `netimps.get_interface` finds one by (an address, a MAC).
-- **`LiveCapture.open() -> None`** — open the socket; `with` does it. Does
-  nothing when already open. `LiveCaptureError` where the platform has no
-  `AF_PACKET` (before any interface is looked up), the kernel's `PermissionError` without the capability,
-  `ValueError` when no interface matches.
-- **`LiveCapture.read() -> Optional[CapturedFrame]`** — the next packet, IP or
-  not, or `None` when `timeout` seconds pass without one. A frame has link
-  type 276 (Linux cooked capture v2, what tcpdump writes for its `any`
-  device), the time it was read and the interface's index: ready for a
-  `FrameDissector`, and for a writer, whose file other tools then read.
-- Iterating a capture yields frames until it is closed.
-- **`LiveCapture.fileno() -> int`** — the socket's descriptor, for a caller's
-  own selector or event loop. There is no asynchronous twin.
-- **`LiveCapture.close() -> None`** — final, complete on return, harmless
-  twice.
-- On a loopback device every packet is seen leaving and arriving; only the
-  arriving copy is returned. Loopback is told by the device type the kernel
-  reports, not by the name `lo`.
-
-**`sniff_frames(interface=None, *, stop=None, dissector=None) -> Iterator[DissectedFrame]`**
-— `LiveCapture` and a `FrameDissector` in one call, what `read_dissected` is
-for a file: every frame as it arrives, dissected, whatever it carries. The
-socket is opened when the first frame is asked for (which is when
-`LiveCaptureError` or `PermissionError` is raised) and closed when the
-iterator ends or is closed. `stop()` is called between packets, and at least
-once a second on a quiet interface; returning true ends the iteration.
-`TypeError` at the call for a `stop` that is not callable or a `dissector`
-that is not a `FrameDissector`.
-
-**`sniff(interface=None, *, stop=None, dissector=None) -> Iterator[CapturedDatagram]`**
-— `sniff_frames` through the datagram view: UDP datagrams as they arrive, the
-rest passed over. The same opening, closing, `stop` and errors.
+- `has_live_capture`, `LiveCapture`, `sniff_frames` and `sniff`: every packet
+  on an interface (Linux), as frames, dissected frames or UDP datagrams.
+- `UDPCapture`, `sniff_udp` and `asniff_udp`: the datagrams that reach
+  endpoints you bound, as dissected frames, with an asynchronous twin. **The IP
+  header of such a frame is made up**, and a socket never sees other hosts'
+  traffic. `datagram_frame` builds the frame of one datagram.
 
 ## Plugins
 

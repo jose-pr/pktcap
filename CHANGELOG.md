@@ -24,6 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- A UDP socket is a capture source, on every platform and with no privilege.
+  `UDPCapture(endpoints, *, timeout=1.0, max_size=65535)` reads datagrams
+  from bound `netimps.UDPEndpoint` objects (at most 256) and returns each as a
+  raw-IP frame (link type 101) with the arrival interface when the host
+  reports one; a datagram over `max_size` is counted in `truncated` and not
+  returned. `sniff_udp(endpoints, *, stop=None, dissector=None)` yields them
+  dissected, with the registered dissector of the port applied, and closes the
+  sockets when it ends, fails, is closed or is dropped. `asniff_udp(endpoints,
+  *, dissector=None)` is its asynchronous twin on `UDPEndpoint.arecv`, with
+  `UDPCapture.aread()` and `aclose()`; every task is cancelled and every
+  socket closed when it stops, and `import pktcap` still imports no `asyncio`.
+  The IP header of such a frame is made up, and a socket never sees other
+  hosts' traffic, the link layer or fragments.
+- `datagram_frame(datagram, *, interface=None, ident=0)` builds the raw-IP
+  frame of a `CapturedDatagram`, the octets `PcapWriter` writes for it, so
+  that dissecting it gives the datagram back.
 - `loads_record(text, format="json")` reads one record back from the text
   `dumps_record` writes, in the same four formats, as its inverse: for every
   record `dumps_record` takes, `loads_record(dumps_record(r, f), f) == r`,
