@@ -61,7 +61,7 @@ VALUES = [
     UDP,
     TCPLayer(50000, 80, 1, 2, 0x18, 512, 0, 0, b"\x01\x01"),
     FilterClause("op", "RRQ,WRQ", True),
-    LoadedPlugin("a.b", "PKTCAP_PLUGINS", (("udp", 67),), ("dhcp",)),
+    LoadedPlugin("a.b", "PKTCAP_LOAD", (("udp", 67),), ("dhcp",)),
     ReplayResult(3, 1),
     CopyResult(4, 2, 1, 1),
 ]

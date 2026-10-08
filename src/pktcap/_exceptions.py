@@ -132,7 +132,7 @@ class CapturePluginError(PktcapError, ValueError):
 
     :ivar plugin: the item as written.
     :ivar source: where the list came from: ``"argument"``,
-        ``"PKTCAP_PLUGINS"`` or the configuration file's path.
+        ``"PKTCAP_LOAD"`` or the configuration file's path.
     """
 
     def __init__(self, message: str, *, plugin: str, source: str) -> None:

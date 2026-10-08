@@ -156,7 +156,7 @@ def test_importing_the_package_loads_no_optional_dependency():
 # -- the trust boundary of plugin loading ------------------------------------
 #
 # Importing a module because a string names it runs its code. A plugin list is
-# read from three places only (an argument, PKTCAP_PLUGINS, one configuration
+# read from three places only (an argument, PKTCAP_LOAD, one configuration
 # file), so the three capabilities are kept in three modules, and these tests
 # say which. Each takes the tree to scan so a test can plant a violation.
 

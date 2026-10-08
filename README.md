@@ -51,7 +51,7 @@ Documentation: <https://jose-pr.github.io/pktcap/>.
   payloads to one destination the caller names; never to the addresses in
   the file, and never as raw frames.
 - **Captures live on Linux** without a capture tool, given `CAP_NET_RAW`.
-- **Protocol plugins** — name a protocol library with `--plugins`, `PKTCAP_PLUGINS` or one configuration file and its dissector and filter keys work in `capture`, `convert` and `replay`; nothing is loaded because it is installed.
+- **Protocol plugins** — name a protocol library with `--load`, `PKTCAP_LOAD` or one configuration file and its dissector and filter keys work in `capture`, `convert` and `replay`; nothing is loaded because it is installed.
 - **A `pktcap` command** — `capture`, `replay`, `convert` and `plugins`, behind the `cli` extra.
 
 ## Installation
@@ -169,7 +169,7 @@ pktcap convert -i trace.pcap -o trace.jsonl
 pktcap convert -i trace.pcap -f "proto=udp and port=69" --datagrams --format json
 pktcap convert -i trace.pcap -o by-frame/{index}.toml --per-record
 pktcap replay -i trace.pcap --to 127.0.0.1:9 --no-delay
-pktcap plugins --plugins none
+pktcap plugins --load none
 ```
 
 `convert` copies a capture, filtered, into pcap, pcapng or records. `replay`
@@ -227,8 +227,8 @@ of yours. Three ways to name a plugin, nearest first; the first that names a
 list is the list:
 
 ```bash not-run
-pktcap convert -i trace.pcap --plugins pydhcp.capture.register_dhcp_dissector,tftp.capture.register_tftp_dissector -f "proto=dhcp"
-PKTCAP_PLUGINS=pydhcp.capture.register_dhcp_dissector pktcap convert -i trace.pcap -f "proto=dhcp"
+pktcap convert -i trace.pcap --load pydhcp.capture.register_dhcp_dissector,tftp.capture.register_tftp_dissector -f "proto=dhcp"
+PKTCAP_LOAD=pydhcp.capture.register_dhcp_dissector pktcap convert -i trace.pcap -f "proto=dhcp"
 pktcap plugins        # the file, what was loaded, every filter key there is
 ```
 
@@ -237,7 +237,7 @@ The third is a file, `pktcap/pktcap.ini` under `$XDG_CONFIG_HOME` (else
 
 ```ini
 [pktcap]
-plugins = pydhcp.capture.register_dhcp_dissector, tftp.capture.register_tftp_dissector
+load = pydhcp.capture.register_dhcp_dissector, tftp.capture.register_tftp_dissector
 ```
 
 An item is a module with a `pktcap_plugin(registry)` function, or

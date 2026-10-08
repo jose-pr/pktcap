@@ -18,7 +18,7 @@ prints the reason for every skip: a skip is not a pass.
 
 | File | Covers |
 | --- | --- |
-| `conftest.py` | the network guard: a test that sends anywhere but loopback fails at the call; every test runs with no `PKTCAP_PLUGINS` and `PKTCAP_CONFIG=none`; `plugin_module` writes a plugin module under a unique name into a temporary directory on `sys.path` |
+| `conftest.py` | the network guard: a test that sends anywhere but loopback fails at the call; every test runs with no `PKTCAP_LOAD` and `PKTCAP_CONFIG=none`; `plugin_module` writes a plugin module under a unique name into a temporary directory on `sys.path` |
 | `test_network_guard.py` | the guard itself refuses an off-host destination and a name lookup |
 | `test_surface.py` | exactly what `pktcap.__all__` exports, and that options are keyword-only |
 | `test_shipped_header.py` | the shipped `AGENTS.md` headers: every export is in the top one, every printed signature is the live one, every option a command declares is in `cli/AGENTS.md`, and a built wheel holds it and the console script |

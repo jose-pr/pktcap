@@ -118,7 +118,7 @@ installed.
 — import the modules a list names and call each one's hook with `registry`.
 There is no default registry, so a run changes nothing outside the one it is
 given. Each result is a **`LoadedPlugin(name, source, selectors, layers)`**: the
-item as written, where the list came from (`"argument"`, `"PKTCAP_PLUGINS"` or
+item as written, where the list came from (`"argument"`, `"PKTCAP_LOAD"` or
 the file's path), the selectors its hook registered a dissector under and the
 names of the layers it declared. Each plugin loaded is logged at `INFO`.
 
@@ -140,7 +140,7 @@ names of the layers it declared. Each plugin loaded is logged at `INFO`.
   `register_x_dissector(registry=None)` is therefore an item as it is.
 - **A plugin that cannot be loaded stops the call** with `CapturePluginError`
   (`plugin`, `source`; a `PktcapError` and a `ValueError`), one line such as
-  `PKTCAP_PLUGINS names 'pydemo.captur': no module of that name`. The same type
+  `PKTCAP_LOAD names 'pydemo.captur': no module of that name`. The same type
   covers a module whose import raised, one with no `pktcap_plugin`, a missing
   or uncallable attribute, a hook that takes no single argument and a hook that
   raised; the cause is chained. **The registry is left as it was before the
@@ -156,7 +156,7 @@ with no home.
 
 **A module is imported because a string names it, which runs its code, so a
 list is read from exactly three places**: the argument, the variable
-`PKTCAP_PLUGINS`, and one configuration file. It is never read from the working
+`PKTCAP_LOAD`, and one configuration file. It is never read from the working
 directory, from a file found by walking up from it, or from a capture or
 anything a capture holds. The first of the three that names a list is the list:
 lists never add up, and a source below it is not opened.
@@ -176,7 +176,7 @@ The dialect is INI: strict UTF-8 with one leading byte-order mark ignored, at
 most 65,536 octets, `#` and `;` comment lines (no inline comments), `=` the
 only delimiter, no interpolation, a value continued on indented lines, a
 duplicate section or key an error. One section, `[pktcap]`, one key,
-`plugins`; any other section, key or `[DEFAULT]` is an error naming it, and an
+`load`; any other section, key or `[DEFAULT]` is an error naming it, and an
 empty value is unset. A malformed file is a **`CaptureConfigError`**
 (`path`, `lineno`; a `PktcapError` and a `ValueError`) whose message is
 `PATH:LINE: problem` and never holds a line of the file; `lineno` is `None`
@@ -184,6 +184,6 @@ for an unknown section or key, which the parser keeps no line for.
 
 ### Environment variables
 
-`PKTCAP_PLUGINS` is the list, `PKTCAP_CONFIG` the file; empty means unset.
+`PKTCAP_LOAD` is the list, `PKTCAP_CONFIG` the file; empty means unset.
 Both are read when a list is asked for and never at import, in one module.
 `import pktcap` reads no variable and imports no plugin.

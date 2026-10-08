@@ -44,11 +44,11 @@ def test_the_variable_names_a_module_and_its_hook_registers_into_the_registry(
 ):
     mod = plugin_module()
     before = default_registry().selectors()
-    monkeypatch.setenv("PKTCAP_PLUGINS", mod.name)
+    monkeypatch.setenv("PKTCAP_LOAD", mod.name)
     registry = DissectorRegistry()
     result = load_plugins(registry, None)
     assert result == (
-        LoadedPlugin(mod.name, "PKTCAP_PLUGINS", (("udp", 9999),), ("demo",)),
+        LoadedPlugin(mod.name, "PKTCAP_LOAD", (("udp", 9999),), ("demo",)),
     )
     assert registry.get("udp", 9999) is not None
     assert default_registry().selectors() == before
@@ -58,7 +58,7 @@ def test_the_variable_names_a_module_and_its_hook_registers_into_the_registry(
 def test_the_file_gives_its_path_as_the_source(plugin_module, tmp_path, monkeypatch):
     mod = plugin_module()
     ini = tmp_path / "named.ini"
-    ini.write_text("[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8")
+    ini.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
     (only,) = load_plugins(DissectorRegistry(), config=ini)
     assert only.source == str(ini) and only.selectors == (("udp", 9999),)
 
@@ -224,14 +224,13 @@ def test_no_module_of_that_name(plugin_module):
 
 
 def test_the_text_names_the_variable_as_the_source(monkeypatch):
-    monkeypatch.setenv("PKTCAP_PLUGINS", "pydemo.captur")
+    monkeypatch.setenv("PKTCAP_LOAD", "pydemo.captur")
     with pytest.raises(CapturePluginError) as caught:
         load_plugins(DissectorRegistry())
     assert (
-        str(caught.value)
-        == "PKTCAP_PLUGINS names 'pydemo.captur': no module of that name"
+        str(caught.value) == "PKTCAP_LOAD names 'pydemo.captur': no module of that name"
     )
-    assert caught.value.source == "PKTCAP_PLUGINS"
+    assert caught.value.source == "PKTCAP_LOAD"
 
 
 def test_a_module_whose_import_raises(plugin_module):
@@ -344,7 +343,7 @@ def test_two_plugins_may_not_claim_one_layer_name(plugin_module):
 _CHILD = """
 import json, os, sys
 
-WATCHED = {"PKTCAP_PLUGINS", "PKTCAP_CONFIG", "XDG_CONFIG_HOME", "APPDATA"}
+WATCHED = {"PKTCAP_LOAD", "PKTCAP_CONFIG", "XDG_CONFIG_HOME", "APPDATA"}
 reads = []  # (name, the file that asked)
 
 PASS_THROUGH = {"os.py", "ntpath.py", "posixpath.py", "genericpath.py", "_collections_abc.py"}
@@ -397,12 +396,12 @@ def test_importing_and_using_the_library_reads_no_variable_and_imports_no_plugin
 ):
     mod = plugin_module()
     ini = tmp_path / "elsewhere.ini"
-    ini.write_text("[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8")
+    ini.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
     work = tmp_path / "child"
     work.mkdir()
     env = dict(os.environ)
     env.update(
-        PKTCAP_PLUGINS=mod.name,
+        PKTCAP_LOAD=mod.name,
         PKTCAP_CONFIG=str(ini),
         PYTHONPATH=str(mod.directory),
         APPDATA=str(tmp_path / "a"),
@@ -436,7 +435,7 @@ def test_the_same_child_does_import_the_plugin_once_asked_to(plugin_module, tmp_
         "import pktcap; r = pktcap.DissectorRegistry();"
         "print(len(pktcap.load_plugins(r)))"
     )
-    env = dict(os.environ, PKTCAP_PLUGINS=mod.name, PYTHONPATH=str(mod.directory))
+    env = dict(os.environ, PKTCAP_LOAD=mod.name, PYTHONPATH=str(mod.directory))
     done = subprocess.run(
         [sys.executable, "-c", code],
         env=env,
@@ -479,7 +478,7 @@ def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(
         "package = os.path.dirname",
         "pktcap.load_plugins(pktcap.DissectorRegistry())\npackage = os.path.dirname",
     )
-    env = dict(os.environ, PKTCAP_PLUGINS=mod.name, PYTHONPATH=str(mod.directory))
+    env = dict(os.environ, PKTCAP_LOAD=mod.name, PYTHONPATH=str(mod.directory))
     done = subprocess.run(
         [sys.executable, "-c", code],
         cwd=str(work),
@@ -489,4 +488,4 @@ def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(
         timeout=120,
     )
     assert done.returncode == 0, done.stderr[-2000:]
-    assert json.loads(done.stdout)["seen"] == ["PKTCAP_PLUGINS"] and mod.imported
+    assert json.loads(done.stdout)["seen"] == ["PKTCAP_LOAD"] and mod.imported

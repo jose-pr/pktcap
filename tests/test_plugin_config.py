@@ -132,15 +132,15 @@ def test_the_nearest_source_that_names_a_list_is_the_list(
     plugin_module, home, monkeypatch
 ):
     arg, var, ini = (plugin_module(hook_on(p)) for p in (9001, 9002, 9003))
-    write_default(home, "[pktcap]\nplugins = %s\n" % ini.name)
+    write_default(home, "[pktcap]\nload = %s\n" % ini.name)
     registry = DissectorRegistry()
     (only,) = load_plugins(registry)
     assert (only.name, only.source) == (ini.name, str(capture_config_path()))
     assert ports([only]) == [9003]
 
-    monkeypatch.setenv("PKTCAP_PLUGINS", var.name)
+    monkeypatch.setenv("PKTCAP_LOAD", var.name)
     (only,) = load_plugins(DissectorRegistry())
-    assert (only.name, only.source) == (var.name, "PKTCAP_PLUGINS")
+    assert (only.name, only.source) == (var.name, "PKTCAP_LOAD")
 
     (only,) = load_plugins(DissectorRegistry(), arg.name)
     assert (only.name, only.source) == (arg.name, "argument")
@@ -157,9 +157,9 @@ def test_the_nearest_source_that_names_a_list_is_the_list(
 def test_a_source_below_the_list_is_not_opened(plugin_module, home, monkeypatch):
     var = plugin_module(hook_on(9002))
     write_default(home, "", raw=b"\xff\xfe not even text")  # unreadable if opened
-    monkeypatch.setenv("PKTCAP_PLUGINS", var.name)
+    monkeypatch.setenv("PKTCAP_LOAD", var.name)
     (only,) = load_plugins(DissectorRegistry())
-    assert only.source == "PKTCAP_PLUGINS"
+    assert only.source == "PKTCAP_LOAD"
     (only,) = load_plugins(DissectorRegistry(), var.name)
     assert only.source == "argument"
 
@@ -190,7 +190,7 @@ def test_a_file_named_by_the_variable_is_not_opened_when_a_list_is_given(
 def test_the_variable_may_name_the_file(plugin_module, tmp_path, monkeypatch):
     mod = plugin_module(hook_on(9001))
     ini = tmp_path / "named.ini"
-    ini.write_text("[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8")
+    ini.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
     monkeypatch.setenv("PKTCAP_CONFIG", str(ini))
     (only,) = load_plugins(DissectorRegistry())
     assert (only.name, only.source) == (mod.name, str(ini))
@@ -209,10 +209,10 @@ def test_none_is_the_explicit_empty_list_and_a_file_is_then_not_opened(
     plugin_module, home, monkeypatch
 ):
     mod = plugin_module(hook_on(9001))
-    write_default(home, "[pktcap]\nplugins = %s\n" % mod.name)
-    monkeypatch.setenv("PKTCAP_PLUGINS", "None")
+    write_default(home, "[pktcap]\nload = %s\n" % mod.name)
+    monkeypatch.setenv("PKTCAP_LOAD", "None")
     assert load_plugins(DissectorRegistry()) == ()
-    monkeypatch.delenv("PKTCAP_PLUGINS")
+    monkeypatch.delenv("PKTCAP_LOAD")
     assert load_plugins(DissectorRegistry(), "none") == ()
     assert load_plugins(DissectorRegistry(), ["NONE"]) == ()
     assert load_plugins(DissectorRegistry(), config="none") == ()
@@ -220,16 +220,16 @@ def test_none_is_the_explicit_empty_list_and_a_file_is_then_not_opened(
 
 
 def test_none_in_the_file_is_the_empty_list(home):
-    write_default(home, "[pktcap]\nplugins = none\n")
+    write_default(home, "[pktcap]\nload = none\n")
     assert load_plugins(DissectorRegistry()) == ()
 
 
 def test_an_empty_variable_is_unset(plugin_module, home, monkeypatch):
     mod = plugin_module(hook_on(9001))
-    write_default(home, "[pktcap]\nplugins = %s\n" % mod.name)
-    monkeypatch.setenv("PKTCAP_PLUGINS", "  ")
+    write_default(home, "[pktcap]\nload = %s\n" % mod.name)
+    monkeypatch.setenv("PKTCAP_LOAD", "  ")
     (only,) = load_plugins(DissectorRegistry())
-    assert only.source != "PKTCAP_PLUGINS"
+    assert only.source != "PKTCAP_LOAD"
 
 
 @pytest.mark.parametrize("separator", [",", ";", ":", " ", "\n", ", ", " ; ", "\t"])
@@ -237,7 +237,7 @@ def test_items_are_separated_by_comma_semicolon_colon_or_white_space(
     separator, plugin_module, monkeypatch
 ):
     first, second = plugin_module(hook_on(9001)), plugin_module(hook_on(9002))
-    monkeypatch.setenv("PKTCAP_PLUGINS", first.name + separator + second.name)
+    monkeypatch.setenv("PKTCAP_LOAD", first.name + separator + second.name)
     assert ports(load_plugins(DissectorRegistry())) == [9001, 9002]
 
 
@@ -248,9 +248,7 @@ def test_the_working_directory_names_nothing(plugin_module, tmp_path, monkeypatc
     work = tmp_path / "work"
     work.mkdir()
     for name in ("pktcap.ini", ".pktcap.ini", ".pkcap.ini", "setup.cfg"):
-        (work / name).write_text(
-            "[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8"
-        )
+        (work / name).write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
     monkeypatch.chdir(work)
     monkeypatch.delenv("PKTCAP_CONFIG")
     monkeypatch.setenv(
@@ -271,7 +269,7 @@ def test_the_dialect_comments_continuation_lines_and_a_byte_order_mark(
         "; and so is this one\n"
         "\n"
         "[pktcap]\n"
-        "plugins = %s,\n"
+        "load = %s,\n"
         "   %s\n" % (one.name, two.name)
     )
     write_default(home, "", raw=b"\xef\xbb\xbf" + text.encode("utf-8"))
@@ -279,14 +277,14 @@ def test_the_dialect_comments_continuation_lines_and_a_byte_order_mark(
 
 
 def test_a_percent_sign_is_not_interpolated(home):
-    write_default(home, "[pktcap]\nplugins = %(x)s\n")
+    write_default(home, "[pktcap]\nload = %(x)s\n")
     with pytest.raises(CapturePluginError, match="not a dotted Python name") as caught:
         load_plugins(DissectorRegistry())
     assert caught.value.source == str(capture_config_path())
 
 
 def test_an_empty_file_or_an_empty_section_or_value_names_nothing(home):
-    for text in ("", "[pktcap]\n", "[pktcap]\nplugins =\n", "# only a comment\n"):
+    for text in ("", "[pktcap]\n", "[pktcap]\nload =\n", "# only a comment\n"):
         write_default(home, text)
         assert load_plugins(DissectorRegistry()) == ()
 
@@ -298,20 +296,20 @@ SECRET = "s3cr3t-line-content"
     "text, lineno, problem",
     [
         ("[pktcap]\n%s\n" % SECRET, 2, "not a section header"),
-        ("plugins = %s\n" % SECRET, 1, "text before the first section"),
-        ("[pktcap]\nplugins = a\n[pktcap]\n", 3, "a section written twice"),
-        ("[pktcap]\nplugins = a\nplugins = b\n", 3, "a key written twice"),
-        ("[pktcap]\nplugins: %s\n" % SECRET, 2, "not a section header"),
-        ("\n\n[pktcap\nplugins = x\n", 3, "text before the first section"),
+        ("load = %s\n" % SECRET, 1, "text before the first section"),
+        ("[pktcap]\nload = a\n[pktcap]\n", 3, "a section written twice"),
+        ("[pktcap]\nload = a\nload = b\n", 3, "a key written twice"),
+        ("[pktcap]\nload: %s\n" % SECRET, 2, "not a section header"),
+        ("\n\n[pktcap\nload = x\n", 3, "text before the first section"),
         (
             "[pktcap]\nplugin = %s\n" % SECRET,
             None,
             "unknown key 'plugin' in \\[pktcap\\]",
         ),
-        ("[pktcap]\nPlugins = x\n", None, "unknown key 'Plugins'"),
-        ("[other]\nplugins = x\n", None, "unknown section 'other'"),
-        ("[DEFAULT]\nplugins = x\n", None, "unknown section 'DEFAULT'"),
-        ("[pktcap]\nplugins = a\n[extra]\n", None, "unknown section 'extra'"),
+        ("[pktcap]\nLoad = x\n", None, "unknown key 'Load'"),
+        ("[other]\nload = x\n", None, "unknown section 'other'"),
+        ("[DEFAULT]\nload = x\n", None, "unknown section 'DEFAULT'"),
+        ("[pktcap]\nload = a\n[extra]\n", None, "unknown section 'extra'"),
     ],
 )
 def test_a_malformed_file_is_one_error_with_the_path_and_the_line_and_no_text_of_it(
@@ -331,9 +329,9 @@ def test_a_malformed_file_is_one_error_with_the_path_and_the_line_and_no_text_of
 
 
 def test_a_file_that_is_not_utf_8_is_refused_with_its_path_and_the_octet(home):
-    path = write_default(home, "", raw=b"[pktcap]\nplugins = \xff\n")
+    path = write_default(home, "", raw=b"[pktcap]\nload = \xff\n")
     with pytest.raises(
-        CaptureConfigError, match="not UTF-8 \\(at octet 19\\)"
+        CaptureConfigError, match="not UTF-8 \\(at octet 16\\)"
     ) as caught:
         load_plugins(DissectorRegistry())
     assert caught.value.path == str(path) and caught.value.lineno is None
@@ -341,7 +339,7 @@ def test_a_file_that_is_not_utf_8_is_refused_with_its_path_and_the_octet(home):
 
 def test_a_file_over_65536_octets_is_refused_and_one_of_exactly_that_is_read(home):
     padding = "# " + "x" * 60 + "\n"
-    head = b"[pktcap]\nplugins = none\n"
+    head = b"[pktcap]\nload = none\n"
     body = (padding * 2000).encode("ascii")
     exact = head + body[: 65536 - len(head)]
     assert len(exact) == 65536
@@ -401,10 +399,10 @@ def test_an_item_that_is_no_dotted_name_is_refused_before_anything_is_imported(
     with pytest.raises(ValueError, match="not a dotted Python name") as caught:
         load_plugins(DissectorRegistry(), text)
     assert not isinstance(caught.value, PktcapError) and not good.imported
-    monkeypatch.setenv("PKTCAP_PLUGINS", text)
+    monkeypatch.setenv("PKTCAP_LOAD", text)
     with pytest.raises(CapturePluginError, match="not a dotted Python name") as named:
         load_plugins(DissectorRegistry())
-    assert named.value.source == "PKTCAP_PLUGINS" and not good.imported
+    assert named.value.source == "PKTCAP_LOAD" and not good.imported
 
 
 def test_more_than_64_items_and_a_repeated_item_are_refused(plugin_module):
@@ -450,7 +448,7 @@ def test_a_default_file_everyone_may_write_is_not_read_and_a_named_one_is(
     if not _can_set_everyone_write(tmp_path):
         pytest.skip("this platform records no write permission for everyone")
     mod = plugin_module(hook_on(9001))
-    path = write_default(home, "[pktcap]\nplugins = %s\n" % mod.name)
+    path = write_default(home, "[pktcap]\nload = %s\n" % mod.name)
     os.chmod(path, 0o666)
     with pytest.raises(CaptureConfigError, match="everyone may write it") as caught:
         load_plugins(DissectorRegistry())
@@ -479,7 +477,7 @@ def test_a_default_file_another_user_owns_is_not_read_and_a_named_one_is(
     if other is None:
         pytest.skip("only root can make a file another user owns")
     mod = plugin_module(hook_on(9001))
-    path = write_default(home, "[pktcap]\nplugins = %s\n" % mod.name)
+    path = write_default(home, "[pktcap]\nload = %s\n" % mod.name)
     os.chown(path, other, other)
     with pytest.raises(CaptureConfigError, match="another user owns it") as caught:
         load_plugins(DissectorRegistry())
@@ -493,7 +491,7 @@ def test_a_default_file_another_user_owns_is_not_read_and_a_named_one_is(
 
 def test_a_default_file_the_user_owns_is_read(plugin_module, home):
     mod = plugin_module(hook_on(9001))
-    write_default(home, "[pktcap]\nplugins = %s\n" % mod.name)
+    write_default(home, "[pktcap]\nload = %s\n" % mod.name)
     (only,) = load_plugins(DissectorRegistry())
     assert only.name == mod.name
 
@@ -502,10 +500,10 @@ def test_a_default_file_the_user_owns_is_read(plugin_module, home):
 
 
 def test_the_two_errors_keep_their_attributes_through_a_pickle():
-    plugin = CapturePluginError("x names 'a'", plugin="a", source="PKTCAP_PLUGINS")
+    plugin = CapturePluginError("x names 'a'", plugin="a", source="PKTCAP_LOAD")
     clone = pickle.loads(pickle.dumps(plugin))
     assert type(clone) is CapturePluginError and str(clone) == str(plugin)
-    assert (clone.plugin, clone.source) == ("a", "PKTCAP_PLUGINS")
+    assert (clone.plugin, clone.source) == ("a", "PKTCAP_LOAD")
     config = CaptureConfigError("p:2: bad", path="p", lineno=2)
     clone = pickle.loads(pickle.dumps(config))
     assert type(clone) is CaptureConfigError and str(clone) == "p:2: bad"
@@ -521,6 +519,6 @@ def test_the_variable_is_read_when_asked_not_before(plugin_module, monkeypatch):
     mod = plugin_module(hook_on(9001))
     registry = DissectorRegistry()
     assert load_plugins(registry) == ()
-    monkeypatch.setenv("PKTCAP_PLUGINS", mod.name)  # set after the import
+    monkeypatch.setenv("PKTCAP_LOAD", mod.name)  # set after the import
     assert ports(load_plugins(registry)) == [9001]
     assert sys.modules.get(mod.name) is not None

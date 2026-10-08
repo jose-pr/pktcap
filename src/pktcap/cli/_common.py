@@ -43,11 +43,11 @@ class Loading(LoggingArgs, Cmd):
     _logger_name_ = "pktcap"
 
     plugins: Optional[List[str]] = None
-    "Plugins to load, each a dotted module name or MODULE.CALLABLE; repeat the option, or separate by , ; : or space; none for no plugin. Omitted: PKTCAP_PLUGINS, then the configuration file, then none. A tool call cannot name it"
-    ("--plugins",)
+    "Plugins to load, each a dotted module name or MODULE.CALLABLE; repeat the option, or separate by , ; : or space; none for no plugin. Omitted: PKTCAP_LOAD, then the configuration file, then none. A tool call cannot name it"
+    ("--load",)
 
     config: Optional[str] = None
-    "The configuration file whose plugins key lists the plugins, read as it is; none for no file. Omitted: PKTCAP_CONFIG, then the user's own pktcap/pktcap.ini if there is one. A tool call cannot name it"
+    "The configuration file whose load key lists the plugins, read as it is; none for no file. Omitted: PKTCAP_CONFIG, then the user's own pktcap/pktcap.ini if there is one. A tool call cannot name it"
     ("--config", "-c")
 
     def served(self) -> bool:
@@ -65,7 +65,7 @@ class Loading(LoggingArgs, Cmd):
         if self.served() and (self.plugins is not None or self.config is not None):
             raise ValueError(
                 "a tool call cannot name plugins or a configuration file: the "
-                "server's PKTCAP_PLUGINS and the user's own file decide"
+                "server's PKTCAP_LOAD and the user's own file decide"
             )
         registry = DissectorRegistry()
         self.loaded: Tuple[LoadedPlugin, ...] = load_plugins(

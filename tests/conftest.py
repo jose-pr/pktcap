@@ -74,7 +74,7 @@ def _nothing_leaves_the_host(request, monkeypatch):
 def _no_plugins_from_the_machine(monkeypatch):
     """No test depends on the plugins, or the configuration file, of the machine
     it runs on: a test that wants either sets them itself."""
-    monkeypatch.delenv("PKTCAP_PLUGINS", raising=False)
+    monkeypatch.delenv("PKTCAP_LOAD", raising=False)
     monkeypatch.setenv("PKTCAP_CONFIG", "none")
 
 

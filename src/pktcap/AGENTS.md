@@ -423,7 +423,7 @@ rest passed over. The same opening, closing, `stop` and errors.
 **`load_plugins(registry, plugins=None, *, config=None) -> Tuple[LoadedPlugin, ...]`**
 imports the modules a list names and calls each one's hook,
 `pktcap_plugin(registry)`, into `registry`. The list is the first of the
-argument, `PKTCAP_PLUGINS` and the user's configuration file that names one,
+argument, `PKTCAP_LOAD` and the user's configuration file that names one,
 read from those places alone, never from the working directory or a capture.
 `capture_config_path(config=None)` is the file that applies. A plugin that fails
 is a `CapturePluginError` and leaves the registry as it was. More:
@@ -471,7 +471,7 @@ file.
 
 Read when a list of plugins is asked for, never at import.
 
-- `PKTCAP_PLUGINS` — the plugins to load; `,` `;` `:` or space between items, `none` for none.
+- `PKTCAP_LOAD` — the plugins to load; `,` `;` `:` or space between items, `none` for none.
 - `PKTCAP_CONFIG` — the configuration file: an absolute path, or `none`; read as it is.
 - `XDG_CONFIG_HOME` (POSIX), `APPDATA` (Windows) — where `pktcap/pktcap.ini` is looked for.
 

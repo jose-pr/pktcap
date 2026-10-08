@@ -64,7 +64,7 @@ def test_an_option_loads_the_plugin_and_its_keys_select_its_frames(
 ):
     mod = plugin_module()
     before = default_registry().selectors()
-    argv = convert(trace, "--plugins", mod.name, "-f", "demo.opcode=1")
+    argv = convert(trace, "--load", mod.name, "-f", "demo.opcode=1")
     assert main(argv) == 0
     out, err = capsys.readouterr()
     (record,) = records(out)
@@ -76,7 +76,7 @@ def test_an_option_loads_the_plugin_and_its_keys_select_its_frames(
 
 def test_the_bare_layer_name_and_proto_work_too(trace, plugin_module, capsys):
     mod = plugin_module()
-    assert main(convert(trace, "--plugins", mod.name, "-f", "proto=demo")) == 0
+    assert main(convert(trace, "--load", mod.name, "-f", "proto=demo")) == 0
     assert len(records(capsys.readouterr().out)) == 2
 
 
@@ -85,23 +85,23 @@ def test_the_variable_and_the_file_give_the_same_output(
 ):
     mod = plugin_module()
     argv = convert(trace, "-f", "demo.opcode=1")
-    assert main(convert(trace, "--plugins", mod.name, "-f", "demo.opcode=1")) == 0
+    assert main(convert(trace, "--load", mod.name, "-f", "demo.opcode=1")) == 0
     by_option = capsys.readouterr().out
 
-    monkeypatch.setenv("PKTCAP_PLUGINS", mod.name)
+    monkeypatch.setenv("PKTCAP_LOAD", mod.name)
     assert main(argv) == 0
     assert capsys.readouterr().out == by_option
-    monkeypatch.delenv("PKTCAP_PLUGINS")
+    monkeypatch.delenv("PKTCAP_LOAD")
 
     (config_home / "pktcap").mkdir()
     (config_home / "pktcap" / "pktcap.ini").write_text(
-        "[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8"
+        "[pktcap]\nload = %s\n" % mod.name, encoding="utf-8"
     )
     assert main(argv) == 0
     assert capsys.readouterr().out == by_option
 
     named = tmp_path / "named.ini"
-    named.write_text("[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8")
+    named.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
     for flag in ("--config", "-c"):
         assert main(convert(trace, flag, str(named), "-f", "demo.opcode=1")) == 0
         assert capsys.readouterr().out == by_option
@@ -115,14 +115,14 @@ def test_none_over_the_variable_or_the_file_leaves_the_key_unknown(
     trace, plugin_module, config_home, monkeypatch, capsys
 ):
     mod = plugin_module()
-    argv = convert(trace, "--plugins", "none", "-f", "demo.opcode=1")
-    monkeypatch.setenv("PKTCAP_PLUGINS", mod.name)
+    argv = convert(trace, "--load", "none", "-f", "demo.opcode=1")
+    monkeypatch.setenv("PKTCAP_LOAD", mod.name)
     assert main(argv) == 2
     assert "unknown filter key 'demo.opcode'" in capsys.readouterr().err
-    monkeypatch.delenv("PKTCAP_PLUGINS")
+    monkeypatch.delenv("PKTCAP_LOAD")
     (config_home / "pktcap").mkdir()
     (config_home / "pktcap" / "pktcap.ini").write_text(
-        "[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8"
+        "[pktcap]\nload = %s\n" % mod.name, encoding="utf-8"
     )
     assert main(argv) == 2
     assert main(convert(trace, "--config", "none", "-f", "demo.opcode=1")) == 2
@@ -133,16 +133,16 @@ def test_a_name_that_does_not_import_is_one_line_and_nothing_is_written(
     trace, tmp_path, capsys, monkeypatch
 ):
     out = tmp_path / "out.jsonl"
-    assert main(convert(trace, "--plugins", "pydemo.captur", "-o", str(out))) == 2
+    assert main(convert(trace, "--load", "pydemo.captur", "-o", str(out))) == 2
     err = capsys.readouterr().err.strip().splitlines()
     assert err == [
         "pktcap: error: the plugins argument names 'pydemo.captur': no module of that name"
     ]
     assert not out.exists()
-    monkeypatch.setenv("PKTCAP_PLUGINS", "pydemo.captur")
+    monkeypatch.setenv("PKTCAP_LOAD", "pydemo.captur")
     assert main(convert(trace, "-o", str(out))) == 2
     assert capsys.readouterr().err.strip() == (
-        "pktcap: error: PKTCAP_PLUGINS names 'pydemo.captur': no module of that name"
+        "pktcap: error: PKTCAP_LOAD names 'pydemo.captur': no module of that name"
     )
     assert not out.exists()
 
@@ -169,7 +169,7 @@ def test_replay_sends_only_the_datagrams_the_plugin_key_selects(
     try:
         to = "127.0.0.1:%d" % sock.getsockname()[1]
         argv = ["replay", "-i", str(trace), "--to", to, "--no-delay", "--json"]
-        assert main(argv + ["--plugins", mod.name, "-f", "demo.opcode=2"]) == 0
+        assert main(argv + ["--load", mod.name, "-f", "demo.opcode=2"]) == 0
         assert json.loads(capsys.readouterr().out) == {"sent": 1, "partial": 0}
         assert sock.recvfrom(2048)[0] == b"\x02lease"
         sock.settimeout(0.2)
@@ -184,7 +184,7 @@ def test_capture_takes_a_plugin_key(packet_socket, plugin_module, capsys):
     ip = build.ipv4("10.0.0.5", "10.0.0.1", build.udp(50000, 9999, b"\x01boot"))
     other = build.ipv4("10.0.0.5", "10.0.0.1", build.udp(50000, 9999, b"\x02lease"))
     packet_socket(_read(ip, 0x0800), _read(other, 0x0800))
-    argv = ["capture", "--count", "1", "--format", "json", "--plugins", mod.name]
+    argv = ["capture", "--count", "1", "--format", "json", "--load", mod.name]
     assert main(argv + ["-f", "demo.opcode=2"]) == 0
     (record,) = records(capsys.readouterr().out)
     assert record["layers"][-1]["name"] == "lease"
@@ -216,7 +216,7 @@ def test_dash_c_is_the_configuration_file_on_every_command_and_count_has_no_shor
 
 def test_the_plugins_command_lists_what_was_loaded(plugin_module, capsys):
     mod = plugin_module()
-    assert main(["plugins", "--plugins", mod.name, "-c", "none"]) == 0
+    assert main(["plugins", "--load", mod.name, "-c", "none"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "configuration: none"
     assert lines[1] == "plugins: 1 from argument"
@@ -243,7 +243,7 @@ def test_the_plugins_command_names_the_file_when_it_is_there(
     mod = plugin_module()
     path = config_home / "pktcap" / "pktcap.ini"
     path.parent.mkdir()
-    path.write_text("[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8")
+    path.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
     assert main(["plugins"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "configuration: %s" % path
@@ -252,7 +252,7 @@ def test_the_plugins_command_names_the_file_when_it_is_there(
 
 def test_the_plugins_command_prints_one_layers_keys(plugin_module, capsys):
     mod = plugin_module()
-    assert main(["plugins", "--plugins", mod.name, "--layer", "demo"]) == 0
+    assert main(["plugins", "--load", mod.name, "--layer", "demo"]) == 0
     assert capsys.readouterr().out.splitlines() == ["demo.name", "demo.opcode"]
     assert main(["plugins", "--layer", "IPV4"]) == 0
     assert "ipv4.ttl" in capsys.readouterr().out.splitlines()
@@ -263,7 +263,7 @@ def test_the_plugins_command_prints_one_layers_keys(plugin_module, capsys):
 
 def test_the_plugins_command_prints_json(plugin_module, capsys):
     mod = plugin_module()
-    assert main(["plugins", "--json", "--plugins", mod.name]) == 0
+    assert main(["plugins", "--json", "--load", mod.name]) == 0
     report = json.loads(capsys.readouterr().out)
     assert set(report) == {"configuration", "plugins", "keys"}
     assert report["plugins"] == [
@@ -300,14 +300,14 @@ def test_a_tool_call_that_names_plugins_or_a_file_is_refused_and_imports_nothing
 ):
     mod = plugin_module()
     named = tmp_path / "named.ini"
-    named.write_text("[pktcap]\nplugins = %s\n" % mod.name, encoding="utf-8")
+    named.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
     value = [mod.name] if field == "plugins" else str(named)
     arguments = {field: value}
     if command == "pktcap.convert":
         arguments["input"] = str(trace)
     result = call_tool(Pktcap, command, arguments)
     assert result["isError"] is True
-    assert "PKTCAP_PLUGINS" in result["content"][0]["text"]
+    assert "PKTCAP_LOAD" in result["content"][0]["text"]
     assert not mod.imported
 
 
@@ -315,7 +315,7 @@ def test_a_tool_call_loads_what_the_servers_own_variable_names(
     trace, plugin_module, monkeypatch
 ):
     mod = plugin_module()
-    monkeypatch.setenv("PKTCAP_PLUGINS", mod.name)
+    monkeypatch.setenv("PKTCAP_LOAD", mod.name)
     result = call_tool(
         Pktcap, "pktcap.convert", {"input": str(trace), "filter": "demo.opcode=1"}
     )
@@ -323,7 +323,7 @@ def test_a_tool_call_loads_what_the_servers_own_variable_names(
     (record,) = records(result["content"][0]["text"])
     assert record["layers"][-1]["name"] == "boot"
     listing = call_tool(Pktcap, "pktcap.plugins", {})
-    assert "plugins: 1 from PKTCAP_PLUGINS" in listing["content"][0]["text"]
+    assert "plugins: 1 from PKTCAP_LOAD" in listing["content"][0]["text"]
 
 
 def test_the_real_server_answers_a_filter_with_the_servers_variable(
@@ -333,7 +333,7 @@ def test_the_real_server_answers_a_filter_with_the_servers_variable(
     env = dict(
         os.environ,
         PKTCAP_MCP="stdio",
-        PKTCAP_PLUGINS=mod.name,
+        PKTCAP_LOAD=mod.name,
         PYTHONPATH=str(mod.directory),
     )
     requests = [
@@ -380,7 +380,7 @@ def test_the_real_server_answers_a_filter_with_the_servers_variable(
     assert json.loads(text)["layers"][-1]["name"] == "boot"
     refused = replies[3]
     flat = json.dumps(refused)
-    assert "PKTCAP_PLUGINS" in flat and "cannot name plugins" in flat
+    assert "PKTCAP_LOAD" in flat and "cannot name plugins" in flat
 
 
 # -- the working directory, a capture and a file name name nothing ----------------
@@ -393,15 +393,15 @@ def test_nothing_a_capture_or_its_directory_holds_is_imported(plugin_module, tmp
     mod = plugin_module()
     work = tmp_path / "work"
     (work / "pktcap").mkdir(parents=True)
-    line = "[pktcap]\nplugins = %s\n" % mod.name
+    line = "[pktcap]\nload = %s\n" % mod.name
     for name in ("pktcap.ini", ".pktcap.ini", ".pkcap.ini", "pktcap/pktcap.ini"):
         (work / name).write_text(line, encoding="utf-8")
     (work / "setup.cfg").write_text(line + "[tool:pytest]\n", encoding="utf-8")
     (work / "pyproject.toml").write_text(
-        '[tool.pktcap]\nplugins = ["%s"]\n' % mod.name, encoding="utf-8"
+        '[tool.pktcap]\nload = ["%s"]\n' % mod.name, encoding="utf-8"
     )
     name = mod.name.encode()
-    payload = frame(b"PKTCAP_PLUGINS=" + name + b"\n[pktcap]\nplugins = " + name)
+    payload = frame(b"PKTCAP_LOAD=" + name + b"\n[pktcap]\nload = " + name)
     capture = work / (mod.name + ".pcap")
     capture.write_bytes(build.pcap([payload, frame(b"x" + name)]))
     empty = tmp_path / "empty"
@@ -414,7 +414,7 @@ def test_nothing_a_capture_or_its_directory_holds_is_imported(plugin_module, tmp
         HOME=str(empty),
         USERPROFILE=str(empty),
     )
-    env.pop("PKTCAP_PLUGINS", None)
+    env.pop("PKTCAP_LOAD", None)
     env.pop("PKTCAP_CONFIG", None)  # so the user's own, empty, directory is read
     for argv in (
         [
@@ -467,7 +467,7 @@ def test_the_plugin_name_in_a_pcapng_comment_and_a_file_name_is_not_imported(
         HOME=str(empty),
         USERPROFILE=str(empty),
     )
-    env.pop("PKTCAP_PLUGINS", None)
+    env.pop("PKTCAP_LOAD", None)
     env.pop("PKTCAP_CONFIG", None)
     done = subprocess.run(
         [sys.executable, "-m", "pktcap", "convert", "-i", str(capture)],

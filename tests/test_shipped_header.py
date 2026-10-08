@@ -286,7 +286,7 @@ def test_the_command_header_names_each_command_the_environment_and_the_tool():
         "PKTCAP_MCP=stdio",
         "pktcap.convert",
         "pktcap.plugins",
-        "PKTCAP_PLUGINS",
+        "PKTCAP_LOAD",
         "PKTCAP_CONFIG",
     ):
         assert needle in text, needle

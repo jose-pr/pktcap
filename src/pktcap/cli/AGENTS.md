@@ -36,13 +36,13 @@ returns the status and does not call `sys.exit`.
   as `LAYER.FIELD` (`ipv4.ttl=64`) and the keys of the plugins loaded;
   `pktcap plugins` lists them all. Omitted: every frame. A bad expression is
   status 2, before anything is read.
-- **`--plugins NAME`** (every command; repeat it, or separate names by `,` `;`
+- **`--load NAME`** (every command; repeat it, or separate names by `,` `;`
   `:` or space; `none` for none) and **`--config`/`-c FILE`** (`none` for no
   file): the plugins to load, each a dotted module name with a
   `pktcap_plugin(registry)` function or `MODULE.CALLABLE`. They are loaded
   into a registry of the command's own, before the filter is compiled and
   before anything is opened. The first of the option, the variable
-  `PKTCAP_PLUGINS` and the plugins key of the configuration file
+  `PKTCAP_LOAD` and the `load` key of the configuration file
   (`pktcap/pktcap.ini` under `$XDG_CONFIG_HOME` or `~/.config`, `%APPDATA%` on
   Windows, or the file `--config` and `PKTCAP_CONFIG` name) is the list. The
   default file must be the user's own and not writable by everyone; a file you
@@ -150,7 +150,7 @@ Captures live and writes what it sees, never sending anything. **Linux only**
 
 ## `pktcap plugins`
 
-`pktcap plugins [--plugins LIST] [--config FILE] [--layer NAME] [--json]`
+`pktcap plugins [--load LIST] [--config FILE] [--layer NAME] [--json]`
 
 Loads the plugins exactly as the other commands do and shows them. Standard
 output is:
@@ -165,7 +165,7 @@ layers: dhcp, ethernet, ipv4, ...
 
 - `configuration` is the file that applies, `none` when there is none, and
   ` (absent)` when it does not exist. `plugins` says how many were loaded and
-  where the list came from (`argument`, `PKTCAP_PLUGINS`, the file's path), or
+  where the list came from (`argument`, `PKTCAP_LOAD`, the file's path), or
   `plugins: none`; each plugin has a line with the selectors it registered a
   dissector under and the layers it declared. `keys` are the bare filter
   keys: the nine built-in ones and each registered key that one layer has.
@@ -178,7 +178,7 @@ layers: dhcp, ethernet, ipv4, ...
 
 ## Environment
 
-- **`PKTCAP_PLUGINS`** and **`PKTCAP_CONFIG`** are what `--plugins` and
+- **`PKTCAP_LOAD`** and **`PKTCAP_CONFIG`** are what `--load` and
   `--config` fall back to, in that order and then the user's own file: the
   plugins to load, and the configuration file (an absolute path, or `none`).
   `XDG_CONFIG_HOME` (POSIX) and `APPDATA` (Windows) say where the user's own
@@ -191,7 +191,7 @@ layers: dhcp, ethernet, ipv4, ...
   the tool's result; a capture format cannot be returned as text, so `format`
   `pcap` or `pcapng` needs an `output` file, and an `input` of `-` is refused.
   A tool call that names `plugins` or `config` is refused (status 2, naming
-  `PKTCAP_PLUGINS`). `capture` runs until stopped and needs a privilege, and
+  `PKTCAP_LOAD`). `capture` runs until stopped and needs a privilege, and
   `replay` puts datagrams on a network: neither is served.
 - `AGENT_HELP=1` makes `--help` print one JSON document describing every
   command; `NO_COLOR` and `FORCE_COLOR` decide the colour of the help and the

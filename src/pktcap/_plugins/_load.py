@@ -30,7 +30,7 @@ class LoadedPlugin(NamedTuple):
 
     :ivar name: the item as written.
     :ivar source: where the list came from: ``"argument"``,
-        ``"PKTCAP_PLUGINS"`` or the configuration file's path.
+        ``"PKTCAP_LOAD"`` or the configuration file's path.
     :ivar selectors: the selectors its hook registered a dissector under.
     :ivar layers: the names of the layers its hook declared.
     """
@@ -146,7 +146,7 @@ def load_plugins(
     """Import the plugins a list names and call each one's hook with ``registry``.
 
     The list is the first of these that names one: ``plugins``, the variable
-    ``PKTCAP_PLUGINS``, the ``plugins`` key of the configuration file
+    ``PKTCAP_LOAD``, the ``load`` key of the configuration file
     (:func:`capture_config_path`). Lists never add up. An item is a dotted
     Python name: a module with a ``pktcap_plugin(registry)`` function, or
     ``MODULE.CALLABLE`` for any callable taking the registry. Items are

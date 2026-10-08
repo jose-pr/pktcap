@@ -1,4 +1,4 @@
-"""Where a plugin list comes from (internal): an argument, ``PKTCAP_PLUGINS``,
+"""Where a plugin list comes from (internal): an argument, ``PKTCAP_LOAD``,
 or the configuration file, in that order.
 
 This is the one module that reads the environment, and only when asked for a
@@ -26,7 +26,7 @@ __all__ = [
     "plugin_list",
 ]
 
-PLUGINS_VARIABLE = "PKTCAP_PLUGINS"
+PLUGINS_VARIABLE = "PKTCAP_LOAD"
 CONFIG_VARIABLE = "PKTCAP_CONFIG"
 #: The source of a list given as an argument.
 PLUGINS_ARGUMENT = "argument"
@@ -44,7 +44,7 @@ _DOTTED_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\
 #: unknown one and not configparser's inherited defaults.
 _NO_DEFAULT_SECTION = "\x00"
 _SECTION = "pktcap"
-_KEY = "plugins"
+_KEY = "load"
 
 
 def describe(source: str) -> str:
