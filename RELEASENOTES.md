@@ -47,26 +47,56 @@ search and the pieces are joined once. `tests/test_reassembly.py` asserts the
 shape itself (eight times the fragments cost under sixteen times the work),
 so it does not depend on a clock being quiet.
 
-### Next performance target
+### The cost of the walk per frame
 
-The cost of the walk per frame: `read_dissected/ethernet-ipv4-udp-2000`.
-A regression there slows every reader in the package, since the datagram
-view, the filter keys and live capture are all built on it.
+`read_dissected/ethernet-ipv4-udp-2000` is the figure every reader depends on:
+the datagram view, the filter keys and live capture are all built on the walk.
+It was measured on hosted runners before anything was changed, and one cost
+stood out: writing an IPv6 address as text, twice a frame, took about half of
+an IPv6 frame's dissection. An address now keeps its text (the 1,024 used
+last), so a capture of addresses that never repeat is bounded and costs what
+it did.
+
+Median milliseconds per call, 25 samples, `ubuntu-latest`, Python 3.14.7, from
+the `Benchmarks` workflow, before (`878c7d1`) and after (`12a69b3`); the files
+are `benchmarks/results/ipv6-text-before-Linux-py3.14.json` and
+`...-after-...`:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| `read_frames/pcap-2000` (not changed: it shows the two machines) | 3.76 | 4.10 |
+| `read_dissected/ethernet-ipv4-udp-2000` (not changed) | 19.83 | 22.19 |
+| `read_dissected/ethernet-ipv6-udp-2000` | 38.57 | 21.19 |
+
+The IPv6 figure halved in every pair of runs on all three hosted systems
+(ubuntu 38.6 and 39.8 to 21.2, windows 37.2 to 20.4 on machines of like speed,
+macos 26.8 and 26.9 to 11.1).
+
+**What a hosted runner cannot show.** Two runs of one commit differed by 1.8
+times on every metric, on ubuntu and on windows, because the jobs landed on
+different machines; and the proportion between two metrics moved with the
+machine too (the fragment-joining metric cost between 7.1 and 8.8 times a
+frame read with the same code). A change to the walk's own loop that measured
+about 6% faster on a developer's machine could not be told from that spread
+and was not kept. Compare a changed metric with one the change cannot touch,
+from the same file, and run a control before believing a regression.
 
 ### Validation
 
-- Tests: 970 on Linux as root (Python 3.14.3 and 3.9.25, aarch64), where the
-  one test of a real `AF_PACKET` socket runs; 969 passed and that one skipped
-  on Windows on ARM64 (Python 3.14.7 and 3.9.10) and on Linux without
-  `CAP_NET_RAW`.
-- `black --check`, `mypy --strict` for `--platform linux`, `darwin` and
-  `win32`, and `mypy` over the caller's typing contract: clean.
-- `mkdocs build --strict`: clean.
+- Tests: 1,419 passed and 4 skipped on Windows on ARM64 (Python 3.14 and 3.9);
+  1,420 passed and 3 skipped on Intel macOS (Python 3.9) and on FreeBSD
+  (Python 3.11). The skips are live capture, which is Linux only, and the
+  configuration file's ownership checks, which need POSIX permissions or root.
+- The hosted matrix, 18 jobs, green at `12a69b3` (run 37722279335): Python 3.9
+  to 3.14 on ubuntu, 3.9 and 3.14 on windows and macos, the dependency floors,
+  an install with no extra on each system, and lint with `mypy --strict` for
+  `--platform linux`, `darwin` and `win32`. netimps comes from PyPI.
+- `black --check` under both supported formatter versions, the caller's
+  typing contract and `mkdocs build --strict`: clean.
 - Conformance: 41 captures against TShark 4.6.8, replayed with no tool
   installed; `record.py --check` reports no drift from that version.
-- macOS, the BSDs and x86-64 have not been run: no continuous integration has
-  run yet, since the repository has no remote.
 
 ### Publication state
 
-Prepared locally. Not pushed, not tagged, not published.
+Public at `github.com/jose-pr/pktcap`, with its documentation site. Not
+tagged, and nothing is on PyPI.

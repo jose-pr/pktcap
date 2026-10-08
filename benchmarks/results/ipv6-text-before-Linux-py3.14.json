@@ -1,0 +1,84 @@
+{
+  "version": "0.1.0",
+  "python": "3.14.7",
+  "platform": "linux-x86_64",
+  "samples": 25,
+  "unit": "milliseconds per call",
+  "metrics": {
+    "read_frames/pcap-2000": {
+      "min_ms": 3.7014,
+      "median_ms": 3.7604,
+      "max_ms": 4.2679
+    },
+    "read_frames/pcapng-2000": {
+      "min_ms": 7.7011,
+      "median_ms": 7.9477,
+      "max_ms": 12.944
+    },
+    "read_dissected/ethernet-ipv4-udp-2000": {
+      "min_ms": 19.6983,
+      "median_ms": 19.8294,
+      "max_ms": 21.5561
+    },
+    "read_dissected/ethernet-ipv6-udp-2000": {
+      "min_ms": 38.2589,
+      "median_ms": 38.5662,
+      "max_ms": 40.3469
+    },
+    "read_dissected/qinq-ipv4-tcp-2000": {
+      "min_ms": 27.7634,
+      "median_ms": 28.0639,
+      "max_ms": 34.4786
+    },
+    "read_dissected/registered-dissector-2000": {
+      "min_ms": 21.5696,
+      "median_ms": 21.6936,
+      "max_ms": 21.963
+    },
+    "read_datagrams/ethernet-ipv4-2000": {
+      "min_ms": 23.9038,
+      "median_ms": 24.1291,
+      "max_ms": 25.3675
+    },
+    "read_datagrams/fragments-3x666": {
+      "min_ms": 31.3202,
+      "median_ms": 31.6053,
+      "max_ms": 32.2705
+    },
+    "dissect/1000-fragments-of-one-datagram": {
+      "min_ms": 6.8241,
+      "median_ms": 6.9112,
+      "max_ms": 7.0788
+    },
+    "PcapWriter.write/2000": {
+      "min_ms": 33.5653,
+      "median_ms": 33.9497,
+      "max_ms": 34.4154
+    },
+    "PcapngWriter.write_frame/2000": {
+      "min_ms": 5.4664,
+      "median_ms": 5.4851,
+      "max_ms": 5.7618
+    },
+    "dumps_record/datagram-json-2000": {
+      "min_ms": 26.6024,
+      "median_ms": 26.8012,
+      "max_ms": 27.2973
+    },
+    "dumps_record/frame-json-2000": {
+      "min_ms": 41.3556,
+      "median_ms": 41.7869,
+      "max_ms": 44.4685
+    },
+    "compile_capture_filter/apply-2000": {
+      "min_ms": 0.7247,
+      "median_ms": 0.7391,
+      "max_ms": 0.7632
+    },
+    "frame_filter/apply-2000": {
+      "min_ms": 13.7396,
+      "median_ms": 13.8625,
+      "max_ms": 14.2612
+    }
+  }
+}
