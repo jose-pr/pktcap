@@ -270,20 +270,23 @@ def test_standard_error_is_bounded_in_the_error_and_the_log(
     assert all("\x1b" not in r.getMessage() for r in caplog.records)
 
 
-def test_the_streams_are_logged_by_size_never_by_content(tmp_path, monkeypatch, caplog):
+def test_the_error_output_is_logged_by_size_never_by_content(
+    tmp_path, monkeypatch, caplog
+):
     program = python_hook(
         monkeypatch,
         tmp_path,
         "secret",
-        'print("SECRET-PAYLOAD")\nimport sys\nsys.stdin.read()\n',
+        'import sys\nprint("SECRET-PAYLOAD")\nsys.stdin.read()\n'
+        'sys.stderr.write("SECRET-ERROR" * 4)\n',
     )
 
     with caplog.at_level(logging.DEBUG, logger="pktcap"):
         command_hook(program)(frame())
 
     text = " ".join(r.getMessage() for r in caplog.records)
-    assert "SECRET-PAYLOAD" not in text
-    assert re.search(r"wrote \d+ characters to stdout and 0 to stderr", text)
+    assert "SECRET" not in text
+    assert re.search(r"wrote 48 octets to standard error", text)
 
 
 def test_a_failure_is_logged_once_per_interval_with_a_bounded_line(

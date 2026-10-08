@@ -8,6 +8,7 @@ runs on this host on every platform. A hook is a real program from
 
 import json
 import logging
+import sys
 import time
 
 import pytest
@@ -210,3 +211,36 @@ def test_a_tool_call_cannot_name_a_hook(tmp_path):
 def test_logging_is_quiet_without_dash_v(caplog):
     caplog.set_level(logging.WARNING)
     assert [r for r in caplog.records if "listening" in r.getMessage()] == []
+
+
+def test_the_failures_of_a_python_function_are_logged_at_the_rate_a_program_is(
+    hook_module, caplog
+):
+    from pktcap.cli._hooks import make_hook
+
+    hook = make_hook(
+        "hookmod:broken",
+        format="json",
+        timeout=10.0,
+        fail_fast=False,
+        names=None,
+        datagrams=False,
+    )
+    with caplog.at_level(logging.ERROR):
+        for _ in range(300):
+            hook(None)
+    assert hook.failures == 300
+    assert len([r for r in caplog.records if r.levelno >= logging.ERROR]) == 1
+
+
+def test_a_python_function_is_not_bounded_by_the_hook_timeout():
+    help_text = Capture._parser_().format_help()
+    assert "not bounded" in " ".join(help_text.split())
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="a drive letter is Windows'")
+def test_a_drive_relative_path_is_a_program_not_a_module_and_function(capsys):
+    argv = ["capture", "--listen", "127.0.0.1:0", "--hook", "C:no-such-hook-here.exe"]
+    assert main(argv) == 2
+    err = capsys.readouterr().err
+    assert "does not exist" in err and "no module" not in err

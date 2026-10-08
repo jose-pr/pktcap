@@ -83,7 +83,7 @@ class Capture(Writing):
     ("--hook-fail-fast",)
 
     hook_timeout: float = 10.0
-    "Seconds a hook may run before it and what it started are killed"
+    "Seconds a hook program may run before it and what it started are killed. A Python MODULE:FUNCTION is not bounded by it"
     ("--hook-timeout",)
 
     # -- the points a subclass overrides ---------------------------------

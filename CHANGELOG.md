@@ -91,9 +91,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   each frame written: the record of the frame on standard input, the values
   `names(frame)` gives as `PKTCAP_HOOK_<FIELD>` variables (each passing the
   file-name rule of `CaptureWriter`), no argument and no shell. The program is
-  found once, as an absolute path, and a `.bat` or `.cmd` file is refused on
-  Windows. Past `timeout` the program and everything it started are killed. A
-  failure is counted in the callable's `failures`, logged on
+  found once, as an absolute path (a bare name in the directories `PATH`
+  lists and nowhere else), and a `.bat` or `.cmd` file is refused on Windows.
+  The run is the program's own exit: a process it leaves holding its streams
+  delays nothing. Past `timeout` the program and everything it started are
+  killed (a job object on Windows, the process group on POSIX). A program that
+  cannot be started is a failure like a non-zero exit. A failure is counted in
+  the callable's `failures`, logged on
   `pktcap._copy._hook` with a bounded, escaped tail of the error output (the
   first, then at most one a minute), and with `fail_fast` raises the new
   `CaptureHookError(message, *, status=None, timed_out=False)`, a

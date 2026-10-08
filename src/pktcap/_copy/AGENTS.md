@@ -56,18 +56,24 @@ call (the writer's own `refused` is for its whole life).
 given.
 
 - **The program is found once, when the hook is made**, as an absolute path: a
-  name with a directory part (`./hook`, `sub/hook`, `/usr/bin/hook`) is that
-  file taken from the working directory then, a bare name is looked up on
-  `PATH`. `ValueError` for a command that does not exist, is not a file, is
+  name with a directory part (`./hook`, `sub/hook`, `/usr/bin/hook`) or a drive
+  (`C:hook.exe`) is that file taken from the working directory then. A bare
+  name is looked up in the directories `PATH` lists, in order, and nowhere
+  else: the working directory only when `PATH` lists it, on every platform;
+  Windows tries the endings of `PATHEXT`. `ValueError` for a command that does not exist, is not a file, is
   not executable (POSIX), is empty or holds a NUL, and **for a `.bat` or
   `.cmd` file on Windows**, which `cmd.exe` runs by reading its command line
   again: name a program. `TypeError` for a command that is not text.
 - **How it runs:** no shell, no argument, its own process group (POSIX
-  session), and a copy of the environment at each run with the additions
-  below. Its standard input is the record of the frame in `format` (one of
-  `RECORD_FORMATS`; `frame_record`, or `datagram_record` of the frame's
-  datagram when `datagrams=True`, which raises `ValueError` for a frame with
-  none). Its standard output and error are read and dropped, never shown.
+  session; a job object on Windows), and a copy of the environment at each run
+  with the additions below. Its standard input is the record of the frame in
+  `format` (one of `RECORD_FORMATS`; `frame_record`, or `datagram_record` of
+  the frame's datagram when `datagrams=True`, which raises `ValueError` for a
+  frame with none), held in a temporary file. Its standard output is
+  discarded; its standard error goes to a temporary file, of which the tail is
+  read after it ends. **A run is the program's own exit within the time
+  limit**: a process it left behind that holds its streams does not delay the
+  run or make it a failure, and is left running.
 - **What a capture can reach:** the record on standard input, and the
   values `names(frame)` gives, as `PKTCAP_HOOK_<FIELD>` (the field name
   upper-cased) beside `PKTCAP_HOOK_FORMAT`, the format's name. A value passes
@@ -79,9 +85,16 @@ given.
   therefore chooses no argument, no variable name and nothing a shell reads.
 - **The time limit:** past `timeout` seconds (positive and finite;
   `ValueError` otherwise, `TypeError` for a non-number) the program and every
-  process it started are killed (`killpg` on POSIX, `taskkill /T` on
-  Windows).
-- **A failure** is a non-zero exit status or a kill for the time limit. It is
+  process it started are killed. On **Windows** that is a job object the
+  program is started in, so a descendant whose parent already left goes too;
+  where the job cannot be made or joined, `taskkill /T`, which finds only
+  descendants whose parent is alive. On **POSIX** it is `killpg`: a descendant
+  that makes a session of its own (`setsid`) leaves the group and is not ended.
+  Measured 2026-10-09 on Windows 11 and under WSL2.
+- **A failure** is a non-zero exit status, a kill for the time limit, or a
+  program that cannot be started (a file the system will not run, one removed
+  after the hook was made); the last is counted, logged and, with `fail_fast`,
+  raised like the others, never an escaping `OSError`. It is
   counted in the `failures` attribute of the returned callable, and logged on
   the logger `pktcap._copy._hook` at `ERROR` with the status and a bounded
   (400 characters), escaped (printable ASCII) tail of the program's error
@@ -89,13 +102,13 @@ given.
   a sender that makes the hook fail does not choose the size of the log. Output
   sizes, never contents, are logged at `DEBUG`. With `fail_fast=True` the
   first failure raises `CaptureHookError`, which ends a copy.
-- **Not bounded:** how much the program writes to its own output before the
-  time limit. It is the user's program.
+- **Not bounded:** how much the program writes to its standard error before
+  the time limit. It is the user's program.
 - Raises `UnsupportedFormatError` for a `format` that is no record format and
   `MissingExtraError` when its extra is not installed, at the call.
 
 **`CaptureHookError(message, *, status=None, timed_out=False)`** — a
 `PktcapError` and an `OSError`, raised by a hook with `fail_fast`. `status` is
-the program's exit status, `None` when it was killed; `timed_out` says it ran
+the program's exit status, `None` when it was killed or never started; `timed_out` says it ran
 past its time limit. The message names the program and ends with the escaped
 tail.

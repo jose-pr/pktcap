@@ -10,14 +10,8 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 import re
-import shutil
-import signal
-import subprocess
-import sys
-import time
-from typing import Callable, Dict, Mapping, Optional, Tuple
+from typing import Callable, Dict, Mapping, Optional
 
 from .._dissect import DissectedFrame
 from .._exceptions import CaptureHookError
@@ -25,6 +19,9 @@ from .._formats import RecordFormat, record_format
 from .._filenames import safe
 from .._plugins._config import process_environment
 from .._records import datagram_record, frame_record
+from ._find import brief, find_program
+from ._limit import FailureLimit
+from ._process import run_program
 
 __all__ = ["command_hook"]
 
@@ -33,141 +30,6 @@ _LOG = logging.getLogger(__name__)
 #: What every variable the hook adds to the environment starts with.
 _PREFIX = "PKTCAP_HOOK_"
 _FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
-#: Seconds to wait for a killed program's pipes to drain.
-_REAP_SECONDS = 5.0
-#: Characters of a failed program's standard error that an error or a log line
-#: carries.
-_STDERR_CHARS = 400
-#: Seconds between two log lines about failures: a sender that makes the hook
-#: fail must not choose how much is logged.
-_LOG_INTERVAL = 60.0
-#: Windows runs these through ``cmd.exe``, which reads its command line again.
-_BATCH = (".bat", ".cmd")
-
-
-def _brief(text: str, limit: int = _STDERR_CHARS) -> str:
-    """Text a program wrote, made safe to log and to put in an error: escaped
-    to printable ASCII, and cut at ``limit`` characters."""
-    escaped = text.encode("unicode_escape", "backslashreplace").decode("ascii")
-    if len(escaped) <= limit:
-        return escaped
-    return "...%s" % escaped[-limit:]
-
-
-def _resolve(command: str) -> str:
-    """The absolute path of a hook command, found once, when it is made.
-
-    A name with a directory part (``./hook``, ``/usr/bin/hook``, ``sub/hook``)
-    is that file, taken from the working directory as it is when the hook is made; a name with
-    none is looked up on ``PATH``, as a shell would. Running the absolute path
-    means ``./hook`` is never handed to the system as the bare ``hook``, which
-    POSIX searches on ``PATH`` alone, and a later change of directory changes
-    nothing.
-    """
-    if not isinstance(command, str):
-        raise TypeError("command must be text")
-    if not command or "\x00" in command:
-        raise ValueError("command must be a program name or path")
-    if "/" in command or "\\" in command:
-        path = os.path.abspath(command)
-        if not os.path.exists(path):
-            raise ValueError("hook command does not exist: %s" % _brief(command))
-    else:
-        found = shutil.which(command)
-        if found is None:
-            raise ValueError(
-                "hook command %s is not on PATH; a file in the working directory "
-                "is named with a path, ./%s" % (_brief(command), _brief(command))
-            )
-        path = os.path.abspath(found)
-    if not os.path.isfile(path):
-        raise ValueError("hook command is not a file: %s" % _brief(command))
-    if os.name == "posix" and not os.access(path, os.X_OK):
-        raise ValueError("hook command is not executable: %s" % _brief(command))
-    if sys.platform == "win32" and path.lower().endswith(_BATCH):
-        raise ValueError(
-            "hook command is a batch file, which cmd.exe runs by reading its "
-            "command line again: name a program (.exe) instead"
-        )
-    return path
-
-
-def _kill_tree(process: "subprocess.Popen[bytes]") -> None:
-    """Kill ``process`` and everything it started."""
-    if sys.platform == "win32":
-        root = process_environment().get("SystemRoot", r"C:\Windows")
-        taskkill = os.path.join(root, "System32", "taskkill.exe")
-        try:
-            subprocess.run(
-                [taskkill, "/F", "/T", "/PID", str(process.pid)],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=_REAP_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-    else:
-        try:
-            # The program leads its own session (see _run), so its group is
-            # exactly the tree to kill.
-            os.killpg(process.pid, signal.SIGKILL)
-        except OSError:
-            pass
-    try:
-        process.kill()
-    except OSError:
-        pass
-
-
-def _run(
-    path: str, payload: bytes, env: Mapping[str, str], timeout: float
-) -> Tuple[Optional[int], str, str]:
-    """Run ``path`` with ``payload`` on standard input: its status (``None``
-    when it was killed for running past ``timeout``) and both streams.
-
-    An argument list with no argument, never a shell. The streams are decoded
-    as UTF-8 with ``errors="replace"``, whatever the platform's encoding is.
-    """
-    # sys.platform is tested here, not through a variable, so a type checker
-    # narrows each branch to the platform that has the option.
-    if sys.platform == "win32":
-        process = subprocess.Popen(
-            [path],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=dict(env),
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-        )
-    else:
-        process = subprocess.Popen(
-            [path],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=dict(env),
-            start_new_session=True,
-        )
-    try:
-        out, err = process.communicate(payload, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _kill_tree(process)
-        try:
-            out, err = process.communicate(timeout=_REAP_SECONDS)
-        except subprocess.TimeoutExpired:  # a pipe a grandchild still holds
-            out = err = b""
-        return None, out.decode("utf-8", "replace"), err.decode("utf-8", "replace")
-    except BaseException:
-        _kill_tree(process)
-        process.wait()
-        raise
-    return (
-        process.returncode,
-        out.decode("utf-8", "replace"),
-        err.decode("utf-8", "replace"),
-    )
 
 
 class _CommandHook:
@@ -190,7 +52,7 @@ class _CommandHook:
         self._datagrams = datagrams
         self._record = record
         self._name = record.name
-        self._last_logged: Optional[float] = None
+        self._limit = FailureLimit()
         self.failures = 0
 
     def _text(self, frame: DissectedFrame) -> bytes:
@@ -216,7 +78,7 @@ class _CommandHook:
             if not isinstance(key, str) or not _FIELD_NAME.match(key):
                 raise ValueError(
                     "a field name is letters, digits and underscores, not %s"
-                    % _brief(str(key), 40)
+                    % brief(str(key), 40)
                 )
             variable = _PREFIX + key.upper()
             if variable == _PREFIX + "FORMAT" or variable in added:
@@ -230,44 +92,33 @@ class _CommandHook:
             raise TypeError("a hook is given a DissectedFrame")
         payload = self._text(frame)
         env = self._environment(frame)
-        status, out, err = _run(self._path, payload, env, self._timeout)
-        _LOG.debug(
-            "hook command wrote %d characters to stdout and %d to stderr",
-            len(out),
-            len(err),
-        )
-        if status == 0:
+        outcome = run_program(self._path, payload, env, self._timeout)
+        _LOG.debug("hook command wrote %d octets to standard error", outcome.written)
+        if outcome.status == 0:
             return
         self.failures += 1
-        timed_out = status is None
-        tail = _brief(err.strip())
-        if timed_out:
+        if outcome.error is not None:
+            what = "could not be started (%s)" % outcome.error
+        elif outcome.timed_out:
             what = "ran past %g seconds and was killed" % self._timeout
         else:
-            what = "failed with exit status %s: %s" % (status, tail)
-        self._log(what)
+            what = "failed with exit status %s: %s" % (
+                outcome.status,
+                brief(outcome.tail.strip()),
+            )
+        if self._limit.due():
+            _LOG.error(
+                "hook command %s %s%s",
+                self._path,
+                what,
+                self._limit.note(self.failures),
+            )
         if self._fail_fast:
             raise CaptureHookError(
                 "hook command %s %s" % (self._path, what),
-                status=status,
-                timed_out=timed_out,
+                status=outcome.status,
+                timed_out=outcome.timed_out,
             )
-
-    def _log(self, what: str) -> None:
-        """One line about a failure: the first, then at most one every
-        ``_LOG_INTERVAL`` seconds with the running count."""
-        moment = time.monotonic()
-        last = self._last_logged
-        if last is not None and moment - last < _LOG_INTERVAL:
-            return
-        self._last_logged = moment
-        note = ""
-        if self.failures > 1:
-            note = " [%d failures so far; at most one line per %g s]" % (
-                self.failures,
-                _LOG_INTERVAL,
-            )
-        _LOG.error("hook command %s %s%s", self._path, what, note)
 
 
 def command_hook(
@@ -316,7 +167,7 @@ def command_hook(
     :raises UnsupportedFormatError: ``format`` is no record format.
     :raises MissingExtraError: the format's extra is not installed.
     """
-    path = _resolve(command)
+    path = find_program(command)
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
         raise TypeError("timeout must be a number of seconds")
     if not (math.isfinite(timeout) and timeout > 0):

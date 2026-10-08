@@ -157,19 +157,19 @@ with no privilege.
   socket does not serve is counted in the summary as `N not admitted`; one
   over 65,535 octets as `N over the size limit`.
 - `--hook COMMAND`: run a program for each record written, with the record on
-  standard input (JSON when the output is a capture or `text`) and the values
-  the command names (`_names`) as `PKTCAP_HOOK_<FIELD>`, passed as
-  `command_hook` passes them. `COMMAND` is a program name on `PATH` or a path,
-  found once; **or `MODULE:FUNCTION`**, imported as written with nothing added
-  to `sys.path` and called with each `DissectedFrame`. The command comes from
-  the command line alone (never a tool call or a capture); a value a root's
-  settings file or variable put in the field is status 2 naming the layer,
-  unless the class lists it in `Capture._hook_from_`. No argument, no shell; a
-  `.bat`/`.cmd` is refused on Windows.
-  `--hook-timeout SECONDS` (default 10) kills the program and what it started;
-  a failure is counted (`N hook failures` in the summary) and logged, and
-  `--hook-fail-fast` ends the capture at the first one with status 1. A hook
-  that cannot be found is status 2 before anything is bound.
+  standard input in the format the writer writes (JSON for a capture format or
+  `text`) and the values `_names` gives as `PKTCAP_HOOK_<FIELD>`; how a program
+  is found, run and ended is `command_hook`'s (`_copy/AGENTS.md`). **Or
+  `MODULE:FUNCTION`**, imported as written with nothing added to `sys.path` and
+  called with each `DissectedFrame`: `--hook-timeout` does not bound a
+  function, and its failures are logged at the rate a program's are. On Windows
+  `C:hook.exe` is a program. The command comes from the command line alone
+  (never a tool call or a capture); a value a root's settings file or variable
+  put in the field is status 2 naming the layer, unless the class lists it in
+  `Capture._hook_from_`. `--hook-timeout SECONDS` (default 10) kills the
+  program and what it started; a failure is counted (`N hook failures` in the
+  summary) and logged, and `--hook-fail-fast` ends the capture at the first one
+  with status 1. A hook that cannot be found is status 2 before anything is bound.
 - `--count N`: stop once N records are written. Omitted: until stopped.
 - `--duration SECONDS`/`-d`: stop after that long, within a second of it. Omitted:
   until stopped.
