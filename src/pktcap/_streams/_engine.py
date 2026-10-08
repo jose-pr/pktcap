@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import List, Optional
 
 from .._layers import TCPLayer
-from ._direction import MASK, Chunk, Direction, Shared
+from ._direction import FAR, MASK, Chunk, Direction, Shared
 from ._types import TCPStreamData, TCPStreamStats
 
 __all__ = ["Engine"]
@@ -165,11 +165,19 @@ class Engine:
         out: List[TCPStreamData],
     ) -> None:
         syn, fin = tcp.syn, tcp.fin
-        if syn and direction.syn is None:
-            direction.syn = tcp.sequence  # the SYN of a direction seen without it
         offset = direction.offset_of((tcp.sequence + syn) & MASK)
         captured = offset + len(data)  # where the captured octets end
         position = captured + snapped  # where the segment ends: a FIN sits here
+        if offset > direction.top + FAR:
+            if self._set_aside(direction, offset, position, time, out):
+                return
+        else:
+            direction.far = None
+            if fin and position > direction.top + FAR:
+                fin = False
+                self._ignored += 1
+        if syn and direction.syn is None:
+            direction.syn = tcp.sequence  # the SYN of a direction seen without it
         if fin:
             # Settled before the octets are placed, so that nothing held at or
             # beyond it is delivered with them.
@@ -197,6 +205,34 @@ class Engine:
         if snapped:
             self._give_up_cut(direction, captured, position, time, out)
         self._settle(direction, time, out)
+
+    def _set_aside(
+        self,
+        direction: Direction,
+        start: int,
+        end: int,
+        time: float,
+        out: List[TCPStreamData],
+        move: bool = True,
+    ) -> bool:
+        """A segment, FIN or reset that starts more than ``FAR`` beyond the
+        furthest octet believed from its sender. It is counted and changes
+        nothing, and where it lay is remembered. When it follows on from the
+        one remembered (starts at or after it, within ``FAR`` of its end), the
+        capture missed what lay between: with ``move`` the direction delivers
+        what it holds, gives up the octets up to ``start`` and goes on from
+        there. Whether it was set aside."""
+        far = direction.far
+        if direction.fin is None and far and far[0] <= start <= far[1] + FAR:
+            direction.far = None
+            if move:
+                self._emit(direction, direction.release_all(), time, out)
+                direction.skip(start)
+                direction.top = start
+            return False
+        direction.far = None if direction.fin is not None else (start, end)
+        self._ignored += 1
+        return True
 
     def _give_up_cut(
         self,

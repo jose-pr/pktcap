@@ -48,7 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   segment is as long as its IP header says: the octets a snap length cut are
   given up at once, reported in `missing`, and place a FIN and an
   acknowledgment as the whole segment would. The checksum is not verified and
-  a segment in an IP fragment that was not reassembled is ignored.
+  a segment in an IP fragment that was not reassembled is ignored. A
+  segment, FIN or reset that starts more than 16,777,216 octets beyond the
+  furthest octet believed from its sender is set aside until the sender's next
+  segment follows on from it, so one forged or corrupted sequence number moves
+  nothing; a SYN that is not the connection's own is set aside until a
+  segment confirms it, so one forged SYN ends no connection.
 - `read_tcp_streams(source, *, reassembler=None, dissector=None,
   max_frame_size=262144)` reads the TCP streams of a capture in one call:
   `read_dissected` through `TCPReassembler.add`, then `flush()` at the end.

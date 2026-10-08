@@ -59,8 +59,9 @@ large for a float.
 octets handed out; octets dropped as copies of delivered or held ones;
 segments that arrived ahead of a hole; octets given up on; held octets that a
 later copy disagreed with; segments and acknowledgments set aside (octets
-before the start or beyond a FIN, a reset out of sequence, a SYN-ACK that
-contradicts the connection, an acknowledgment beyond everything seen, a
+before the start or beyond a FIN, a reset out of sequence, a segment, FIN or
+reset too far ahead (rule 11), a SYN not yet confirmed (rule 9), a SYN-ACK that
+contradicts the connection, an acknowledgment beyond everything believed, a
 segment in an IP fragment that was not reassembled); connections forgotten at
 `max_streams` or for age (a connection every direction of which has ended gives
 up its place first and is not counted); connections in the table; octets held
@@ -108,24 +109,54 @@ ends: the one-call form, as `read_datagrams` is for UDP.
 7. **An acknowledgment from the other side proves receipt.** A segment with
    ACK set is read against the other direction of its connection. When its
    acknowledgment number is ahead of that direction's next expected octet and
-   not beyond the furthest octet seen from that sender, every hole before it
-   is given up and what is held up to it is delivered, in the frame that
+   not beyond the furthest octet believed from that sender, every hole before
+   it is given up and what is held up to it is delivered, in the frame that
    carried the acknowledgment and before that frame's own octets. One that
    falls inside a hole gives up only the part before it. An acknowledgment
-   beyond everything seen from the sender changes nothing and is counted in
-   `ignored`: it cannot be told from a forged one, and believing it would let
-   one segment make every later octet look like a retransmission. The
-   acknowledgment of a FIN covers the FIN.
+   beyond everything believed from the sender changes nothing and is counted
+   in `ignored`: it cannot be told from a forged one, and believing it would
+   let one segment make every later octet look like a retransmission. The
+   guard holds against a lone forged acknowledgment and, through rule 11,
+   against a lone forged segment; two forged segments that agree can still
+   move a stream. The acknowledgment of a FIN covers the FIN.
 8. **FIN ends a direction** at its position; octets claimed beyond it are
-   dropped, those held as well as those of the segment that carries the FIN. **RST ends the connection**, both directions, unless its sequence
-   number is behind what was already delivered, when it is ignored. A reset in
-   sequence is taken at its word: held octets come out with their `missing`,
-   and the next segments on those addresses start a new stream.
-9. **A SYN that is not a retransmission of the connection's own starts a new
-   connection** on the same addresses and ends the connection it replaces.
+   dropped, those held as well as those of the segment that carries the FIN.
+   **RST ends the connection**, both directions, unless its sequence number
+   is behind what was already delivered, when it is ignored, or is set aside
+   by rule 11. A reset in sequence is taken at its word: held octets come out
+   with their `missing`, and the next segments on those addresses start a new
+   stream. A reset from a side that has sent nothing has no sequence to
+   compare with and is believed whatever its number.
+9. **A SYN that is not a retransmission of the connection's own is set
+   aside** while the connection has a direction that has not ended: counted
+   in `ignored`, it changes nothing, and the connection remembers its sender
+   and its number (one per connection; a later SYN replaces it). A segment
+   confirms it: one from the other side with ACK set whose acknowledgment
+   number is the SYN's plus one, or one from the SYN's sender, other than a
+   SYN, that starts from the SYN's number plus one up to 16,777,216 octets
+   beyond. Once confirmed, the connection it replaces ends, the SYN is not
+   counted in `ignored`, the new connection starts on the same addresses
+   with that SYN (offset 0 is the octet after it), and the confirming
+   segment is read in it. The octets the SYN itself carried are not kept. On
+   a connection whose directions have all ended, a new SYN starts the new
+   connection at once.
 10. **Not done**: the checksum is not verified; the urgent pointer is ignored
     and its octet delivered in place (RFC 6093); a segment inside an IP
     fragment that was not reassembled is ignored.
+11. **A segment, a FIN or a reset that starts more than 16,777,216 octets
+    beyond the furthest octet believed from its sender is set aside**:
+    counted in `ignored`, not held, and the furthest octet believed does not
+    move. Nothing a sender transmits in order lands there; a number corrupted
+    in a capture usually does. A segment exactly that far is believed. One
+    set-aside segment is remembered per direction (where it started and
+    ended, no octets). When the next segment from that sender is set aside
+    too, and starts at or after where the remembered one started, within
+    16,777,216 octets of where it ended, the capture missed what lay between:
+    everything the direction holds is delivered, the octets up to the new
+    segment are given up and reported in `missing`, the first segment's among
+    them, and the direction goes on from the new one; a reset that follows
+    on from a remembered segment is believed. A segment believed from the
+    sender forgets what was remembered.
 12. **A segment is as long as its IP header says**, not as long as the capture
     kept. The octets a snap length cut from its end are those the header
     states beyond the packet captured: for IPv4 the total length, for IPv6 40

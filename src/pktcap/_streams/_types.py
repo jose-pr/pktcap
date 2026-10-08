@@ -47,9 +47,10 @@ class TCPStreamStats(NamedTuple):
     :ivar missing: octets given up on.
     :ivar conflicts: held octets that a later copy disagreed with.
     :ivar ignored: segments and acknowledgments set aside: octets before the
-        start or beyond a FIN, an out-of-sequence RST, a SYN-ACK that
-        contradicts the connection, an acknowledgment beyond everything seen,
-        a segment in an IP fragment that was not reassembled.
+        start or beyond a FIN, an out-of-sequence RST, a segment, FIN or RST
+        too far ahead, a SYN not yet confirmed, a SYN-ACK that contradicts the
+        connection, an acknowledgment beyond everything believed, a segment in
+        an IP fragment that was not reassembled.
     :ivar evicted: connections forgotten at ``max_streams`` or for age; their
         held octets are dropped. A connection every direction of which had
         ended gives up its place first and is not counted when it does.

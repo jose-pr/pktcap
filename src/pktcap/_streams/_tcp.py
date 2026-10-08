@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from .._dissect import DissectedFrame
 from .._layers import IPv4Layer, IPv6FragmentLayer, IPv6Layer, TCPLayer
-from ._direction import MASK, Direction
+from ._direction import FAR, MASK, Direction
 from ._engine import Engine
 from ._types import TCPStreamData
 
@@ -28,12 +28,15 @@ _JOIN, _NEW, _IGNORE = 0, 1, 2
 class _Connection:
     """The two directions between two socket addresses."""
 
-    __slots__ = ("stream", "last", "directions")
+    __slots__ = ("stream", "last", "directions", "aside")
 
     def __init__(self, stream: int) -> None:
         self.stream = stream
         self.last = 0.0  # the time of the last segment that had one
         self.directions: Dict[_Endpoint, Direction] = {}
+        # A SYN set aside until something confirms it: its sender, its
+        # receiver and its number. One per connection.
+        self.aside: Optional[Tuple[_Endpoint, _Endpoint, int]] = None
 
 
 def _snapped(layer: Union[IPv4Layer, IPv6Layer], packet: int) -> int:
@@ -164,24 +167,42 @@ class TCPReassembler(Engine):
         if conn is None and (tcp.rst or not (data or tcp.syn or tcp.fin)):
             return ()
         if conn is not None and tcp.rst:
+            # A reset from a side that has sent nothing is believed whatever
+            # its number.
             sender = conn.directions.get(source)
-            if sender is not None and sender.behind(tcp.sequence):
-                self._ignored += 1
-                self._touch(key, conn, time)
-                return ()
-            del self._table[key]
-            self._done.pop(key, None)
-            self._close(conn, time, out)
+            if sender is not None:
+                start = sender.offset_of(tcp.sequence)
+                behind = sender.behind(tcp.sequence)
+                if behind:
+                    self._ignored += 1
+                if behind or (
+                    start > sender.top + FAR
+                    and self._set_aside(sender, start, start, time, out, False)
+                ):
+                    self._touch(key, conn, time)
+                    return ()
+            self._replace(key, conn, time, out)
             return tuple(out)
+        if conn is not None and conn.aside is not None:
+            if self._confirms(conn.aside, source, tcp):
+                origin, target, number = conn.aside
+                self._ignored -= 1
+                self._replace(key, conn, time, out)
+                conn = self._create(key)
+                conn.directions[origin] = Direction(
+                    origin, target, conn.stream, self._shared, number, True
+                )
         if conn is not None and tcp.syn:
             verdict = self._syn(conn, source, destination, tcp)
             if verdict == _IGNORE:
                 self._ignored += 1
-                return ()
+                return tuple(out)
             if verdict == _NEW:
-                del self._table[key]
-                self._done.pop(key, None)
-                self._close(conn, time, out)
+                if any(not d.ended for d in conn.directions.values()):
+                    conn.aside = (source, destination, tcp.sequence)
+                    self._ignored += 1
+                    return tuple(out)
+                self._replace(key, conn, time, out)
                 conn = None
         if conn is None:
             conn = self._create(key)
@@ -269,6 +290,28 @@ class TCPReassembler(Engine):
         self._done.pop(key, None)
         if counted:
             self._evicted += 1
+
+    def _replace(
+        self, key: _Key, conn: _Connection, time: float, out: List[TCPStreamData]
+    ) -> None:
+        """The connection is over and leaves the table."""
+        del self._table[key]
+        self._done.pop(key, None)
+        self._close(conn, time, out)
+
+    @staticmethod
+    def _confirms(
+        aside: Tuple[_Endpoint, _Endpoint, int], source: _Endpoint, tcp: TCPLayer
+    ) -> bool:
+        """Whether a segment confirms the SYN set aside: its sender's next
+        segment, from the octet after the SYN up to ``FAR`` beyond, or an
+        acknowledgment of the SYN from the other side."""
+        sender, _, number = aside
+        after = (number + 1) & MASK
+        if source == sender:
+            # A SYN is not a continuation: a second one replaces the first.
+            return not tcp.syn and ((tcp.sequence - after) & MASK) <= FAR
+        return tcp.ack and tcp.acknowledgment == after
 
     def _close(self, conn: _Connection, time: float, out: List[TCPStreamData]) -> None:
         """The connection is over: every direction delivers and ends."""

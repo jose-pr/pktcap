@@ -17,11 +17,17 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from typing import Dict, List, Optional, Tuple, Union
 
-__all__ = ["Direction", "Shared", "MASK", "HALF"]
+__all__ = ["Direction", "Shared", "MASK", "HALF", "FAR"]
 
 MASK = 0xFFFFFFFF
 HALF = 0x80000000
 _WRAP = 0x100000000
+#: How far beyond the furthest octet believed from a sender a segment may start
+#: and still be believed, and how far after a set-aside one a segment may start
+#: and confirm it. A sender in order never lands there; a window is at most
+#: 2**30 (RFC 7323) and a number corrupted at random lands within it one time
+#: in four.
+FAR = 16777216
 
 #: A delivered run: where it starts, its octets, the octets given up before it.
 Chunk = Tuple[int, bytes, int]
@@ -68,6 +74,7 @@ class Direction:
         "held",
         "fin",
         "ended",
+        "far",
     )
 
     def __init__(
@@ -94,6 +101,8 @@ class Direction:
         self.held = 0
         self.fin: Optional[int] = None  # the offset a FIN sits at
         self.ended = False
+        # Where the last segment set aside as too far ahead started and ended.
+        self.far: Optional[Tuple[int, int]] = None
 
     def sequence(self) -> int:
         """The sequence number of the next octet to deliver, not reduced:

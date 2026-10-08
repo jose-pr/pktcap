@@ -536,21 +536,26 @@ def test_a_reset_for_a_connection_never_seen_starts_nothing():
     assert wire.stats.streams == 0 and wire.stats.pending == 0
 
 
-def test_a_syn_that_is_not_the_connections_own_starts_a_new_stream():
+def test_a_syn_that_is_not_the_connections_own_starts_a_new_stream_once_confirmed():
     wire = Wire()
     wire.send(999, b"one", flags=SYN)
-    got = wire.send(5000, flags=SYN)
-    assert view(got) == [(b"", 3, 0, 0, True)]
-    assert view(wire.send(5001, b"two")) == [(b"two", 0, 0, 1, False)]
+    assert wire.send(5000, flags=SYN) == ()  # set aside until something confirms it
+    assert wire.stats.streams == 1 and wire.stats.ignored == 1
+    # Its sender goes on from the octet after it: the old connection ends and
+    # the new one starts with that SYN.
+    got = wire.send(5001, b"two")
+    assert view(got) == [(b"", 3, 0, 0, True), (b"two", 0, 0, 1, False)]
     assert wire.stats.streams == 2 and wire.stats.pending == 1
+    assert wire.stats.ignored == 0
 
 
-def test_a_syn_after_octets_were_seen_the_other_way_starts_a_new_stream():
+def test_a_syn_after_octets_were_seen_the_other_way_starts_a_new_stream_once_confirmed():
     wire = Wire()
     wire.send(5000, b"x", src=B, dst=A)  # a capture that began mid-stream
-    got = wire.send(999, flags=SYN)
-    assert view(got) == [(b"", 1, 0, 0, True)]
-    assert wire.send(1000, b"y")[0].stream == 1 and wire.stats.streams == 2
+    assert wire.send(999, flags=SYN) == ()
+    got = wire.send(1000, b"y")
+    assert view(got) == [(b"", 1, 0, 0, True), (b"y", 0, 0, 1, False)]
+    assert wire.stats.streams == 2
 
 
 def test_a_syn_after_a_finished_connection_starts_a_new_stream_without_a_second_end():
@@ -658,6 +663,314 @@ def test_a_mapped_ipv6_address_is_a_different_host_from_the_ipv4_one():
     wire.send(1, b"a", src=A, dst=B)
     wire.send(1, b"b", src=mapped, dst=("::ffff:10.0.0.2", 80))
     assert wire.stats.streams == 2
+
+
+FAR = 16777216  # how far beyond the furthest octet believed a segment is believed
+
+
+def begun(wire=None, **options):
+    """A wire that has seen both SYNs and 6 octets from A: A's octet 0 is
+    numbered 1000, B's 5000."""
+    wire = wire or Wire(**options)
+    handshake(wire)
+    wire.send(1000, b"hello ")
+    return wire
+
+
+def genuine(wire, seq=1006):
+    """The octets that follow ``begun``, in four segments; A's octets so far."""
+    for word in (b"these ", b"octets ", b"are ", b"genuine"):
+        wire.send(seq, word)
+        seq += len(word)
+    wire.flush()
+    return wire.octets(A)
+
+
+# -- a segment far beyond what was believed is set aside ----------------------
+
+
+def test_a_forged_acknowledgment_alone_changes_nothing():
+    wire = begun()
+    assert wire.send(5000, b"", ACK, src=B, dst=A, ack=1006 + 0x7FFFFFF0) == ()
+    assert genuine(wire) == b"hello these octets are genuine"
+    stats = wire.stats
+    assert (stats.missing, stats.retransmitted, stats.ignored) == (0, 0, 1)
+
+
+def test_one_octet_far_ahead_and_its_acknowledgment_cost_nothing():
+    wire = begun()
+    assert wire.send(1006 + 0x7FFFFFF0, b"!") == ()
+    assert wire.stats.held == 0 and wire.stats.ignored == 1
+    # Nothing was believed, so its acknowledgment is beyond everything seen.
+    assert wire.send(5000, b"", ACK, src=B, dst=A, ack=1006 + 0x7FFFFFF0) == ()
+    assert wire.stats.ignored == 2
+    assert genuine(wire) == b"hello these octets are genuine"
+    stats = wire.stats
+    assert (stats.missing, stats.retransmitted, stats.out_of_order) == (0, 0, 0)
+    consistent(wire.items)
+
+
+def test_a_fin_far_ahead_and_its_acknowledgment_cost_nothing():
+    wire = begun()
+    assert wire.send(1006 + 0x7FFFFFF0, flags=FIN) == ()
+    assert wire.send(5000, b"", ACK, src=B, dst=A, ack=1006 + 0x7FFFFFF1) == ()
+    assert wire.stats.ignored == 2
+    assert genuine(wire) == b"hello these octets are genuine"
+    assert wire.stats.missing == 0 and not any(i.end for i in wire.items)
+
+
+def test_one_octet_far_ahead_survives_another_connection_filling_the_budget():
+    wire = begun(max_buffered=200000)
+    wire.send(1006 + 0x7FFFFFF0, b"!")
+    x, y = ("10.9.9.9", 1111), ("10.9.9.8", 2222)
+    wire.send(1, flags=SYN, src=x, dst=y)
+    for frames in range(1, 20):
+        wire.send(100 + frames * 60001, b"j" * 60000, src=x, dst=y)
+    assert wire.stats.missing > 0  # the flood did give its own holes up
+    assert genuine(wire) == b"hello these octets are genuine"
+    assert sum(i.missing for i in wire.items if i.source == A) == 0
+
+
+def test_a_segment_exactly_far_is_believed_and_one_octet_beyond_is_not():
+    wire = begun()
+    wire.send(1006 + FAR, b"x")
+    assert wire.stats.held == 1 and wire.stats.ignored == 0
+    wire = begun()
+    wire.send(1006 + FAR + 1, b"x")
+    assert wire.stats.held == 0 and wire.stats.ignored == 1
+    # The furthest octet believed moves the limit with it.
+    wire = begun()
+    wire.send(1006 + FAR, b"x")  # believed: the furthest octet is now FAR + 1
+    wire.send(1006 + 2 * FAR + 1, b"y")
+    assert wire.stats.held == 2 and wire.stats.ignored == 0
+    wire.send(1006 + 3 * FAR + 10, b"z")
+    assert wire.stats.held == 2 and wire.stats.ignored == 1
+
+
+def test_the_limit_is_the_same_across_the_wrap_of_the_sequence_number():
+    start = 0xFFFFFF00
+    for extra, held in ((0, 1), (1, 0)):
+        wire = Wire()
+        handshake(wire, a=start - 1)
+        wire.send(start, b"hello ")
+        wire.send(start + 6 + FAR + extra, b"x")
+        assert (wire.stats.held, wire.stats.ignored) == (held, 1 - held)
+
+
+def test_a_fin_exactly_far_is_believed_and_one_octet_beyond_is_not():
+    for extra, ends in ((0, True), (1, False)):
+        wire = begun()
+        wire.send(1006 + FAR + extra, flags=FIN)
+        assert wire.stats.ignored == (0 if ends else 1)
+        assert view(wire.flush()) == ([(b"", 6 + FAR, FAR, 0, True)] if ends else [])
+
+
+def test_two_far_segments_that_follow_one_another_move_the_direction():
+    wire = begun()
+    wire.send(1020, b"held")  # held at [20, 24)
+    far = 1000 + FAR + 100
+    assert wire.send(far, b"F" * 10) == ()
+    assert wire.stats.held == 4 and wire.stats.ignored == 1
+    got = wire.send(far + 10, b"G" * 2)
+    assert view(got) == [
+        (b"held", 20, 14, 0, False),
+        (b"G" * 2, FAR + 110, FAR + 110 - 24, 0, False),
+    ]
+    stats = wire.stats
+    assert stats.held == 0 and stats.missing == 14 + FAR + 110 - 24
+    # The first far segment's own octets are among those given up.
+    assert wire.send(far + 12, b"H")[0].missing == 0
+    consistent(wire.items)
+
+
+def test_a_believed_segment_between_two_far_ones_forgets_the_first():
+    wire = begun()
+    far = 1000 + FAR + 100
+    wire.send(far, b"F" * 10)
+    assert wire.send(1006, b"abc")[0].offset == 6  # believed
+    assert wire.send(far + 10, b"G" * 2) == ()  # not a follower of anything
+    assert wire.stats.ignored == 2 and wire.stats.missing == 0
+    assert wire.stats.held == 0
+
+
+def test_a_far_segment_that_does_not_follow_the_first_replaces_it():
+    wire = begun()
+    wire.send(1000 + FAR + 100, b"F" * 10)
+    assert wire.send(1000 + FAR + 50, b"E") == ()  # starts before the first
+    assert wire.send(1000 + FAR + 51 + FAR + 1, b"X") == ()  # too far past the last
+    assert wire.stats.ignored == 3 and wire.stats.missing == 0
+    # But one that follows the latest does.
+    got = wire.send(1000 + FAR + 51 + FAR + 2, b"Y")
+    assert len(got) == 1 and got[0].data == b"Y"
+
+
+def test_two_far_fins_that_follow_one_another_end_the_direction():
+    wire = begun()
+    assert wire.send(1000 + FAR + 100, flags=FIN) == ()
+    got = wire.send(1000 + FAR + 100, flags=FIN)
+    assert view(got) == [(b"", FAR + 100, FAR + 94, 0, True)]
+    assert wire.stats.missing == FAR + 94
+
+
+def test_a_far_reset_is_set_aside_and_two_that_follow_one_another_reset():
+    wire = begun()
+    got = wire.send(1000 + FAR + 100, flags=RST)
+    assert got == () and wire.stats.ignored == 1 and wire.stats.pending == 1
+    assert wire.send(1006, b"abc")[0].stream == 0
+    wire.send(1000 + FAR + 100, flags=RST)
+    assert wire.stats.pending == 1  # the believed segment forgot the first
+    got = wire.send(1000 + FAR + 100, flags=RST)
+    assert view(got)[-1][4] is True and wire.stats.pending == 0
+
+
+def test_a_reset_from_a_side_that_has_sent_nothing_is_believed_whatever_its_number():
+    wire = Wire()
+    wire.send(999, flags=SYN)
+    wire.send(1000, b"part one, ")
+    got = wire.send(0xDEADBEEF, flags=RST, src=B, dst=A)
+    assert view(got) == [(b"", 10, 0, 0, True)]
+    assert wire.send(1010, b"part two")[0].stream == 1
+
+
+def test_a_reset_from_the_sender_a_gigabyte_ahead_is_set_aside():
+    wire = Wire()
+    wire.send(999, flags=SYN)
+    wire.send(1000, b"part one, ")
+    assert wire.send(1010 + (1 << 30), flags=RST) == ()
+    assert wire.stats.ignored == 1
+    assert view(wire.send(1010, b"part two")) == [(b"part two", 10, 0, 0, False)]
+
+
+def test_a_far_segment_after_a_fin_is_set_aside_and_never_moves_the_direction():
+    wire = begun()
+    wire.send(1006, flags=FIN)
+    assert wire.send(1000 + FAR + 100, b"F") == ()
+    assert wire.send(1000 + FAR + 101, b"G") == ()
+    assert wire.stats.ignored == 2 and wire.stats.missing == 0
+
+
+# -- a SYN on a live connection is set aside until something confirms it --------
+
+
+def run_forged(forged, lose=None):
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"hello ", PSH | ACK, ack=5000)
+    first = wire.send(forged, flags=SYN)
+    seq = 1006
+    for n in range(200):
+        wire.send(seq, b"genuine%03d " % n, PSH | ACK, ack=5000)
+        seq += 11
+    wire.send(5000, b"reply", PSH | ACK, src=B, dst=A, ack=seq)
+    wire.flush()
+    return first, wire
+
+
+def test_a_forged_syn_on_a_live_connection_costs_no_octet():
+    first, wire = run_forged(1006 + 0x7FFFFFFF)
+    assert first == ()
+    assert wire.octets(A, stream=0) == b"hello " + b"".join(
+        b"genuine%03d " % n for n in range(200)
+    )
+    assert wire.octets(A) == wire.octets(A, stream=0)
+    assert wire.stats.streams == 1 and wire.stats.missing == 0
+    assert wire.stats.ignored == 1
+    assert [i.stream for i in wire.items] == [0] * len(wire.items)
+
+
+def test_a_syn_numbered_at_random_never_loses_an_octet():
+    rng = random.Random(1)
+    truth = b"hello " + b"".join(b"genuine%03d " % n for n in range(200))
+    for _ in range(200):
+        forged = rng.randrange(1 << 32)
+        _, wire = run_forged(forged)
+        # Either nothing confirmed it, or the sender's own genuine segments
+        # did and the rest of them are the new stream's: every octet comes out.
+        assert wire.octets(A, stream=0) + wire.octets(A, stream=1) == truth
+
+
+def test_a_genuine_reuse_of_the_addresses_is_confirmed_by_its_syn_ack():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"old", PSH | ACK, ack=5000)
+    assert wire.send(70000, flags=SYN) == ()
+    assert wire.stats.ignored == 1 and wire.stats.streams == 1
+    got = wire.send(90000, flags=SYN | ACK, src=B, dst=A, ack=70001)
+    assert [(i.source, i.end, i.stream) for i in got] == [
+        (A, True, 0),
+        (B, True, 0),
+    ]
+    assert wire.stats.ignored == 0 and wire.stats.streams == 2
+    assert view(wire.send(70001, b"new", PSH | ACK, ack=90001)) == [
+        (b"new", 0, 0, 1, False)
+    ]
+    assert view(wire.send(90001, b"yes", PSH | ACK, src=B, dst=A, ack=70004)) == [
+        (b"yes", 0, 0, 1, False)
+    ]
+    consistent(wire.items)
+
+
+def test_a_syn_ack_that_acknowledges_a_set_aside_syn_starts_the_new_stream_with_it():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"old")
+    wire.send(70000, b"ignored data", flags=SYN | ACK, ack=123)
+    assert wire.stats.ignored == 1
+    got = wire.send(90000, b"hi", flags=SYN | ACK, src=B, dst=A, ack=70001)
+    assert [(i.data, i.stream) for i in got if i.data] == [(b"hi", 1)]
+    # The octets the set-aside SYN carried were not kept.
+    assert wire.octets(A, stream=1) == b""
+
+
+def test_a_genuine_reuse_is_confirmed_by_its_senders_next_segment_with_no_reply():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"old")
+    wire.send(70000, flags=SYN)
+    got = wire.send(70001, b"new")
+    assert [(i.stream, i.end) for i in got] == [(0, True), (0, True), (1, False)]
+    assert got[-1].offset == 0 and wire.stats.ignored == 0
+    for extra, streams in ((0, 2), (1, 1)):  # exactly FAR confirms, one more does not
+        other = Wire()
+        handshake(other)
+        other.send(70000, flags=SYN)
+        other.send(70001 + FAR + extra, b"x")
+        assert other.stats.streams == streams
+
+
+def test_a_second_syn_replaces_the_first_set_aside_one():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"old")
+    wire.send(70000, flags=SYN)
+    wire.send(80000, flags=SYN)
+    assert wire.stats.ignored == 2 and wire.stats.streams == 1
+    # An acknowledgment of the first is no confirmation any more.
+    wire.send(5000, b"", ACK, src=B, dst=A, ack=70001)
+    assert wire.stats.streams == 1
+    wire.send(5000, b"", ACK, src=B, dst=A, ack=80001)
+    assert wire.stats.streams == 2
+    assert view(wire.send(80001, b"new")) == [(b"new", 0, 0, 1, False)]
+
+
+def test_a_syn_on_a_connection_that_has_finished_starts_the_new_stream_at_once():
+    wire = Wire()
+    handshake(wire)
+    wire.send(1000, b"abc", FIN | ACK, ack=5000)
+    wire.send(5000, b"xyz", FIN | ACK, src=B, dst=A, ack=1004)
+    assert all(i.end for i in wire.items if not i.data) and wire.stats.streams == 1
+    assert wire.send(70000, flags=SYN) == ()
+    assert wire.stats.streams == 2 and wire.stats.ignored == 0
+    assert view(wire.send(70001, b"new")) == [(b"new", 0, 0, 1, False)]
+
+
+def test_a_syn_ack_numbered_blind_on_a_live_connection_is_set_aside_the_same_way():
+    wire = Wire()
+    wire.send(1000, b"abc")  # a capture that began mid-stream
+    assert wire.send(7777, flags=SYN | ACK, src=B, dst=A, ack=424242) == ()
+    assert wire.stats.ignored == 1 and wire.stats.streams == 1
+    assert view(wire.send(1003, b"def")) == [(b"def", 3, 0, 0, False)]
+    assert view(wire.send(1006, b"ghi")) == [(b"ghi", 6, 0, 0, False)]
 
 
 # -- a segment is as long as its IP header says --------------------------------
@@ -1356,7 +1669,7 @@ def test_mutated_segments_never_raise_and_never_pass_the_bounds(seed):
     wire = Wire(max_streams=2, max_buffered=1024, idle_timeout=500.0)
     hosts = [("10.0.%d.%d" % (n, n), 1000 + n) for n in range(3)]
     flags = [PSH, PSH | ACK, ACK, SYN, SYN | ACK, FIN, FIN | ACK, RST]
-    weights = [30, 30, 20, 2, 2, 3, 3, 1]
+    weights = [30, 30, 20, 6, 4, 3, 3, 2]
     after = {}  # the sequence number each direction would continue at
     for _ in range(4000):
         src, dst = rng.sample(hosts, 2)
@@ -1364,16 +1677,21 @@ def test_mutated_segments_never_raise_and_never_pass_the_bounds(seed):
         roll = rng.random()
         if roll < 0.03:
             number = rng.randrange(1 << 32)
+        elif roll < 0.07:  # at, and just either side of, the far limit
+            number = base + FAR + rng.randrange(-3, 400)
         elif roll < 0.5:
             number = base + rng.randrange(0, 400)
         else:
             number = base - rng.randrange(0, 60)
         data = bytes(rng.choice(b"ab") for _ in range(rng.choice([0, 1, 5, 40, 200])))
+        flag = rng.choices(flags, weights)[0]
+        if flag & SYN and rng.random() < 0.5:
+            number = rng.randrange(1 << 32)  # a SYN numbered blind
         after[(src, dst)] = number + len(data)
         wire.send(
             number,
             data,
-            rng.choices(flags, weights)[0],
+            flag,
             src=src,
             dst=dst,
             ack=rng.choice([number, base + rng.randrange(900), rng.randrange(1 << 32)]),
@@ -1388,6 +1706,7 @@ def test_mutated_segments_never_raise_and_never_pass_the_bounds(seed):
     assert stats.delivered == sum(len(i.data) for i in wire.items)
     # Octets of a forgotten connection are given up and never reported.
     assert stats.missing >= sum(i.missing for i in wire.items)
+    assert 0 <= stats.dropped and 0 <= stats.ignored <= stats.segments
     # The run met every rule, not only the quiet ones.
     for counter in (
         "out_of_order",
