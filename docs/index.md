@@ -16,8 +16,8 @@ Requires Python 3.9 or newer.
 
 | Extra | Adds | Needed for |
 | --- | --- | --- |
-| `yaml` | `PyYAML` | writing records as YAML |
-| `toml` | `tomli-w` | writing records as TOML |
+| `yaml` | `PyYAML` | writing and reading records as YAML |
+| `toml` | `tomli-w`, and `tomli` before Python 3.11 | writing records as TOML, and reading them before 3.11 |
 | `cli` | `duho` | the `pktcap` command |
 
 ## 30-second tour

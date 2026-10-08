@@ -32,10 +32,11 @@ classifiers = [
 dependencies = ["netimps>=0.4.0,<0.5"]
 
 [project.optional-dependencies]
-# One extra per output format that needs a third-party writer. JSON and INI
-# are written with the standard library and need none.
+# One extra per record format that needs a third-party library. JSON and INI
+# are written and read with the standard library and need none. TOML is read by
+# tomllib from Python 3.11, and before that by tomli.
 yaml = ["PyYAML>=6.0,<7"]
-toml = ["tomli-w>=1.0,<2"]
+toml = ["tomli-w>=1.0,<2", "tomli>=2.0,<3; python_version < '3.11'"]
 # The command line: duho, and only the modules under pktcap.cli import it.
 cli = ["duho>=0.7.0,<0.8"]
 # The tests exercise every extra, so dev refers to them rather than repeating
