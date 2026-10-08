@@ -1,4 +1,4 @@
-"""The performance suite. Run on demand, never in CI.
+"""The performance suite. Run on demand, never on a push.
 
     python benchmarks/run.py            # print a table
     python benchmarks/run.py --save     # also write benchmarks/results/<name>.json

@@ -23,9 +23,9 @@ src/pktcap/   the package: every module is private but `cli/`, the root re-expor
               `_plugins/` holds layers and filter keys, and loading plugins by name
 tests/        the suite (tests/AGENTS.md)
 docs/         the published site, with mkdocs.yml; built strictly as a release gate
-benchmarks/   run on demand, never in CI; results/ is tracked
+benchmarks/   run on demand, never on a push; results/ is tracked
 examples/     runnable scripts, local and loopback only
-.github/      the three workflows: test, docs, release
+.github/      the workflows: test, docs, release, and benchmarks (run by hand)
 ```
 
 ## Environment

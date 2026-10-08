@@ -1,7 +1,10 @@
 # Benchmarks
 
-A performance suite run **on demand**, never in CI: a shared runner is too
-noisy for a per-push number to mean anything.
+A performance suite run **on demand**, never on a push: a shared runner is
+too noisy for a per-push number to mean anything. The `Benchmarks` workflow
+runs it by hand on the three hosted systems and uploads one result file per
+system as an artifact; two runs of the same system are what a before-and-after
+comparison is made of.
 
 ```bash
 .venv/3.14-nt-arm64/Scripts/python benchmarks/run.py            # print a table
