@@ -145,9 +145,33 @@ def test_a_bind_that_fails_names_what_was_asked_for_as_text(tmp_path):
 # -- the source turns the endpoints away ----------------------------------------------
 
 
+def _room_for_sockets(wanted):
+    """Whether this process may hold ``wanted`` more descriptors, raising its
+    own soft limit to the hard one where that is what stands in the way."""
+    try:
+        import resource
+    except ImportError:  # Windows: no such limit on sockets
+        return True
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    needed = wanted + 64
+    if soft == resource.RLIM_INFINITY or soft >= needed:
+        return True
+    if hard != resource.RLIM_INFINITY and hard < needed:
+        return False
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (needed, hard))
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def test_the_endpoints_a_command_bound_are_closed_when_the_source_refuses_them(
     tmp_path,
 ):
+    # macOS gives a process 256 descriptors by default (measured 2026-10-09:
+    # the 257 sockets below ended in "Too many open files" there).
+    if not _room_for_sockets(257):
+        pytest.skip("this process may not hold 257 sockets at once")
     made = []
 
     class TooMany(Capture):
