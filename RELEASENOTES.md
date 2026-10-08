@@ -44,6 +44,30 @@ back together. How it was checked:
 in order and with each pair swapped. No figure is recorded here: a local run
 is a sanity check and the metrics have not been run on the hosted runners.
 
+### Reading a record back
+
+`loads_record` reads the text `dumps_record` writes. The text is a file
+somebody hands the library, so how it was checked is mostly about refusals:
+
+- `tests/test_records_hostile.py` writes 3,000 seeded random records per
+  format (nested mappings and lists, every scalar kind, text from ASCII,
+  control characters, non-ASCII, astral characters and lone surrogates, keys
+  that need percent-encoding) and reads each back. Every exception it found is
+  listed in the format header and pinned by a test: two lone surrogates that
+  JSON and INI read as one character, names that collide once TOML has
+  replaced a lone surrogate, the empty name INI cannot read.
+- Hostile text: nesting 100,000 deep in each format; a YAML document of 702
+  characters whose aliases expand to 10**12 items, read in 3 ms with a peak of
+  26 KB of Python allocations (`tracemalloc`, Python 3.14.7), where the same
+  document at 4, 8 and 12 levels peaks at 13, 19 and 24 KB: the cost follows
+  the size of the document and not what it expands to; a chain of YAML merge
+  keys, which would double at every link, refused; numbers of 100,000 digits;
+  4,000 texts of random octets per format; a written record cut at every
+  position and with random edits, a marker planted in the text and searched
+  for in every message and chained exception.
+- 54 mutations (one or more for each refusal and each error) are all caught on
+  Python 3.14; two more, for the TOML reader on Python before 3.11, on 3.9.
+
 ### Benchmark baseline
 
 `benchmarks/results/0.1.0-win_arm64-py3.14.json` and `...-py3.9.json`, the
