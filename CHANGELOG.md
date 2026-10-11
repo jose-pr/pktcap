@@ -9,10 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- The `--config` option of the commands is the field `plugin_config` (the
-  flags `--config` and `-c` are unchanged), so a base class of another library
-  may have a `config` of its own; the tool-input key of `pktcap.convert` and
-  `pktcap.plugins` is `plugin_config`, and `pktcap.convert` takes `append`.
+- The command line reads its settings the way every duho program does. The
+  root takes `--config`/`-c FILE` before the command's name, else
+  `PKTCAP_CONFIG`, else the user's own `pktcap/pktcap.ini`; the file is duho's
+  layout (top-level keys for the root, a table for each command), in INI,
+  TOML, JSON or YAML by its name, and a `[convert]` table sets the options of
+  `convert`. No command has a configuration option, so a library that
+  subclasses the commands names its settings file on its own root and meets no
+  clash. An unknown key or table, a `config` key, a `[pktcap]` table and a file
+  that is not valid are status 2 with one line that holds no text of the file.
+  The default file is checked where owners are, as before; a served tree
+  (`PKTCAP_MCP`) is given no settings file. `pktcap plugins` names the file the
+  root read. The `cli` extra needs duho 0.7.2.
+- The plugin list of a command is the field `load` (`--load`, `PKTCAP_LOAD`,
+  the key `load`), the tool-input key of `pktcap.convert` and `pktcap.plugins`
+  is `load`, and `pktcap.convert` takes `append`. A top-level `load` of the
+  settings file is the list of every command. `Loading._load_from_` names the
+  layers a class takes the list from, as `Capture._hook_from_` does for a hook.
+  `--config none`, `PKTCAP_CONFIG=none` and the file layout `[pktcap]` with a
+  `load` key are gone: the file's `load` goes at the top level. A variable that
+  is only white space is a list with no plugin and not unset; only an empty one
+  is unset.
   pktcap needs netimps 0.4.1.
 - Dissecting an IPv6 frame costs about half. An IPv6 address keeps its text
   (the 1,024 a process used last), since a capture names few hosts and every
@@ -212,15 +229,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   [--duration SECONDS]` captures live through `sniff_frames` and `copy_frames`
   (Linux, `CAP_NET_RAW`). Ctrl-C ends it with status 0 and the summary; off
   Linux the one line says to pipe a capture tool into `pktcap convert`.
-- Every command takes `--load NAME` (repeatable; `none` for none) and
-  `--config`/`-c FILE` (`none` for no file), loading into a registry of its
-  own before the filter is compiled, so `pktcap capture -f "proto=dhcp"` and a
-  library's own keys work with no code written; `--count` of `capture` has no
-  short form, `-c` being the configuration file on every command.
-  `pktcap plugins [--layer NAME] [--json]` shows the file, what was loaded and
-  every filter key, and is served as the tool `pktcap.plugins`. A tool call
-  cannot name `plugins` or `config`: it is refused, and the server's own
-  `PKTCAP_LOAD` and file decide.
+- Every command takes `--load NAME` (repeatable; `none` for none), loading
+  into a registry of its own before the filter is compiled, so `pktcap capture
+  -f "proto=dhcp"` and a library's own keys work with no code written; the
+  root takes `--config`/`-c FILE`, and `--count` of `capture` has no short
+  form. `pktcap plugins [--layer NAME] [--json]` shows the settings file, what
+  was loaded and every filter key, and is served as the tool `pktcap.plugins`.
+  A tool call cannot name `load`: it is refused, and the server's own
+  `PKTCAP_LOAD` decides.
 - `PKTCAP_MCP=stdio pktcap` serves `convert` as a tool (`pktcap.convert`):
   the records come back as the tool's result, and a capture format is refused
   for standard output, which a tool call has no octets for. `capture` and
