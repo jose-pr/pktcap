@@ -57,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   pipe as `EINVAL` and the interpreter's own flush at exit failed again. It is
   status 1 and no line there as it is elsewhere; an `EINVAL` of a file or a
   socket stays an error with its line.
+- On Windows the hook's program is resumed with documented calls
+  (a Toolhelp snapshot to find its thread, then `ResumeThread`) and no longer
+  with `NtResumeProcess`, which Microsoft does not document. Measured: no
+  start in 400 missed its thread; each costs about 60 ms more.
 
 ### Added
 
