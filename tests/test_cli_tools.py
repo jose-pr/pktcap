@@ -40,7 +40,7 @@ def test_every_field_of_the_tool_says_what_it_is_and_what_omitting_it_means():
     (tool,) = [t for t in describe_tools(Pktcap) if t["name"] == "pktcap.convert"]
     properties = tool["inputSchema"]["properties"]
     assert tool["inputSchema"]["required"] == ["input"]
-    own = set(properties) - {"loglevels", "verbose", "quiet", "--"}
+    own = set(properties) - {"loglevels", "verbose", "quiet", "config", "--"}
     assert own == {
         "filter",
         "output",
@@ -50,8 +50,7 @@ def test_every_field_of_the_tool_says_what_it_is_and_what_omitting_it_means():
         "datagrams",
         "input",
         "limit",
-        "plugins",
-        "plugin_config",
+        "load",
         "append",
     }
     for name in own:

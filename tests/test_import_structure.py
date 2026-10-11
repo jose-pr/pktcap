@@ -6,6 +6,7 @@ names only.
 """
 
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -233,10 +234,10 @@ def test_no_other_way_of_running_a_named_module_is_used():
 
 #: The modules that read the process environment: the copy a hook's process
 #: starts from, and where the user's settings file is.
-_ENVIRONMENT_READERS = {_CONFIG, "cli/_settings.py", "cli/_legacy.py"}
+_ENVIRONMENT_READERS = {_CONFIG, "cli/_settings.py"}
 
 
-def test_the_environment_is_read_by_three_modules_alone():
+def test_the_environment_is_read_by_two_modules_alone():
     names = ("environ", "getenv", "environb", "getenvb")
     assert _naming(_SRC, names, _ENVIRONMENT_READERS) == []
     assert _naming(_SRC, ("environ",), set()) == sorted(_ENVIRONMENT_READERS)
@@ -308,3 +309,30 @@ def test_the_scanners_see_a_planted_violation(tmp_path):
     ]
     assert _loader_importers(root) == ["__init__.py", "_keys.py", "cli/_x.py"]
     assert _naming(root, ("exec", "eval"), set()) == ["_exec.py"]
+
+
+def test_importing_the_command_line_loads_no_config_reader_until_a_file_is_read(
+    tmp_path,
+):
+    """`duho.config` is imported when a settings file is read, not before."""
+    settings = tmp_path / "s.json"
+    settings.write_bytes(b"{}")
+    code = "\n".join(
+        [
+            "import sys",
+            "from pktcap.cli import Capture, main",
+            "before = 'duho.config' in sys.modules",
+            "main(['plugins'])",
+            "idle = 'duho.config' in sys.modules",
+            "main(['-c', %r, 'plugins'])" % str(settings),
+            "print(before, idle, 'duho.config' in sys.modules)",
+        ]
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=dict(os.environ, APPDATA=str(tmp_path), XDG_CONFIG_HOME=str(tmp_path)),
+        timeout=120,
+    )
+    assert done.stdout.splitlines()[-1] == "False False True", done.stderr[-1000:]

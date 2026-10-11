@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-import pathlib
 from typing import List, Optional
 
 from .._dissectors import DissectorRegistry
 from .._frame_filter import frame_filter_keys
 from .._layers import BUILTIN_LAYERS
 from ._common import Loading
-from ._legacy import capture_config_path
+from ._settings import file_read
 
 __all__ = ["Plugins"]
 
@@ -28,15 +27,9 @@ class Plugins(Loading):
     "Print one JSON object with configuration, plugins and keys. Omitted: text"
     ("--json",)
 
-    def _text(
-        self, registry: DissectorRegistry, path: Optional[pathlib.Path]
-    ) -> List[str]:
+    def _text(self, registry: DissectorRegistry, path: Optional[str]) -> List[str]:
         keys = frame_filter_keys(registry)
-        if path is None:
-            lines = ["configuration: none"]
-        else:
-            absent = "" if path.is_file() else " (absent)"
-            lines = ["configuration: %s%s" % (path, absent)]
+        lines = ["configuration: %s" % ("none" if path is None else path)]
         if self.loaded:
             lines.append(
                 "plugins: %d from %s" % (len(self.loaded), self.loaded[0].source)
@@ -60,9 +53,8 @@ class Plugins(Loading):
         return lines
 
     def __call__(self) -> Optional[int]:
-        path = capture_config_path(self.plugin_config)
-        configuration = None if path is None else str(path)
         registry = self._registry()
+        configuration = file_read()
         keys = frame_filter_keys(registry)
         if self.layer is not None:
             wanted = [key for key in keys if key.startswith(self.layer.lower() + ".")]
@@ -94,5 +86,5 @@ class Plugins(Loading):
                 )
             )
         else:
-            print("\n".join(self._text(registry, path)))
+            print("\n".join(self._text(registry, configuration)))
         return None

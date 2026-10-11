@@ -174,3 +174,31 @@ What each source is and what is refused is in `pktcap/cli/AGENTS.md`.
 `import pktcap` reads no variable and imports no plugin; the one variable the
 library reads is the copy of the environment a hook command's process starts
 from.
+
+## The `pktcap plugins` command
+
+`pktcap plugins [--load LIST] [--layer NAME] [--json]`
+
+Loads the plugins exactly as the other commands do and shows them (the
+settings file is `pktcap/cli/AGENTS.md`). Standard output is:
+
+```text
+configuration: PATH
+plugins: 2 from SOURCE
+  NAME: udp 67, udp 68; layer dhcp
+keys: dport, dst, host, linktype, ...
+layers: dhcp, ethernet, ipv4, ...
+```
+
+- `configuration` is the settings file the root read, `none` when it read
+  none. `plugins` says how many were loaded and where the list came from
+  (`argument`, `PKTCAP_LOAD`, the file's path), or
+  `plugins: none`; each plugin has a line with the selectors it registered a
+  dissector under and the layers it declared. `keys` are the bare filter
+  keys: the nine built-in ones and each registered key that one layer has.
+  `layers` are the names a filter may put before a dot.
+- `--layer NAME`: print only that layer's keys, one per line
+  (`ipv4.ttl`, `demo.opcode`), which are `LAYER.FIELD` and `LAYER.KEY` of a
+  filter. A name that is no layer is status 2 listing the layers.
+- `--json`: one object, `{"configuration": PATH-or-null, "plugins": [{"name",
+  "source", "selectors", "layers"}], "keys": [every filter key that compiles]}`.

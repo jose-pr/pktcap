@@ -444,10 +444,11 @@ file.
 
 ## Environment variables
 
-Read when a list of plugins is asked for, never at import.
+The library reads none, and never at import: they belong to the command line
+(`pktcap/cli/AGENTS.md`).
 
-- `PKTCAP_LOAD` — the plugins to load; `,` `;` `:` or space between items, `none` for none.
-- `PKTCAP_CONFIG` — the configuration file: an absolute path, or `none`; read as it is.
+- `PKTCAP_LOAD` — the plugins the command line loads; `,` `;` `:` or space between items, `none` for none.
+- `PKTCAP_CONFIG` — the command line's settings file: an absolute path; read as it is.
 - `XDG_CONFIG_HOME` (POSIX), `APPDATA` (Windows) — where `pktcap/pktcap.ini` is looked for.
 
 ## Gotchas

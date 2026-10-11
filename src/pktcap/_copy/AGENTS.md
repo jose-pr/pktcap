@@ -112,3 +112,19 @@ given.
 the program's exit status, `None` when it was killed or never started; `timed_out` says it ran
 past its time limit. The message names the program and ends with the escaped
 tail.
+
+## The `--hook` option of `pktcap capture`
+
+`--hook COMMAND` runs a program for each record written, with the record on
+standard input in the format the writer writes (JSON for a capture format or
+`text`) and the values `_names` gives as `PKTCAP_HOOK_<FIELD>`, as
+`command_hook` runs one. **Or `MODULE:FUNCTION`**, imported as written with
+nothing added to `sys.path` and called with each `DissectedFrame`:
+`--hook-timeout` does not bound a function, and its failures are logged at the
+rate a program's are. On Windows `C:hook.exe` is a program. The command comes
+from the command line alone (never a tool call or a capture); a value from a
+layer the class does not list in `Capture._hook_from_` is status 2 naming the
+layer. `--hook-timeout SECONDS` (default 10) kills the program and what it
+started; a failure is counted (`N hook failures` in the summary) and logged,
+and `--hook-fail-fast` ends the capture at the first one with status 1. A hook
+that cannot be found is status 2 before anything is bound.

@@ -3,7 +3,8 @@ can rely on when it subclasses them.
 
 Each demonstration subclass uses the override points of one command, and is
 mixed with a base class of another library that has a ``config`` field and a
-``listen`` field of its own. What is shown working here is what
+``listen`` field of its own: the command classes declare no configuration
+option, so the first meets no clash. What is shown working here is what
 ``cli/AGENTS.md`` promises.
 """
 
@@ -12,14 +13,14 @@ import pathlib
 import socket
 import threading
 import time
-from typing import Annotated, Optional
+from typing import Optional
 
 import pytest
 
 pytest.importorskip("duho")
 
 import captures as build  # noqa: E402
-from duho import Cmd, Meta, main as run  # noqa: E402
+from duho import Cmd, main as run  # noqa: E402
 from netimps import UDPEndpoint, bind  # noqa: E402
 
 import pktcap.cli  # noqa: E402
@@ -38,7 +39,7 @@ WAIT = 10.0
 
 class Foreign(Cmd):
     """A base class of another library: its own settings file and its own
-    listening grammar, under the names pktcap's classes once used."""
+    listening grammar."""
 
     config: Optional[pathlib.Path] = None
     "the other library's settings file"
@@ -89,9 +90,6 @@ def demo(plugin_module, calls):
     class Base(Loading):
         _plugins_ = (mod,)
         _logger_name_ = "demo"
-        plugin_config: Annotated[Optional[str], Meta(env=None)] = None
-        "the plugin list file, under a name that does not collide"
-        ("--demo-plugin-config",)
 
     class DemoConvert(Foreign, Base, Convert):
         _parsername_ = "convert"
@@ -147,17 +145,11 @@ def test_the_users_list_naming_the_same_plugin_is_not_an_error(demo, trace, caps
 
 def test_a_foreign_config_field_is_never_taken_for_the_plugin_list(demo, trace):
     """The other library's ``--config`` names a file that does not exist; it is
-    that library's, so the registry is built without ever reading it."""
+    that library's, so the registry is built without ever reading it, and no
+    option of the base class has to be renamed for it."""
     missing = trace.parent / "missing.ini"
     argv = ["-i", str(trace), "--config", str(missing), "--format", "json"]
     assert status_of(demo.Convert, argv) == 0
-
-
-def test_the_plugin_list_file_is_named_by_the_subclasses_own_flag(demo, trace):
-    missing = trace.parent / "missing.ini"
-    argv = ["-i", str(trace), "--demo-plugin-config", str(missing)]
-    assert status_of(demo.Convert, argv) == 1  # a named file that does not exist
-    assert status_of(demo.Convert, ["-i", str(trace), "-c", "none"]) == 2
 
 
 def test_a_tool_call_cannot_name_plugins_even_for_a_subclass(demo, trace):
@@ -169,7 +161,7 @@ def test_a_tool_call_cannot_name_plugins_even_for_a_subclass(demo, trace):
         _parsername_ = "demo"
         _subcommands_ = [demo.Convert]
 
-    result = call_tool(Root, "demo.convert", {"input": str(trace), "plugins": ["x"]})
+    result = call_tool(Root, "demo.convert", {"input": str(trace), "load": ["x"]})
     assert result["isError"] is True
 
 
@@ -330,10 +322,6 @@ def test_endpoints_and_stop_and_default_port_are_the_subclasses(demo, calls, cap
     published = {}
 
     class Mine(Foreign, demo.Loop):
-        plugin_config: Optional[str] = None
-        "the plugin list file, under a flag that does not collide"
-        ("--pktcap-config",)
-
         def _endpoints(self):
             calls.append("endpoints")
             endpoint = UDPEndpoint(bind("127.0.0.1", 0))
@@ -406,9 +394,6 @@ def test_replay_points_are_the_subclasses(trace, capsys):
     class Mine(Foreign, Replay):
         _parsername_ = "replay"
         _default_port_ = port
-        plugin_config: Optional[str] = None
-        "the plugin list file, under a flag that does not collide"
-        ("--pktcap-config",)
 
         def _datagrams(self, registry):
             calls.append("datagrams")

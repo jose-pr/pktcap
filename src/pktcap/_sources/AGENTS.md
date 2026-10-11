@@ -159,3 +159,16 @@ Ceilings:
 | endpoints one capture reads | 256 | `ValueError` before any is looked at |
 | octets of a payload | `max_size` (65,535 at most) | the datagram is counted in `truncated` and not returned |
 | frames queued in `aread` | 64, and one datagram in each reader's hand | the readers wait; the kernel drops the rest |
+
+## The `--listen` option of `pktcap capture`
+
+`--listen SPEC` (repeatable, and it excludes `--interface`, status 2) captures
+the datagrams that arrive at sockets the command binds, read with
+`netimps.parse_listen` before anything is opened: `HOST:PORT`, `[V6]:PORT`,
+`*:PORT` or `:PORT`, an adapter name or a MAC, several joined by commas. A value
+with no port gets the command's `_default_port_`, and with none is refused
+(status 2, netimps' message). A taken port is status 1, one line `cannot listen
+on SPEC: ...`. `listening on HOST:PORT` is logged at INFO for each socket,
+shown unless `-q`, the way to learn a port 0. A datagram that arrives on an
+interface a limited socket does not serve is counted in the summary as `N not
+admitted`; one over 65,535 octets as `N over the size limit`.

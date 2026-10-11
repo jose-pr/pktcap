@@ -46,7 +46,7 @@ def config_home(tmp_path, monkeypatch):
     """The user's configuration directory, by this platform's variable."""
     base = tmp_path / "config-home"
     base.mkdir()
-    monkeypatch.delenv("PKTCAP_CONFIG")
+    monkeypatch.delenv("PKTCAP_CONFIG", raising=False)
     monkeypatch.setenv("APPDATA" if os.name == "nt" else "XDG_CONFIG_HOME", str(base))
     return base
 
@@ -95,15 +95,15 @@ def test_the_variable_and_the_file_give_the_same_output(
 
     (config_home / "pktcap").mkdir()
     (config_home / "pktcap" / "pktcap.ini").write_text(
-        "[pktcap]\nload = %s\n" % mod.name, encoding="utf-8"
+        "[DEFAULT]\nload = %s\n" % mod.name, encoding="utf-8"
     )
     assert main(argv) == 0
     assert capsys.readouterr().out == by_option
 
     named = tmp_path / "named.ini"
-    named.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
+    named.write_text("[DEFAULT]\nload = %s\n" % mod.name, encoding="utf-8")
     for flag in ("--config", "-c"):
-        assert main(convert(trace, flag, str(named), "-f", "demo.opcode=1")) == 0
+        assert main([flag, str(named)] + argv) == 0
         assert capsys.readouterr().out == by_option
     monkeypatch.setenv("PKTCAP_CONFIG", str(named))
     (config_home / "pktcap" / "pktcap.ini").unlink()
@@ -122,10 +122,10 @@ def test_none_over_the_variable_or_the_file_leaves_the_key_unknown(
     monkeypatch.delenv("PKTCAP_LOAD")
     (config_home / "pktcap").mkdir()
     (config_home / "pktcap" / "pktcap.ini").write_text(
-        "[pktcap]\nload = %s\n" % mod.name, encoding="utf-8"
+        "[DEFAULT]\nload = %s\n" % mod.name, encoding="utf-8"
     )
     assert main(argv) == 2
-    assert main(convert(trace, "--config", "none", "-f", "demo.opcode=1")) == 2
+    assert "unknown filter key 'demo.opcode'" in capsys.readouterr().err
     assert not mod.imported
 
 
@@ -147,16 +147,26 @@ def test_a_name_that_does_not_import_is_one_line_and_nothing_is_written(
     assert not out.exists()
 
 
-def test_a_named_file_that_is_missing_is_status_1(trace, tmp_path, capsys):
-    assert main(convert(trace, "-c", str(tmp_path / "missing.ini"))) == 1
+def test_a_missing_file_is_status_2_from_the_option_and_1_from_the_variable(
+    trace, tmp_path, capsys, monkeypatch
+):
+    missing = tmp_path / "missing.ini"
+    assert main(["-c", str(missing)] + convert(trace)) == 2
+    assert "no such file" in capsys.readouterr().err
+    monkeypatch.setenv("PKTCAP_CONFIG", str(missing))
+    assert main(convert(trace)) == 1
     assert capsys.readouterr().err.startswith("pktcap: error: ")
 
 
-def test_a_malformed_file_is_status_2_with_its_path_and_line(trace, tmp_path, capsys):
+def test_a_malformed_file_is_status_2_with_its_path_and_no_text_of_it(
+    trace, tmp_path, capsys
+):
     bad = tmp_path / "bad.ini"
-    bad.write_text("[pktcap]\nnonsense\n", encoding="utf-8")
-    assert main(convert(trace, "--config", str(bad))) == 2
-    assert capsys.readouterr().err.startswith("pktcap: error: %s:2: " % bad)
+    bad.write_text("[DEFAULT]\nnonsense s3cr3t\n", encoding="utf-8")
+    assert main(["--config", str(bad)] + convert(trace)) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("pktcap: error: duho: invalid INI in config file %s" % bad)
+    assert "s3cr3t" not in err
 
 
 def test_replay_sends_only_the_datagrams_the_plugin_key_selects(
@@ -190,25 +200,25 @@ def test_capture_takes_a_plugin_key(packet_socket, plugin_module, capsys):
     assert record["layers"][-1]["name"] == "lease"
 
 
-def test_dash_c_is_the_configuration_file_on_every_command_and_count_has_no_short_flag():
+def test_dash_c_is_the_roots_settings_file_and_no_command_has_it():
     from pktcap.cli.capture import Capture
     from pktcap.cli.convert import Convert
     from pktcap.cli.plugins import Plugins
     from pktcap.cli.replay import Replay
 
-    for command in (Capture, Convert, Replay, Plugins):
-        owners = {
+    def owners(parser):
+        return {
             option: action.dest
-            for action in command._parser_()._actions
+            for action in parser._actions
             for option in action.option_strings
         }
-        assert owners["-c"] == owners["--config"] == "plugin_config", command.__name__
-    assert "-c" not in [
-        o
-        for a in Capture._parser_()._actions
-        if a.dest == "count"
-        for o in a.option_strings
-    ]
+
+    root = owners(Pktcap._parser_())
+    assert root["-c"] == root["--config"] == "config"
+    for command in (Capture, Convert, Replay, Plugins):
+        assert "-c" not in owners(command._parser_()), command.__name__
+        assert "--config" not in owners(command._parser_()), command.__name__
+    assert "--count" in owners(Capture._parser_())
 
 
 # -- pktcap plugins ------------------------------------------------------------
@@ -216,7 +226,7 @@ def test_dash_c_is_the_configuration_file_on_every_command_and_count_has_no_shor
 
 def test_the_plugins_command_lists_what_was_loaded(plugin_module, capsys):
     mod = plugin_module()
-    assert main(["plugins", "--load", mod.name, "-c", "none"]) == 0
+    assert main(["plugins", "--load", mod.name]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "configuration: none"
     assert lines[1] == "plugins: 1 from argument"
@@ -226,14 +236,12 @@ def test_the_plugins_command_lists_what_was_loaded(plugin_module, capsys):
     assert len(lines) == 5
 
 
-def test_the_plugins_command_says_when_the_file_is_absent_and_nothing_is_loaded(
+def test_the_plugins_command_says_none_when_no_file_was_read_and_nothing_is_loaded(
     config_home, capsys
 ):
     assert main(["plugins"]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == "configuration: %s (absent)" % (
-        config_home / "pktcap" / "pktcap.ini"
-    )
+    assert lines[0] == "configuration: none"
     assert lines[1] == "plugins: none"
 
 
@@ -243,7 +251,7 @@ def test_the_plugins_command_names_the_file_when_it_is_there(
     mod = plugin_module()
     path = config_home / "pktcap" / "pktcap.ini"
     path.parent.mkdir()
-    path.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
+    path.write_text("[DEFAULT]\nload = %s\n" % mod.name, encoding="utf-8")
     assert main(["plugins"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "configuration: %s" % path
@@ -275,7 +283,7 @@ def test_the_plugins_command_prints_json(plugin_module, capsys):
         }
     ]
     assert "demo.opcode" in report["keys"] and "ipv4.ttl" in report["keys"]
-    assert main(["plugins", "--json", "-c", "none"]) == 0
+    assert main(["plugins", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["configuration"] is None
 
 
@@ -290,19 +298,11 @@ def test_the_tools_served_are_convert_and_plugins():
 
 
 @pytest.mark.parametrize("command", ["pktcap.convert", "pktcap.plugins"])
-@pytest.mark.parametrize(
-    "field, value",
-    [("plugins", ["NAME"]), ("plugin_config", "FILE")],
-    ids=["plugins", "plugin_config"],
-)
-def test_a_tool_call_that_names_plugins_or_a_file_is_refused_and_imports_nothing(
-    command, field, value, trace, plugin_module, tmp_path
+def test_a_tool_call_that_names_plugins_is_refused_and_imports_nothing(
+    command, trace, plugin_module
 ):
     mod = plugin_module()
-    named = tmp_path / "named.ini"
-    named.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
-    value = [mod.name] if field == "plugins" else str(named)
-    arguments = {field: value}
+    arguments = {"load": [mod.name]}
     if command == "pktcap.convert":
         arguments["input"] = str(trace)
     result = call_tool(Pktcap, command, arguments)
@@ -363,7 +363,7 @@ def test_the_real_server_answers_a_filter_with_the_servers_variable(
             "method": "tools/call",
             "params": {
                 "name": "pktcap.convert",
-                "arguments": {"input": str(trace), "plugins": [mod.name]},
+                "arguments": {"input": str(trace), "load": [mod.name]},
             },
         },
     ]

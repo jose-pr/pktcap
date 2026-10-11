@@ -23,8 +23,9 @@ from pktcap import (
     default_registry,
     frame_filter_for,
     frame_filter_keys,
+    load_plugins,
 )
-from pktcap.cli._legacy import load_configured as load_plugins
+from pktcap._plugins._load import load_named
 
 
 def state(registry):
@@ -39,28 +40,25 @@ def state(registry):
 # -- the done-when of the plan -------------------------------------------------
 
 
-def test_the_variable_names_a_module_and_its_hook_registers_into_the_registry(
-    plugin_module, monkeypatch
+def test_a_list_names_a_module_and_its_hook_registers_into_the_registry(
+    plugin_module,
 ):
     mod = plugin_module()
     before = default_registry().selectors()
-    monkeypatch.setenv("PKTCAP_LOAD", mod.name)
     registry = DissectorRegistry()
-    result = load_plugins(registry, None)
-    assert result == (
-        LoadedPlugin(mod.name, "PKTCAP_LOAD", (("udp", 9999),), ("demo",)),
-    )
+    result = load_plugins(registry, mod.name)
+    assert result == (LoadedPlugin(mod.name, "argument", (("udp", 9999),), ("demo",)),)
     assert registry.get("udp", 9999) is not None
     assert default_registry().selectors() == before
     assert default_registry().layers() == {}
 
 
-def test_the_file_gives_its_path_as_the_source(plugin_module, tmp_path, monkeypatch):
+def test_a_command_line_names_the_source_of_the_list_it_gives(plugin_module):
     mod = plugin_module()
-    ini = tmp_path / "named.ini"
-    ini.write_text("[pktcap]\nload = %s\n" % mod.name, encoding="utf-8")
-    (only,) = load_plugins(DissectorRegistry(), config=ini)
-    assert only.source == str(ini) and only.selectors == (("udp", 9999),)
+    (only,) = load_named(DissectorRegistry(), mod.name, "/etc/pktcap.ini")
+    assert only.source == "/etc/pktcap.ini" and only.selectors == (("udp", 9999),)
+    with pytest.raises(CapturePluginError, match="/etc/pktcap.ini names 'a-b'"):
+        load_named(DissectorRegistry(), "a-b", "/etc/pktcap.ini")
 
 
 def test_a_loaded_plugins_keys_and_dissector_work_in_a_filter(plugin_module):
@@ -223,10 +221,9 @@ def test_no_module_of_that_name(plugin_module):
             load_plugins(registry, item)
 
 
-def test_the_text_names_the_variable_as_the_source(monkeypatch):
-    monkeypatch.setenv("PKTCAP_LOAD", "pydemo.captur")
+def test_the_text_names_the_variable_as_the_source():
     with pytest.raises(CapturePluginError) as caught:
-        load_plugins(DissectorRegistry())
+        load_named(DissectorRegistry(), "pydemo.captur", "PKTCAP_LOAD")
     assert (
         str(caught.value) == "PKTCAP_LOAD names 'pydemo.captur': no module of that name"
     )
@@ -521,11 +518,8 @@ def test_the_items_of_always_load_first_and_then_the_users_list(plugin_module):
     assert registry.get("udp", 9998) is not None
 
 
-def test_always_loads_when_the_user_asks_for_no_plugin_at_all(
-    plugin_module, monkeypatch
-):
+def test_always_loads_when_the_user_asks_for_no_plugin_at_all(plugin_module):
     mod = plugin_module()
-    monkeypatch.setenv("PKTCAP_LOAD", "none")
     registry = DissectorRegistry()
     assert [p.name for p in load_plugins(registry, always=[mod.name])] == [mod.name]
     assert registry.get("udp", 9999) is not None
@@ -534,28 +528,14 @@ def test_always_loads_when_the_user_asks_for_no_plugin_at_all(
     ] == [mod.name]
 
 
-def test_always_is_code_and_never_read_from_the_variable_or_the_file(
-    plugin_module, monkeypatch, tmp_path
-):
-    named, from_variable, from_file = (
-        plugin_module(),
-        plugin_module(OTHER),
-        plugin_module(CLAIMS_9999.replace("9999", "9997")),
-    )
-    ini = tmp_path / "named.ini"
-    ini.write_text("[pktcap]\nload = %s\n" % from_file.name, encoding="utf-8")
-    monkeypatch.setenv("PKTCAP_LOAD", from_variable.name)
-    result = load_plugins(DissectorRegistry(), always=[named.name])
-    assert [(p.name, p.source) for p in result] == [
-        (named.name, "always"),
-        (from_variable.name, "PKTCAP_LOAD"),
-    ]
-    monkeypatch.delenv("PKTCAP_LOAD")
-    result = load_plugins(DissectorRegistry(), config=ini, always=[named.name])
-    assert [(p.name, p.source) for p in result] == [
-        (named.name, "always"),
-        (from_file.name, str(ini)),
-    ]
+def test_always_loads_first_whatever_the_source_of_the_users_list(plugin_module):
+    named, listed = plugin_module(), plugin_module(OTHER)
+    for source in ("argument", "PKTCAP_LOAD", "/etc/pktcap.ini"):
+        result = load_named(DissectorRegistry(), listed.name, source, [named.name])
+        assert [(p.name, p.source) for p in result] == [
+            (named.name, "always"),
+            (listed.name, source),
+        ]
 
 
 def test_an_item_of_the_users_list_that_is_the_same_hook_is_skipped(plugin_module):

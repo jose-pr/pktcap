@@ -71,11 +71,15 @@ def _nothing_leaves_the_host(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_plugins_from_the_machine(monkeypatch):
-    """No test depends on the plugins, or the configuration file, of the machine
-    it runs on: a test that wants either sets them itself."""
-    monkeypatch.delenv("PKTCAP_LOAD", raising=False)
-    monkeypatch.setenv("PKTCAP_CONFIG", "none")
+def _no_settings_from_the_machine(monkeypatch, tmp_path_factory):
+    """No test depends on the plugins, or the settings file, of the machine it
+    runs on: the user's configuration directory is an empty one, and a test
+    that wants a variable or a file sets it itself."""
+    for name in ("PKTCAP_LOAD", "PKTCAP_CONFIG", "PKTCAP_MCP"):
+        monkeypatch.delenv(name, raising=False)
+    empty = tmp_path_factory.mktemp("no-config")
+    monkeypatch.setenv("APPDATA", str(empty))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(empty))
 
 
 _PLUGIN_BODY = """\

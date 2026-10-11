@@ -3,8 +3,8 @@
 The default file is ``pktcap/pktcap.ini`` under the user's configuration
 directory. It is found by this module alone and checked before it is read; a
 file the user names (``--config``, ``PKTCAP_CONFIG``) is theirs and is read as
-it is. This and :mod:`._legacy` are the modules of the command line that read
-the process environment, and only when asked, never at import.
+it is. This is the one module of the command line that reads the process
+environment, and only when asked, never at import.
 """
 
 from __future__ import annotations
@@ -12,9 +12,20 @@ from __future__ import annotations
 import os
 import pathlib
 import stat
-from typing import List, Optional
+from typing import Container, Dict, List, Optional, Sequence
 
-__all__ = ["SettingsError", "default_path", "read_octets"]
+__all__ = [
+    "SettingsError",
+    "check_variable",
+    "choose_default",
+    "default_path",
+    "file_read",
+    "forget",
+    "is_default",
+    "names_a_file",
+    "note_read",
+    "read_octets",
+]
 
 #: The most octets read from a settings file.
 MAX_OCTETS = 65536
@@ -117,3 +128,70 @@ def read_octets(path: pathlib.Path, named: bool) -> Optional[bytes]:
     if total > MAX_OCTETS:
         raise SettingsError(str(path), None, "over %d octets" % MAX_OCTETS)
     return b"".join(chunks)
+
+
+# -- the run -------------------------------------------------------------------
+
+#: What this run set as the root's default file, and the file the root read.
+_state: Dict[str, Optional[str]] = {"default": None, "read": None}
+
+
+def check_variable() -> None:
+    """``PKTCAP_CONFIG`` must be an absolute path: a variable outlives the
+    directory it was set in."""
+    text = os.environ.get("PKTCAP_CONFIG", "").strip()
+    if text and not os.path.isabs(text):
+        raise SettingsError(
+            None,
+            None,
+            "PKTCAP_CONFIG must be an absolute path: a variable outlives the "
+            "directory it was set in",
+        )
+
+
+def names_a_file(tokens: Sequence[str], commands: Container[str]) -> bool:
+    """Whether the user names the settings file: ``PKTCAP_CONFIG``, or
+    ``-c``/``--config`` (or an abbreviation of it) before the command's name.
+    A false answer leaves the user's own file in force, checked."""
+    if os.environ.get("PKTCAP_CONFIG", "").strip():
+        return True
+    for token in tokens:
+        if token == "--" or token in commands:
+            return False
+        if token.startswith("--c") or token.startswith("-c"):
+            return True
+    return False
+
+
+def choose_default(tokens: Sequence[str], commands: Container[str]) -> Optional[str]:
+    """The user's own file as the root's default for this run, or ``None``: a
+    served tree is given no settings file (``PKTCAP_MCP``), and a file the
+    user names makes the default moot. Remembered, so the loader knows which
+    file to check."""
+    _state["read"] = None
+    _state["default"] = None
+    if os.environ.get("PKTCAP_MCP", "").strip() or names_a_file(tokens, commands):
+        return None
+    path = default_path()
+    if path is not None:
+        _state["default"] = str(path)
+    return _state["default"]
+
+
+def forget() -> None:
+    """End the run's state: no default file, no file read."""
+    _state["default"] = _state["read"] = None
+
+
+def is_default(path: pathlib.Path) -> bool:
+    """Whether ``path`` is the file :func:`choose_default` set."""
+    return _state["default"] is not None and str(path) == _state["default"]
+
+
+def note_read(path: pathlib.Path) -> None:
+    _state["read"] = str(path)
+
+
+def file_read() -> Optional[str]:
+    """The settings file the root read in this run, or ``None``."""
+    return _state["read"]

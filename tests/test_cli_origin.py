@@ -2,9 +2,10 @@
 
 A library that serves the commands from a root of its own can give the root a
 settings file or a variable, and duho applies those to every declared field.
-A hook command and a plugin list run code, so they come from the command line
-alone unless a subclass says more (``Capture._hook_from_``), and the plugin list
-never comes from a root's layers.
+A hook command and a plugin list run code, so each class says which layers it
+takes them from: a hook from the command line alone unless it says more
+(``Capture._hook_from_``), a plugin list from the argument, the variable and
+the file unless it narrows ``Loading._load_from_``.
 """
 
 from typing import Annotated, Optional
@@ -46,6 +47,13 @@ def outcome(root, argv):
     return (0 if status is None else status), ""
 
 
+class Narrow(Capture):
+    """A command that takes its plugin list from the command line alone."""
+
+    _parsername_ = "capture"
+    _load_from_ = ("argument",)
+
+
 def root_of(command, config=None):
     attributes = {"_parsername_": "root", "_subcommands_": [command]}
     if config is not None:
@@ -65,7 +73,7 @@ def settings(tmp_path, hook, plugin, *, hook_line=True, plugin_line=True):
     if hook_line:
         lines.append('hook = "%s:ran"' % hook.name)
     if plugin_line:
-        lines.append('plugins = ["%s"]' % plugin.name)
+        lines.append('load = ["%s"]' % plugin.name)
     path = tmp_path / "root-settings.toml"
     path.write_bytes(("\n".join(lines) + "\n").encode("ascii"))
     return path
@@ -83,22 +91,35 @@ def test_a_hook_from_a_roots_settings_file_is_refused_before_anything_is_bound(
     assert "listening on" not in caplog.text
 
 
-def test_a_plugin_list_from_a_roots_settings_file_is_refused_and_not_imported(
+def test_a_plugin_list_from_a_roots_settings_file_is_refused_by_a_class_that_narrows_it(
     modules, tmp_path
 ):
     hook, plugin = modules
-    root = root_of(Capture, settings(tmp_path, hook, plugin, hook_line=False))
+    root = root_of(Narrow, settings(tmp_path, hook, plugin, hook_line=False))
     status, line = outcome(root, LISTEN + SHORT)
     assert status == 2
-    assert "--load" in line and "PKTCAP_LOAD" in line and "file" in line
+    assert "--load" in line and "file" in line and "argument" in line
     assert (
         not plugin.imported and not (plugin.directory / "plugin-imported.txt").exists()
     )
 
 
+def test_a_plugin_list_from_a_roots_settings_file_is_taken_by_the_default(
+    modules, tmp_path
+):
+    hook, plugin = modules
+    assert Capture._load_from_ == ("argument", "environment", "file")
+    root = root_of(Capture, settings(tmp_path, hook, plugin, hook_line=False))
+    assert outcome(root, ["capture", "--listen", "127.0.0.1:0", "--count", "0"]) == (
+        0,
+        "",
+    )
+    assert (plugin.directory / "plugin-imported.txt").exists()
+
+
 def test_the_reviewers_root_runs_neither_and_names_the_layer(modules, tmp_path):
     hook, plugin = modules
-    root = root_of(Capture, settings(tmp_path, hook, plugin))
+    root = root_of(Narrow, settings(tmp_path, hook, plugin))
     status, line = outcome(root, LISTEN + SHORT)
     assert status == 2 and "file" in line
     assert not (hook.directory / "hook-ran.txt").exists()
@@ -106,15 +127,17 @@ def test_the_reviewers_root_runs_neither_and_names_the_layer(modules, tmp_path):
 
 
 class FromVariable(Capture):
-    """A command with a variable of its own for the hook and the plugin list."""
+    """A command with a variable of its own for the hook and the plugin list,
+    that takes the list from the argument and the file alone."""
 
     _parsername_ = "capture"
+    _load_from_ = ("argument", "file")
 
     hook: Annotated[Optional[str], Meta(env="ORIGIN_TEST_HOOK")] = None
     "the hook, from a variable too"
     ("--hook",)
 
-    plugins: Annotated[Optional[list], Meta(env="ORIGIN_TEST_PLUGINS")] = None
+    load: Annotated[Optional[list], Meta(env="ORIGIN_TEST_PLUGINS")] = None
     "the plugins, from a variable too"
     ("--load",)
 
@@ -137,10 +160,12 @@ def test_a_plugin_list_from_a_variable_a_root_reads_is_refused(modules, monkeypa
 
 
 class FromFile(Capture):
-    """A library that has a settings file the user names and says so."""
+    """A library that has a settings file the user names and says so, for the
+    hook and not for the plugin list."""
 
     _parsername_ = "capture"
     _hook_from_ = ("argument", "file")
+    _load_from_ = ("argument",)
 
 
 def test_a_subclass_can_take_the_hook_from_a_file_and_still_not_the_plugins(

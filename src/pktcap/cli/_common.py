@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from typing import (
+    Annotated,
     Callable,
     ClassVar,
     Iterable,
@@ -13,14 +14,15 @@ from typing import (
     Tuple,
 )
 
-from duho import Cmd, LoggingArgs, value_sources
+from duho import Cmd, LoggingArgs, Meta, value_sources
 
 from .._dissect import DissectedFrame
 from .._dissectors import DissectorRegistry
 from .._filter import compile_capture_filter
 from .._frame_filter import frame_filter_for
-from .._plugins._load import LoadedPlugin
-from ._legacy import load_configured
+from .._plugins._config import PLUGINS_ARGUMENT
+from .._plugins._load import LoadedPlugin, load_named
+from ._settings import file_read
 
 __all__ = ["Counted", "Loading", "Selecting", "error"]
 
@@ -66,14 +68,14 @@ class Loading(LoggingArgs, Cmd):
     #: Plugins this command always loads, before the user's list: dotted names
     #: as ``--load`` takes them. Code's, never read from an argument.
     _plugins_: ClassVar[Tuple[str, ...]] = ()
+    #: The layers ``--load`` may come from: ``"argument"``, ``"environment"``
+    #: (``PKTCAP_LOAD``) and ``"file"`` (the settings file the root read). A
+    #: list is code a module will run, so a class names the layers it trusts.
+    _load_from_: ClassVar[Tuple[str, ...]] = ("argument", "environment", "file")
 
-    plugins: Optional[List[str]] = None
-    "Plugins to load, each a dotted module name or MODULE.CALLABLE; repeat the option, or separate by , ; : or space; none for no plugin. Omitted: PKTCAP_LOAD, then the configuration file, then none. A tool call cannot name it"
+    load: Annotated[Optional[List[str]], Meta(env="PKTCAP_LOAD")] = None
+    "Plugins to load, each a dotted module name or MODULE.CALLABLE; repeat the option, or separate by , ; : or space; none for no plugin. Omitted: PKTCAP_LOAD, then the settings file, then none. A tool call cannot name it"
     ("--load",)
-
-    plugin_config: Optional[str] = None
-    "The configuration file whose load key lists the plugins, read as it is; none for no file. Omitted: PKTCAP_CONFIG, then the user's own pktcap/pktcap.ini if there is one. A tool call cannot name it"
-    ("--config", "-c")
 
     def served(self) -> bool:
         """Whether this is a tool call: duho runs one with standard output
@@ -82,9 +84,9 @@ class Loading(LoggingArgs, Cmd):
 
     def _origin(self, field: str) -> str:
         """Where the value of a field came from, by duho's record of the
-        layers: ``"environment"`` (a variable a root reads), ``"file"`` (a
-        settings file a root reads) or ``"argument"``, which also covers a
-        value the class or the code that built the command gave."""
+        layers: ``"environment"`` (a variable), ``"file"`` (the settings file
+        the root read) or ``"argument"``, which also covers a value the class
+        or the code that built the command gave."""
         layer = value_sources(self).get(field)
         return {"env": "environment", "config": "file"}.get(layer or "", "argument")
 
@@ -97,37 +99,34 @@ class Loading(LoggingArgs, Cmd):
                 "command takes it from: %s" % (field, layer, ", ".join(layers))
             )
 
+    def _list_source(self) -> str:
+        """How the list names where it came from: ``argument``, the variable's
+        name, or the settings file's path."""
+        layer = self._origin("load")
+        if layer == "environment":
+            return str(next(b.env for b in type(self)._getargs_() if b.name == "load"))
+        if layer == "file":
+            return file_read() or "file"
+        return PLUGINS_ARGUMENT
+
     def _registry(self) -> DissectorRegistry:
         """A registry of this run's own, with the plugins loaded into it:
         ``_plugins_`` first, then the user's list.
 
         A tool call's arguments may come from text a capture held, so a tool
-        call names no plugin and no file: the server's own variable and the
-        user's own file decide. A root's own settings file or variable is no
-        more the user's than a tool call is, so a list that reached the field
-        from one is refused too.
+        call names no list: the server's own variable decides. A list from a
+        layer ``_load_from_`` does not name is refused before anything is
+        imported.
         """
-        for field in ("plugins", "plugin_config"):
-            layer = self._origin(field)
-            if getattr(self, field) is not None and layer != "argument":
+        if self.load is not None:
+            if self.served() and self._origin("load") == "argument":
                 raise ValueError(
-                    "%s was set from the %s layer of a root's configuration: the "
-                    "plugin list comes from --load, PKTCAP_LOAD or pktcap's own "
-                    "file" % (field, layer)
+                    "a tool call cannot name plugins: the server's PKTCAP_LOAD decides"
                 )
-        if self.served() and (
-            self.plugins is not None or self.plugin_config is not None
-        ):
-            raise ValueError(
-                "a tool call cannot name plugins or a configuration file: the "
-                "server's PKTCAP_LOAD and the user's own file decide"
-            )
+            self._taken_from("load", self._load_from_)
         registry = DissectorRegistry()
-        self.loaded: Tuple[LoadedPlugin, ...] = load_configured(
-            registry,
-            self.plugins,
-            config=self.plugin_config,
-            always=self._plugins_,
+        self.loaded: Tuple[LoadedPlugin, ...] = load_named(
+            registry, self.load, self._list_source(), self._plugins_
         )
         return registry
 

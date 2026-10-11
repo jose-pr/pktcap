@@ -39,22 +39,14 @@ returns the status and does not call `sys.exit`.
   `pktcap plugins` lists them all. Omitted: every frame. A bad expression is
   status 2, before anything is read.
 - **`--load NAME`** (every command; repeat it, or separate names by `,` `;`
-  `:` or space; `none` for none) and **`--config`/`-c FILE`** (the field
-  `plugin_config`; `none` for no file): the plugins to load, each a dotted module name with a
-  `pktcap_plugin(registry)` function or `MODULE.CALLABLE`. They are loaded
-  into a registry of the command's own, before the filter is compiled and
-  before anything is opened. The first of the option, the variable
-  `PKTCAP_LOAD` and the `load` key of the configuration file is the list; where
-  the file is and what it must be are in `_plugins/AGENTS.md`. A file you name
-  is read as it is, so a capture run as root names the user's file:
-  `sudo pktcap capture --config ~/.config/pktcap/pktcap.ini`. A plugin that
-  cannot be loaded, or a malformed file, is status 2 and one line naming it;
-  a named file that does not exist is status 1. **A tool call cannot name
-  either option**: they are refused, since a program serving the tool may have
-  just read a capture's text, and the server's own variable and file decide.
-  **A root's own settings file or variable cannot supply them either**: such a
-  value is status 2 naming the layer (`--load`, `PKTCAP_LOAD` or pktcap's own
-  file are the sources).
+  `:` or space; `none` for none): the plugins to load, each a dotted module name
+  with a `pktcap_plugin(registry)` function or `MODULE.CALLABLE`, into a
+  registry of the command's own, before the filter is compiled and before
+  anything is opened. The first of the option, `PKTCAP_LOAD` and the `load` of
+  the settings file is the list. A plugin that cannot be loaded is status 2 and
+  one line naming it. **A tool call cannot name it**: a program serving the
+  tool may have just read a capture's text, and the server's own variable
+  decides.
 - **Output and statuses.** What a command produces goes to standard output or
   to `--output`; its one-line summary and every diagnostic go to standard
   error, because standard output may be a capture. Every failure is one line,
@@ -70,6 +62,51 @@ returns the status and does not call `sys.exit`.
   command: a frame larger than the reader's ceiling, the reassembly limits and
   `--max-files` apply as they do to a program, and the commands keep no state
   of their own that a file could grow.
+
+## The settings file
+
+The root takes it, before the command's name (`pktcap -c FILE convert ...`; after
+it is the parser's own error): `--config`/`-c FILE`, else `PKTCAP_CONFIG` (an
+absolute path), else the user's own `pktcap/pktcap.ini` under `$XDG_CONFIG_HOME`
+(else `~/.config`) on Linux, macOS and the BSDs and `%APPDATA%` on Windows, which
+may be absent. It is duho's layout, read by `duho.config` in the format its name
+says (`.ini`/`.cfg`, `.toml`, `.json`, `.yaml`/`.yml`; TOML before Python 3.11 and
+YAML need duho's `config` and `yaml` extras; another name is refused): top-level
+keys for the root's options (`verbose`), a table for each command with the
+command's field names as keys. In INI the keys of `[DEFAULT]` are the top level:
+
+```ini
+[DEFAULT]
+load = pydhcp.capture.register_dhcp_dissector, tftp.capture.register_tftp_dissector
+
+[convert]
+format = text
+per_record = true
+```
+
+```toml
+load = ["pydhcp.capture.register_dhcp_dissector", "tftp.capture.register_tftp_dissector"]
+
+[convert]
+format = "text"
+per_record = true
+```
+
+- **Order**, nearest first: the argument, the variable the field declares
+  (`PKTCAP_LOAD`, for `load` alone), the file, the default; a higher layer
+  replaces a lower for that option only, so lists do not add up. A top-level
+  `load` is the list of every command whose table names none.
+- **Refused**, status 2, one line naming the file and the key and never text of
+  it: a key or table nobody has, a `config` key, a `[pktcap]` table (`load` goes
+  at the top level), a table that is no table, an invalid document, a file over
+  65,536 octets. A named file that does not exist is status 2 from `--config`
+  and 1 from the variable.
+- **Trust.** A list and a hook run code: `Loading._load_from_` and
+  `Capture._hook_from_` name the layers each may come from. The file found by
+  default must be yours or root's and not writable by everyone (POSIX); a file
+  you name is read as it is: as root, `sudo pktcap -c ~/.config/pktcap/pktcap.ini capture`.
+- **A served tree** (`PKTCAP_MCP`) is given no settings file, and a tool call
+  that names `config` reads none, nor names a `load` or a `hook`.
 
 ## Writing options
 
@@ -146,30 +183,12 @@ with no privilege.
 - `--interface NAME`: a name, an address or a MAC. Omitted: every interface.
 - `--listen SPEC` (repeatable, and excludes `--interface`, status 2): capture
   the datagrams that arrive at sockets the command binds, read with
-  `netimps.parse_listen` before anything is opened: `HOST:PORT`, `[V6]:PORT`,
-  `*:PORT` or `:PORT`, an adapter name or a MAC, several joined by commas. A
-  value with no port gets the command's `_default_port_`, and with none is
-  refused (status 2, netimps' message). A taken port is status 1, one line
-  `cannot listen on SPEC: ...`. `listening on HOST:PORT` is logged at INFO for
-  each socket, shown unless `-q`, the way to learn a port 0. What it sees and does not (a made-up IP
-  header, no other host's traffic) and that it holds the port are in
-  `_sources/AGENTS.md`. A datagram that arrives on an interface a limited
-  socket does not serve is counted in the summary as `N not admitted`; one
-  over 65,535 octets as `N over the size limit`.
+  `netimps.parse_listen`; the grammar, the ports and the counts are in
+  `_sources/AGENTS.md`.
 - `--hook COMMAND`: run a program for each record written, with the record on
-  standard input in the format the writer writes (JSON for a capture format or
-  `text`) and the values `_names` gives as `PKTCAP_HOOK_<FIELD>`; how a program
-  is found, run and ended is `command_hook`'s (`_copy/AGENTS.md`). **Or
-  `MODULE:FUNCTION`**, imported as written with nothing added to `sys.path` and
-  called with each `DissectedFrame`: `--hook-timeout` does not bound a
-  function, and its failures are logged at the rate a program's are. On Windows
-  `C:hook.exe` is a program. The command comes from the command line alone
-  (never a tool call or a capture); a value a root's settings file or variable
-  put in the field is status 2 naming the layer, unless the class lists it in
-  `Capture._hook_from_`. `--hook-timeout SECONDS` (default 10) kills the
-  program and what it started; a failure is counted (`N hook failures` in the
-  summary) and logged, and `--hook-fail-fast` ends the capture at the first one
-  with status 1. A hook that cannot be found is status 2 before anything is bound.
+  standard input, or `MODULE:FUNCTION`; `--hook-timeout SECONDS` (default 10)
+  and `--hook-fail-fast`; all in `_copy/AGENTS.md`. It comes from the command
+  line alone (never a tool call or a capture) unless `Capture._hook_from_` says.
 - `--count N`: stop once N records are written. Omitted: until stopped.
 - `--duration SECONDS`/`-d`: stop after that long, within a second of it. Omitted:
   until stopped.
@@ -181,39 +200,18 @@ with no privilege.
 
 ## `pktcap plugins`
 
-`pktcap plugins [--load LIST] [--config FILE] [--layer NAME] [--json]`
+`pktcap plugins [--load LIST] [--layer NAME] [--json]`
 
-Loads the plugins exactly as the other commands do and shows them. Standard
-output is:
-
-```text
-configuration: PATH (absent)
-plugins: 2 from SOURCE
-  NAME: udp 67, udp 68; layer dhcp
-keys: dport, dst, host, linktype, ...
-layers: dhcp, ethernet, ipv4, ...
-```
-
-- `configuration` is the file that applies, `none` when there is none, and
-  ` (absent)` when it does not exist. `plugins` says how many were loaded and
-  where the list came from (`argument`, `PKTCAP_LOAD`, the file's path), or
-  `plugins: none`; each plugin has a line with the selectors it registered a
-  dissector under and the layers it declared. `keys` are the bare filter
-  keys: the nine built-in ones and each registered key that one layer has.
-  `layers` are the names a filter may put before a dot.
-- `--layer NAME`: print only that layer's keys, one per line
-  (`ipv4.ttl`, `demo.opcode`), which are `LAYER.FIELD` and `LAYER.KEY` of a
-  filter. A name that is no layer is status 2 listing the layers.
-- `--json`: one object, `{"configuration": PATH-or-null, "plugins": [{"name",
-  "source", "selectors", "layers"}], "keys": [every filter key that compiles]}`.
+Loads the plugins exactly as the other commands do and shows them: the settings
+file the root read (`none` when it read none), where the list came from, each
+plugin with what it registered, every filter key and layer. The output, the
+options `--layer` and `--json` and the JSON object are in `_plugins/AGENTS.md`.
 
 ## Environment
 
-- **`PKTCAP_LOAD`** and **`PKTCAP_CONFIG`** are what `--load` and
-  `--config` fall back to, in that order and then the user's own file: the
-  plugins to load, and the configuration file (an absolute path, or `none`).
-  `XDG_CONFIG_HOME` (POSIX) and `APPDATA` (Windows) say where the user's own
-  file is.
+- **`PKTCAP_LOAD`** is the `--load` option's variable and **`PKTCAP_CONFIG`**
+  the root's (an absolute path). `XDG_CONFIG_HOME` (POSIX) and `APPDATA`
+  (Windows) say where the user's own settings file is.
 - **`PKTCAP_MCP=stdio`** serves the command line as tools over standard input
   and output (JSON-RPC, the MCP protocol) instead of running a command.
   **`convert`** is served as the tool `pktcap.convert` with the options above
@@ -221,10 +219,10 @@ layers: dhcp, ethernet, ipv4, ...
   **`plugins`** as `pktcap.plugins`, which only reads. The records come back as
   the tool's result; a capture format cannot be returned as text, so `format`
   `pcap` or `pcapng` needs an `output` file, and an `input` of `-` is refused.
-  A tool call that names `plugins`, `plugin_config` or `append` is refused
-  (status 2, naming `PKTCAP_LOAD` for the first two). `capture` runs until stopped and binds ports or needs a privilege, and
-  `replay` puts datagrams on a network: neither is served, and a subclass that
-  serves `capture` is refused a `hook` in a tool call.
+  A tool call that names `load` or `append` is refused (status 2, naming
+  `PKTCAP_LOAD` for the first). `capture` runs until stopped and binds ports or
+  needs a privilege, and `replay` puts datagrams on a network: neither is
+  served, and a subclass that serves `capture` is refused a `hook` in a call.
 - `AGENT_HELP=1` makes `--help` print one JSON document describing every
   command; `NO_COLOR` and `FORCE_COLOR` decide the colour of the help and the
   log.
@@ -241,11 +239,11 @@ beginning with `_` is promised.
 
 | Class | Options it declares | Class attributes |
 | --- | --- | --- |
-| `Loading(LoggingArgs, Cmd)` | `--load` (`plugins`), `--config`/`-c` (`plugin_config`) | `_plugins_ = ()`: dotted plugin names always loaded, first, source `always`; code's, never read from input |
+| `Loading(LoggingArgs, Cmd)` | `--load` (`load`) | `_plugins_ = ()`: dotted plugin names always loaded, first, source `always`; code's, never read from input. `_load_from_ = ("argument", "environment", "file")`: the layers `--load` may come from |
 | `Selecting(Loading)` | `--filter`/`-f` | `_filter_ = None`: own clauses, ANDed with `--filter` |
 | `Writing(Selecting)` | `--output`, `--format`, `--per-record`, `--max-files`, `--datagrams`, `--append` | `_fields_ = ()` file-name fields beyond `timestamp`, `index`, `format`; `_interruptible_ = False`; `_format_ = None` |
 | `Convert(Writing)` | `--input`/`-i`, `--limit` | |
-| `Capture(Writing)` | `--interface`, `--listen`, `--count`, `--duration`/`-d`, `--hook`, `--hook-fail-fast`, `--hook-timeout`; `_interruptible_ = True` | `_default_port_ = None` (`None`, an `int` or a tuple of them); `_hook_from_ = ("argument",)`: the layers `--hook` may come from, of `"argument"`, `"environment"`, `"file"` |
+| `Capture(Writing)` | `--interface`, `--listen`, `--count`, `--duration`/`-d`, `--hook`, `--hook-fail-fast`, `--hook-timeout`; `_interruptible_ = True` | `_default_port_ = None` (`None`, an `int` or a tuple of them); `_hook_from_ = ("argument",)`: the layers `--hook` may come from, as `_load_from_` |
 | `Replay(Selecting)` | `--input`/`-i`, `--to`, `--speed`, `--no-delay`, `--max-delay`, `--limit`, `--source-port`, `--broadcast`, `--json` | `_default_port_ = None` (an `int` or `None`) |
 | `Plugins(Loading)` | `--layer`, `--json` | |
 
@@ -271,19 +269,21 @@ wants a listing sets `"text"`. Methods, with when each is called:
 
 **What a subclass must do that a thin wrapper would not:**
 
-- A foreign base with a field of the same name wins silently if it comes first
-  in the bases (`duho` keeps the first). With a `--config` of its own the
-  parser fails to build (`conflicting option string`) until the subclass
-  redeclares `plugin_config` under a flag of its own (`("--pktcap-config",)`);
+- **No command class has a configuration option**, so a foreign base with a
+  `--config` of its own meets no clash. A program that subclasses a command
+  names its settings file on **its own root**, and that file's table for the
+  command (`[convert]`) sets the inherited options, `load` among them unless
+  the subclass narrows `_load_from_`. A foreign base with a field of the same
+  name wins silently if it comes first in the bases (`duho` keeps the first);
   redeclaring `--listen` drops the exclusion with `--interface`, which it must
   restate (`Meta(conflicts=...)`) if it wants it.
 - A root that serves the subclass maps `MissingExtraError` (an `ImportError`)
   and `CaptureHookError` (an `OSError`) to status 1; `main`'s does.
 - A subclass that serves `Capture` as a tool (`_mcp_ = True`) is refused a
   `hook` in a tool call by the class; do not remove that. A root that has a
-  settings file or a variable for a field applies it to the inherited ones too;
-  `_hook_from_` is how a class says which of those it takes a hook from, and
-  the plugin list never comes from them.
+  settings file or a variable for a field applies it to the inherited ones too:
+  `_load_from_` and `_hook_from_` say which layers a class takes a list and a
+  hook from, and `Loading._origin(field)` names the layer a value came from.
 - `_names` runs for hooks as well as file names, so it must not raise on a
   frame the filter let through; `_filter_` is how it is guaranteed its layer.
 

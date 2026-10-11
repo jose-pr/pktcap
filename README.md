@@ -243,15 +243,21 @@ list is the list:
 ```bash not-run
 pktcap convert -i trace.pcap --load pydhcp.capture.register_dhcp_dissector,tftp.capture.register_tftp_dissector -f "proto=dhcp"
 PKTCAP_LOAD=pydhcp.capture.register_dhcp_dissector pktcap convert -i trace.pcap -f "proto=dhcp"
-pktcap plugins        # the file, what was loaded, every filter key there is
+pktcap plugins        # the settings file, what was loaded, every filter key there is
 ```
 
-The third is a file, `pktcap/pktcap.ini` under `$XDG_CONFIG_HOME` (else
-`~/.config`) on Linux, macOS and the BSDs and under `%APPDATA%` on Windows:
+The third is the settings file, `pktcap/pktcap.ini` under `$XDG_CONFIG_HOME`
+(else `~/.config`) on Linux, macOS and the BSDs and under `%APPDATA%` on
+Windows, or the file `pktcap --config FILE` (before the command's name) or
+`PKTCAP_CONFIG` names. A top-level `load` is the list of every command, and a
+table named for a command sets that command's options:
 
 ```ini
-[pktcap]
+[DEFAULT]
 load = pydhcp.capture.register_dhcp_dissector, tftp.capture.register_tftp_dissector
+
+[convert]
+format = text
 ```
 
 An item is a module with a `pktcap_plugin(registry)` function, or
@@ -280,13 +286,13 @@ def pktcap_plugin(registry: pktcap.DissectorRegistry) -> None:
 ```
 
 **Importing a module runs its code**, so a list is read from the option, the
-variable and that one file, and never from the working directory or a capture;
-a tool call cannot name plugins at all. The file found by default must be your
-own and not writable by everyone; a file you name with `--config` or
-`PKTCAP_CONFIG` is read as it is, so as root name yours:
+variable and the settings file, and never from the working directory or a
+capture; a tool call cannot name plugins at all. The file found by default
+must be your own and not writable by everyone; a file you name with `--config`
+or `PKTCAP_CONFIG` is read as it is, so as root name yours:
 
 ```bash not-run
-sudo pktcap capture --config ~/.config/pktcap/pktcap.ini -f "proto=dhcp" -o dhcp.pcapng
+sudo pktcap --config ~/.config/pktcap/pktcap.ini capture -f "proto=dhcp" -o dhcp.pcapng
 ```
 
 ## Differences from tshark
