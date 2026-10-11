@@ -12,14 +12,14 @@ import sys
 import pytest
 
 from pktcap import (
-    CaptureConfigError,
     CapturePluginError,
     DissectorRegistry,
     PktcapError,
-    capture_config_path,
     default_registry,
-    load_plugins,
 )
+from pktcap.cli._legacy import capture_config_path
+from pktcap.cli._legacy import load_configured as load_plugins
+from pktcap.cli._settings import SettingsError as CaptureConfigError
 
 IS_WINDOWS = os.name == "nt"
 
@@ -325,7 +325,7 @@ def test_a_malformed_file_is_one_error_with_the_path_and_the_line_and_no_text_of
     )
     assert SECRET not in str(error) and error.__cause__ is None
     assert error.__context__ is None or error.__suppress_context__
-    assert isinstance(error, PktcapError) and isinstance(error, ValueError)
+    assert isinstance(error, ValueError)
 
 
 def test_a_file_that_is_not_utf_8_is_refused_with_its_path_and_the_octet(home):
@@ -499,18 +499,11 @@ def test_a_default_file_the_user_owns_is_read(plugin_module, home):
 # -- the exceptions are values --------------------------------------------------
 
 
-def test_the_two_errors_keep_their_attributes_through_a_pickle():
+def test_the_plugin_error_keeps_its_attributes_through_a_pickle():
     plugin = CapturePluginError("x names 'a'", plugin="a", source="PKTCAP_LOAD")
     clone = pickle.loads(pickle.dumps(plugin))
     assert type(clone) is CapturePluginError and str(clone) == str(plugin)
     assert (clone.plugin, clone.source) == ("a", "PKTCAP_LOAD")
-    config = CaptureConfigError("p:2: bad", path="p", lineno=2)
-    clone = pickle.loads(pickle.dumps(config))
-    assert type(clone) is CaptureConfigError and str(clone) == "p:2: bad"
-    assert (clone.path, clone.lineno) == ("p", 2)
-    assert (
-        CaptureConfigError("m").path is None and CaptureConfigError("m").lineno is None
-    )
     with pytest.raises(TypeError):
         CapturePluginError("no data")  # type: ignore[call-arg]
 

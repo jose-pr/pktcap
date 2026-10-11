@@ -10,7 +10,6 @@ from importlib.metadata import version
 import pktcap
 
 EXPECTED = [
-    "CaptureConfigError",
     "CaptureFilterError",
     "CaptureFormatError",
     "CaptureHookError",
@@ -75,7 +74,6 @@ EXPECTED = [
     "frame_summary",
     "load_plugins",
     "loads_record",
-    "capture_config_path",
     "has_live_capture",
     "has_output_format",
     "parse_capture_filter",

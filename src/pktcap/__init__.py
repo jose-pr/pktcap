@@ -34,7 +34,6 @@ from ._dissectors import (
 )
 from ._dissectors._contract import Dissected, Dissector, Fragment, Selector
 from ._exceptions import (
-    CaptureConfigError,
     CaptureFilterError,
     CaptureFormatError,
     CaptureHookError,
@@ -74,7 +73,6 @@ from ._layers import (
 )
 from ._live import LiveCapture, has_live_capture, sniff, sniff_frames
 from ._output import CaptureWriter
-from ._plugins._config import capture_config_path
 from ._plugins._load import LoadedPlugin, load_plugins
 from ._records import datagram_record, frame_record
 from ._replay import ReplayResult, ReplaySource, replay, replay_schedule, replay_to
@@ -89,7 +87,6 @@ from ._summary import frame_summary
 from ._writer import PcapngWriter, PcapWriter, datagram_frame
 
 __all__ = [
-    "CaptureConfigError",
     "CaptureFilterError",
     "CaptureFormatError",
     "CaptureHookError",
@@ -154,7 +151,6 @@ __all__ = [
     "frame_summary",
     "load_plugins",
     "loads_record",
-    "capture_config_path",
     "has_live_capture",
     "has_output_format",
     "parse_capture_filter",

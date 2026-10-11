@@ -161,6 +161,8 @@ def test_the_plugin_section_runs_its_hook_and_marks_what_needs_a_library(
     (ini,) = re.findall(r"```ini\n(.*?)```", section, re.DOTALL)
     path = tmp_path / "pktcap.ini"
     path.write_text(ini, encoding="utf-8")
-    assert pktcap.load_plugins(pktcap.DissectorRegistry(), "none", config=path) == ()
+    from pktcap.cli._legacy import load_configured
+
+    assert load_configured(pktcap.DissectorRegistry(), "none", config=path) == ()
     assert "XDG_CONFIG_HOME" in section and "%APPDATA%" in section
     assert "runs its code" in section and "read as it is" in section

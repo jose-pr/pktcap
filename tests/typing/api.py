@@ -148,7 +148,7 @@ assert_type(pktcap.frame_filter_keys(), Tuple[str, ...])
 
 # -- plugins --------------------------------------------------------------
 
-loaded = pktcap.load_plugins(registry, "a.b", config="none")
+loaded = pktcap.load_plugins(registry, "a.b")
 assert_type(loaded, Tuple[pktcap.LoadedPlugin, ...])
 assert_type(pktcap.load_plugins(registry), Tuple[pktcap.LoadedPlugin, ...])
 assert_type(
@@ -162,8 +162,6 @@ for plugin in loaded:
     assert_type(plugin.source, str)
     assert_type(plugin.selectors, Tuple[pktcap.Selector, ...])
     assert_type(plugin.layers, Tuple[str, ...])
-assert_type(pktcap.capture_config_path(), Optional[pathlib.Path])
-assert_type(pktcap.capture_config_path(pathlib.Path("x.ini")), Optional[pathlib.Path])
 
 
 def hook(registry: pktcap.DissectorRegistry) -> None:
@@ -175,9 +173,6 @@ try:
 except pktcap.CapturePluginError as problem:
     assert_type(problem.plugin, str)
     assert_type(problem.source, str)
-except pktcap.CaptureConfigError as bad:
-    assert_type(bad.path, Optional[str])
-    assert_type(bad.lineno, Optional[int])
 
 
 class DemoLayer(NamedTuple):

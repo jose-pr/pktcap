@@ -19,7 +19,8 @@ from .._dissect import DissectedFrame
 from .._dissectors import DissectorRegistry
 from .._filter import compile_capture_filter
 from .._frame_filter import frame_filter_for
-from .._plugins._load import LoadedPlugin, load_plugins
+from .._plugins._load import LoadedPlugin
+from ._legacy import load_configured
 
 __all__ = ["Counted", "Loading", "Selecting", "error"]
 
@@ -122,7 +123,7 @@ class Loading(LoggingArgs, Cmd):
                 "server's PKTCAP_LOAD and the user's own file decide"
             )
         registry = DissectorRegistry()
-        self.loaded: Tuple[LoadedPlugin, ...] = load_plugins(
+        self.loaded: Tuple[LoadedPlugin, ...] = load_configured(
             registry,
             self.plugins,
             config=self.plugin_config,

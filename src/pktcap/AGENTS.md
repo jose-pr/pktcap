@@ -394,15 +394,13 @@ passive, and the detail is in `pktcap/_sources/AGENTS.md`.
 
 ## Plugins
 
-**`load_plugins(registry, plugins=None, *, config=None, always=()) -> Tuple[LoadedPlugin, ...]`**
+**`load_plugins(registry, plugins=None, *, always=()) -> Tuple[LoadedPlugin, ...]`**
 imports the modules a list names and calls each one's hook,
-`pktcap_plugin(registry)`, into `registry`. The list is the first of the
-argument, `PKTCAP_LOAD` and the user's configuration file that names one,
-read from those places alone, never from the working directory or a capture.
-`always` names plugins the caller's own code loads whatever the user listed.
-`capture_config_path(config=None)` is the file that applies. A plugin that fails
-is a `CapturePluginError` and leaves the registry as it was. More:
-`pktcap/_plugins/AGENTS.md`.
+`pktcap_plugin(registry)`, into `registry`. The list is `plugins`: the library
+reads no variable and no file, so a program passes a list only from a place it
+trusts. `always` names plugins the caller's own code loads whatever the user
+listed. A plugin that fails is a `CapturePluginError` and leaves the registry
+as it was. More: `pktcap/_plugins/AGENTS.md`.
 
 ## Command line
 
@@ -432,7 +430,6 @@ type) is a plain `ValueError` or `TypeError`, never a `PktcapError`.
 | `DissectError` | `PktcapError`, `ValueError` | raised **by a dissector** for octets that are not its layer. A caller of `FrameDissector` never sees it: it becomes the frame's `error` |
 | `LiveCaptureError` | `PktcapError`, `OSError` | a platform with no `AF_PACKET`, asked to capture live |
 | `CapturePluginError` | `PktcapError`, `ValueError` | a plugin the user named that cannot be loaded: `plugin` and `source` say which, and from where |
-| `CaptureConfigError` | `PktcapError`, `ValueError` | a configuration file, or `PKTCAP_CONFIG`, that is malformed or not trusted: `path` and `lineno` |
 | `CaptureHookError` | `PktcapError`, `OSError` | a hook command that failed or ran past its time limit, under `fail_fast`: `status` and `timed_out` |
 
 `MissingExtraError(message, *, format, extra)` has `format` (`"toml"`) and

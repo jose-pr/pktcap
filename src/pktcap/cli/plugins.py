@@ -9,8 +9,8 @@ from typing import List, Optional
 from .._dissectors import DissectorRegistry
 from .._frame_filter import frame_filter_keys
 from .._layers import BUILTIN_LAYERS
-from .._plugins._config import capture_config_path
 from ._common import Loading
+from ._legacy import capture_config_path
 
 __all__ = ["Plugins"]
 

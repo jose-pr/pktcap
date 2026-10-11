@@ -118,36 +118,36 @@ library's dissector and its layer's filter keys into a registry the caller
 owns. A user names the plugins to load; nothing is loaded because it is
 installed.
 
-**`load_plugins(registry, plugins=None, *, config=None, always=()) -> Tuple[LoadedPlugin, ...]`**
+**`load_plugins(registry, plugins=None, *, always=()) -> Tuple[LoadedPlugin, ...]`**
 — import the modules a list names and call each one's hook with `registry`.
 There is no default registry, so a run changes nothing outside the one it is
-given. Each result is a **`LoadedPlugin(name, source, selectors, layers)`**: the
-item as written, where the list came from (`"argument"`, `"PKTCAP_LOAD"`, the
-file's path, or `"always"`), the selectors its hook registered a dissector under and the
-names of the layers it declared. Each plugin loaded is logged at `INFO`.
+given. **The list is `plugins` and nothing else: the library reads no variable
+and no file.** Each result is a **`LoadedPlugin(name, source, selectors,
+layers)`**: the item as written, where the list came from (`"argument"` for
+the one given here, or what a command line names: a variable, a settings
+file's path; `"always"`), the selectors its hook registered a dissector under
+and the names of the layers it declared. Each plugin loaded is logged at
+`INFO`.
 
-- `plugins` is `None` (the list as configured, below), one text, or an
-  iterable of texts. Given, it is the list and neither the variable nor a
-  default file is read.
-- `config` is `None`, the path of a configuration file, or `none`. A file named
-  here is read and checked even when `plugins` names the list.
+- `plugins` is `None` (no plugin), one text, or an iterable of texts. Importing
+  a module runs its code, so a program passes a list only from a place it
+  trusts.
 - `always` is a text or an iterable of texts, written as `plugins`, for a
   command that needs its own protocol's plugin whatever the user listed. Its
   items load **first**, source `"always"`, and are checked as an argument is (a
-  mistake is a `ValueError`). **They come from the caller's code and never
-  from the variable or the file**, which still decide the user's list: with
-  `PKTCAP_LOAD=none` the `always` items load and nothing else does. An item of
-  the user's list that resolves to the same hook callable as one of `always`
-  (the module and `MODULE.pktcap_plugin` are one callable) is **skipped**, not
-  loaded twice and not an error, and is not in the result; a different callable
-  that claims a selector already taken is the `CapturePluginError` as ever. A
-  failure anywhere, `always` included, leaves the registry as it was.
+  mistake is a `ValueError`). An item of `plugins` that resolves to the same
+  hook callable as one of `always` (the module and `MODULE.pktcap_plugin` are
+  one callable) is **skipped**, not loaded twice and not an error, and is not
+  in the result; a different callable that claims a selector already taken is
+  the `CapturePluginError` as ever. A failure anywhere, `always` included,
+  leaves the registry as it was.
 - **An item is a dotted Python name**: ASCII identifiers joined by `.`, at
   most 255 characters, at most 64 items, none twice. Items are separated by
   `,` `;` `:` or white space, the same on every platform; `none` alone is the
   empty list. Anything else (a path, a relative name, `a-b`) is refused before
-  anything is imported: a plain `ValueError` for an argument, a
-  `CapturePluginError` for the variable and the file.
+  anything is imported: a plain `ValueError` for the argument, a
+  `CapturePluginError` for a list a command line took from a variable or a
+  file.
 - `pktcap_plugin(registry) -> None` is the hook of a module: the item names the
   module. When no module of that name exists, the item is `MODULE.CALLABLE`,
   any callable that takes the registry as its one positional argument and
@@ -162,45 +162,15 @@ names of the layers it declared. Each plugin loaded is logged at `INFO`.
   call**, whatever the earlier plugins had registered; modules already imported
   stay imported.
 
-**`capture_config_path(config=None) -> Optional[pathlib.Path]`** — the
-configuration file that applies, opening nothing: `config`, else
-`PKTCAP_CONFIG`, else the user's own. `None` for `none` and for a platform
-with no home.
+### Where a command line takes the list from
 
-### Where the list comes from
+Not the library: `pktcap.cli` resolves `--load`, the variable `PKTCAP_LOAD`
+and one settings file in that order, and gives the list to `load_plugins`. It
+is never read from the working directory, from a file found by walking up from
+it, or from a capture or anything a capture holds. The first source that names
+a list is the list: lists never add up, and a source below it is not opened.
+What each source is and what is refused is in `pktcap/cli/AGENTS.md`.
 
-**A module is imported because a string names it, which runs its code, so a
-list is read from exactly three places**: the argument, the variable
-`PKTCAP_LOAD`, and one configuration file. It is never read from the working
-directory, from a file found by walking up from it, or from a capture or
-anything a capture holds. The first of the three that names a list is the list:
-lists never add up, and a source below it is not opened. A command line adds
-no fourth: a list a program's own settings file or variable put in the
-`plugins` field of a command is refused (status 2), not read as the argument.
-
-**The configuration file** is `pktcap/pktcap.ini` under the user's
-configuration directory: `$XDG_CONFIG_HOME` (else `~/.config`) on Linux, macOS
-and the BSDs; `%APPDATA%` (else `~\AppData\Roaming`) on Windows. A relative
-`XDG_CONFIG_HOME` or `APPDATA` is ignored. `config` and `PKTCAP_CONFIG` name
-another file, which must exist (`FileNotFoundError`); `PKTCAP_CONFIG` must be
-absolute or `none`. The default file may be absent; an unreadable one is the
-`OSError`. **A file found by default must be the user's own, or root's, and not
-writable by everyone** (POSIX; a `CaptureConfigError` otherwise), so a capture
-run as root imports nothing another user wrote; **a file you name is read as it
-is**, whoever owns it.
-
-The dialect is INI: strict UTF-8 with one leading byte-order mark ignored, at
-most 65,536 octets, `#` and `;` comment lines (no inline comments), `=` the
-only delimiter, no interpolation, a value continued on indented lines, a
-duplicate section or key an error. One section, `[pktcap]`, one key,
-`load`; any other section, key or `[DEFAULT]` is an error naming it, and an
-empty value is unset. A malformed file is a **`CaptureConfigError`**
-(`path`, `lineno`; a `PktcapError` and a `ValueError`) whose message is
-`PATH:LINE: problem` and never holds a line of the file; `lineno` is `None`
-for an unknown section or key, which the parser keeps no line for.
-
-### Environment variables
-
-`PKTCAP_LOAD` is the list, `PKTCAP_CONFIG` the file; empty means unset.
-Both are read when a list is asked for and never at import, in one module.
-`import pktcap` reads no variable and imports no plugin.
+`import pktcap` reads no variable and imports no plugin; the one variable the
+library reads is the copy of the environment a hook command's process starts
+from.

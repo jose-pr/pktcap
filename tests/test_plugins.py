@@ -23,8 +23,8 @@ from pktcap import (
     default_registry,
     frame_filter_for,
     frame_filter_keys,
-    load_plugins,
 )
+from pktcap.cli._legacy import load_configured as load_plugins
 
 
 def state(registry):
@@ -433,9 +433,9 @@ def test_the_same_child_does_import_the_plugin_once_asked_to(plugin_module, tmp_
     mod = plugin_module()
     code = (
         "import pktcap; r = pktcap.DissectorRegistry();"
-        "print(len(pktcap.load_plugins(r)))"
+        "print(len(pktcap.load_plugins(r, %r)))" % mod.name
     )
-    env = dict(os.environ, PKTCAP_LOAD=mod.name, PYTHONPATH=str(mod.directory))
+    env = dict(os.environ, PYTHONPATH=str(mod.directory))
     done = subprocess.run(
         [sys.executable, "-c", code],
         env=env,
@@ -468,17 +468,15 @@ def test_a_dissector_the_plugin_registered_runs_only_in_the_registry_given(
     assert Dissected  # the contract type is the public one
 
 
-def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(
-    plugin_module, tmp_path
-):
-    mod = plugin_module()
+def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(tmp_path):
     work = tmp_path / "control"
     work.mkdir()
     code = _CHILD.replace(
         "package = os.path.dirname",
-        "pktcap.load_plugins(pktcap.DissectorRegistry())\npackage = os.path.dirname",
+        "from pktcap.cli._settings import default_path\ndefault_path()\n"
+        "package = os.path.dirname",
     )
-    env = dict(os.environ, PKTCAP_LOAD=mod.name, PYTHONPATH=str(mod.directory))
+    env = dict(os.environ)
     done = subprocess.run(
         [sys.executable, "-c", code],
         cwd=str(work),
@@ -488,7 +486,9 @@ def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(
         timeout=120,
     )
     assert done.returncode == 0, done.stderr[-2000:]
-    assert json.loads(done.stdout)["seen"] == ["PKTCAP_LOAD"] and mod.imported
+    assert json.loads(done.stdout)["seen"] == [
+        "APPDATA" if os.name == "nt" else "XDG_CONFIG_HOME"
+    ]
 
 
 # -- always: what a command loads without being asked ---------------------------
@@ -628,3 +628,41 @@ def test_always_is_an_empty_iterable_by_default_and_a_text_is_a_list(plugin_modu
 def test_always_is_keyword_only():
     with pytest.raises(TypeError):
         load_plugins(DissectorRegistry(), None, None, ())  # type: ignore[misc]
+
+
+# -- the library reads no variable and no file -----------------------------------
+
+
+def test_load_plugins_reads_neither_the_variable_nor_a_file(
+    plugin_module, tmp_path, monkeypatch
+):
+    import pktcap
+
+    named, listed = plugin_module(), plugin_module(OTHER)
+    config = tmp_path / "config-home"
+    (config / "pktcap").mkdir(parents=True)
+    default = config / "pktcap" / "pktcap.ini"
+    default.write_text("[pktcap]\nload = %s\n" % listed.name, encoding="utf-8")
+    named_file = tmp_path / "named.ini"
+    named_file.write_text("[pktcap]\nload = %s\n" % listed.name, encoding="utf-8")
+    monkeypatch.setenv("APPDATA" if os.name == "nt" else "XDG_CONFIG_HOME", str(config))
+    monkeypatch.setenv("PKTCAP_LOAD", named.name)
+    monkeypatch.setenv("PKTCAP_CONFIG", str(named_file))
+    registry = DissectorRegistry()
+    before = state(registry)
+    assert pktcap.load_plugins(registry) == ()
+    assert pktcap.load_plugins(registry, None) == ()
+    assert pktcap.load_plugins(registry, "none") == ()
+    assert state(registry) == before
+    assert not named.imported and not listed.imported
+    with pytest.raises(TypeError):
+        pktcap.load_plugins(registry, config=str(named_file))  # type: ignore[call-arg]
+
+
+def test_a_list_given_to_the_library_is_the_whole_list(plugin_module, monkeypatch):
+    import pktcap
+
+    mod = plugin_module()
+    monkeypatch.setenv("PKTCAP_LOAD", "no.such.module")
+    (only,) = pktcap.load_plugins(DissectorRegistry(), mod.name)
+    assert (only.name, only.source) == (mod.name, "argument")

@@ -231,9 +231,34 @@ def test_no_other_way_of_running_a_named_module_is_used():
     )
 
 
-def test_the_environment_is_read_by_the_configuration_module_alone():
-    assert _naming(_SRC, ("environ", "getenv", "environb", "getenvb"), {_CONFIG}) == []
-    assert _naming(_SRC, ("environ",), set()) == [_CONFIG]
+#: The modules that read the process environment: the copy a hook's process
+#: starts from, and where the user's settings file is.
+_ENVIRONMENT_READERS = {_CONFIG, "cli/_settings.py", "cli/_legacy.py"}
+
+
+def test_the_environment_is_read_by_three_modules_alone():
+    names = ("environ", "getenv", "environb", "getenvb")
+    assert _naming(_SRC, names, _ENVIRONMENT_READERS) == []
+    assert _naming(_SRC, ("environ",), set()) == sorted(_ENVIRONMENT_READERS)
+
+
+def test_the_plugin_package_reads_no_file_and_the_environment_only_for_a_child():
+    """The list is given to the library, never looked up by it."""
+    package = _SRC / "_plugins"
+    assert (
+        _naming(package, ("open", "read_text", "read_bytes", "configparser"), set())
+        == []
+    )
+    tree = ast.parse((package / "_config.py").read_text(encoding="utf-8"))
+    readers = [
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and any(
+            isinstance(n, ast.Attribute) and n.attr == "environ" for n in ast.walk(node)
+        )
+    ]
+    assert readers == ["process_environment"]
 
 
 def test_the_loader_is_imported_by_the_package_root_and_the_command_line_alone():

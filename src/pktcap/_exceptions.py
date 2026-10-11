@@ -25,7 +25,6 @@ __all__ = [
     "LiveCaptureError",
     "DissectError",
     "CapturePluginError",
-    "CaptureConfigError",
     "CaptureHookError",
 ]
 
@@ -162,14 +161,13 @@ class CapturePluginError(PktcapError, ValueError):
 
     Raised for a name that is no module, a module whose import failed, a
     module with no ``pktcap_plugin`` hook, a hook that takes no registry or
-    raised, and an item of a list from the environment or the configuration
-    file that is no dotted Python name. The registry is left as it was before
-    the call. A malformed item passed as an argument is a plain
-    ``ValueError`` instead.
+    raised, and an item of a list from a variable or a settings file that is
+    no dotted Python name. The registry is left as it was before the call. A
+    malformed item passed as an argument is a plain ``ValueError`` instead.
 
     :ivar plugin: the item as written.
-    :ivar source: where the list came from: ``"argument"``,
-        ``"PKTCAP_LOAD"`` or the configuration file's path.
+    :ivar source: where the list came from: ``"argument"``, or what the
+        command line names (``"PKTCAP_LOAD"``, a settings file's path).
     """
 
     def __init__(self, message: str, *, plugin: str, source: str) -> None:
@@ -179,37 +177,6 @@ class CapturePluginError(PktcapError, ValueError):
 
     def __reduce__(self) -> Tuple[Any, ...]:
         return (_restore_plugin_error, (self.args[0], self.plugin, self.source))
-
-
-def _restore_config_error(
-    message: str, path: Optional[str], lineno: Optional[int]
-) -> "CaptureConfigError":
-    return CaptureConfigError(message, path=path, lineno=lineno)
-
-
-class CaptureConfigError(PktcapError, ValueError):
-    """The configuration file, or ``PKTCAP_CONFIG``, cannot be used.
-
-    The message is ``PATH:LINE: problem`` and never holds a line of the file.
-
-    :ivar path: the file's path, or ``None`` when the problem is not a file's.
-    :ivar lineno: the 1-based line of the problem, or ``None`` when the parser
-        keeps none (an unknown section or key).
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        path: Optional[str] = None,
-        lineno: Optional[int] = None,
-    ) -> None:
-        super().__init__(message)
-        self.path = path
-        self.lineno = lineno
-
-    def __reduce__(self) -> Tuple[Any, ...]:
-        return (_restore_config_error, (self.args[0], self.path, self.lineno))
 
 
 def _restore_hook_error(

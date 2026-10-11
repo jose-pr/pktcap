@@ -9,7 +9,6 @@ import pktcap
 from pktcap import (
     CapturedDatagram,
     CapturedFrame,
-    CaptureConfigError,
     CaptureFilterError,
     CaptureFormatError,
     CaptureHookError,
@@ -120,7 +119,6 @@ BUILTIN = {
     CaptureHookError: OSError,
     LiveCaptureError: OSError,
     CapturePluginError: ValueError,
-    CaptureConfigError: ValueError,
 }
 
 

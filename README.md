@@ -220,12 +220,12 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
 | `CaptureWriter`, `dumps_record`, `loads_record`, `datagram_record`, `frame_record`, `frame_summary`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format (text is a line a person reads), and read a record back |
 | `copy_frames`, `CopyResult`, `command_hook` | copy a source of dissected frames, filtered, into a writer, and run a program for each frame written |
-| `load_plugins`, `LoadedPlugin`, `capture_config_path` | load the plugins a user names into a registry |
+| `load_plugins`, `LoadedPlugin` | load the plugins a user names into a registry |
 | `parse_capture_filter`, `compile_capture_filter`, `FilterClause`, `frame_filter`, `frame_filter_for`, `frame_filter_keys`, `FRAME_FILTER_KEYS` | the filter expression, the keys of the built-in layers, and the layers and keys a registry declares |
 | `replay_schedule`, `replay`, `replay_to`, `ReplayResult`, `ReplaySource` | replay a capture |
 | `LiveCapture`, `sniff_frames`, `sniff`, `has_live_capture` | live capture on Linux |
 | `UDPCapture`, `sniff_udp`, `asniff_udp`, `datagram_frame` | UDP sockets as a capture source, on every platform, and the frame of one datagram |
-| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `MissingExtraError`, `RecordFormatError`, `DissectError`, `LiveCaptureError`, `CapturePluginError`, `CaptureConfigError`, `CaptureHookError` | the exceptions |
+| `PktcapError`, `CaptureFormatError`, `CaptureFilterError`, `UnsupportedFormatError`, `MissingExtraError`, `RecordFormatError`, `DissectError`, `LiveCaptureError`, `CapturePluginError`, `CaptureHookError` | the exceptions |
 
 The reference with every signature, bound and gotcha is the API header that
 ships inside the package, `pktcap/AGENTS.md`, also at
