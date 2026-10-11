@@ -262,3 +262,36 @@ def test_taskkill_ends_the_tree_where_a_job_cannot_be_made(tmp_path, monkeypatch
         for pid in pids:
             kill(pid)
     assert hook.failures == 1
+
+
+# Each run leaves a mark and exits at once.
+LEAVES_A_MARK = r"""
+with (HERE / "ran.txt").open("a") as marks:
+    marks.write("x")
+"""
+
+
+def test_fifty_hooks_in_a_row_each_run_and_none_is_left_suspended(
+    tmp_path, monkeypatch
+):
+    """A program started suspended (Windows, so that it joins the job before it
+    runs) is resumed every time: each of fifty runs ends by itself, inside its
+    time limit, and counts as a success."""
+    program = python_hook(monkeypatch, tmp_path, "marker", LEAVES_A_MARK)
+    hook = command_hook(program, timeout=20.0, fail_fast=True)
+    for _ in range(50):
+        hook(frame())
+    assert hook.failures == 0
+    assert (tmp_path / "ran.txt").read_text() == "x" * 50
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the job object is Windows'")
+def test_a_program_with_no_suspended_thread_is_not_resumed(tmp_path):
+    import subprocess
+
+    from pktcap._copy._job import resume
+
+    done = subprocess.Popen([sys.executable, "-c", "pass"])
+    done.wait(timeout=60)
+    with pytest.raises(OSError, match="no suspended thread|could not"):
+        resume(done.pid)

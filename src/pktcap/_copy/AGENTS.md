@@ -86,7 +86,9 @@ given.
 - **The time limit:** past `timeout` seconds (positive and finite;
   `ValueError` otherwise, `TypeError` for a non-number) the program and every
   process it started are killed. On **Windows** that is a job object the
-  program is started in, so a descendant whose parent already left goes too;
+  program is started in (suspended, and resumed through documented calls once
+  it has joined; one that cannot be resumed is ended and the run is a failure),
+  so a descendant whose parent already left goes too;
   where the job cannot be made or joined, `taskkill /T`, which finds only
   descendants whose parent is alive. On **POSIX** it is `killpg`: a descendant
   that makes a session of its own (`setsid`) leaves the group and is not ended.

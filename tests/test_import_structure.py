@@ -336,3 +336,18 @@ def test_importing_the_command_line_loads_no_config_reader_until_a_file_is_read(
         timeout=120,
     )
     assert done.stdout.splitlines()[-1] == "False False True", done.stderr[-1000:]
+
+
+def test_the_hooks_job_resumes_its_program_with_documented_calls_alone():
+    """No call of ntdll: the program's first thread is found through a
+    Toolhelp snapshot and resumed with ResumeThread."""
+    assert _naming(_SRC, ("NtResumeProcess", "_ntdll"), set()) == []
+    used = _names_used(_SRC / "_copy" / "_job.py")
+    for name in (
+        "CreateToolhelp32Snapshot",
+        "Thread32First",
+        "Thread32Next",
+        "OpenThread",
+        "ResumeThread",
+    ):
+        assert ("name", name) in used, name
