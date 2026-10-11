@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   of `nul` there made every write under it fail on Windows. A part the
   pattern spells out is kept as written.
 
+### Fixed
+
+- A command whose standard output the reader closed ended on Windows with
+  status 120 and two lines on standard error, because Windows reports a closed
+  pipe as `EINVAL` and the interpreter's own flush at exit failed again. It is
+  status 1 and no line there as it is elsewhere; an `EINVAL` of a file or a
+  socket stays an error with its line.
+
 ### Added
 
 - The command classes are the base of a protocol library's commands.
