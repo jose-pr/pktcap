@@ -30,6 +30,29 @@ How it was checked:
   datagram above `net.inet.udp.maxdgram` (9216 octets by default), so the test
   of the largest datagram sends what the host will.
 
+### The settings file of the command line
+
+How it was checked:
+
+- `tests/test_cli_settings.py` drives the real command: a table for a command
+  in INI, TOML and JSON; the top-level `load` reaching every command; the
+  argument over the variable over the file; each refusal with a marker planted
+  in the file and absent from the one line printed; the default file's
+  location on each platform, its owner and mode (POSIX, as root under Linux for
+  the owner); a real server (`PKTCAP_MCP=stdio`) given the user's file, the
+  variable and a call naming `config`, and reading none of them; a subclass that
+  narrows the layers a list may come from.
+- 42 mutations (the loader's refusals, the cap, the default file's checks,
+  the layers a list or a hook may come from, a served tree, the library
+  reading a variable or a file) each make a test fail; the 36 of them that do
+  not depend on file permissions run on Windows, the other six under Linux.
+  One more was added when a repointed mutation first survived: the plugins are
+  loaded before the output is looked at.
+- Measured 2026-10-11 on duho 0.7.2 (Python 3.9 and 3.14): the loader is called
+  with one path for the option's file, the variable's and the default; a real
+  server applies a class-level default file but not the variable's file, so
+  the run sets the default only when the tree is not served.
+
 ### TCP stream reassembly
 
 `TCPReassembler` and `read_tcp_streams` put each direction of a TCP connection
