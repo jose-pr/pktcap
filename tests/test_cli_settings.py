@@ -630,3 +630,9 @@ def test_a_class_that_narrows_the_layers_refuses_the_files_list_and_the_default_
     assert _status(_root(TakesConvert), argv) == 0
     assert mod.imported
     assert len(capsys.readouterr().out.splitlines()) == 1
+
+
+def test_a_document_that_is_no_table_is_refused(tmp_path, capsys):
+    path = written(tmp_path, "s.json", "[1, 2]")
+    status, _, err = go(capsys, "-c", path, "plugins")
+    assert status == 2 and "the top level must be a table" in err

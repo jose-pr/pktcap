@@ -147,6 +147,16 @@ def test_a_name_that_does_not_import_is_one_line_and_nothing_is_written(
     assert not out.exists()
 
 
+def test_the_plugins_load_before_the_output_is_looked_at(trace, capsys):
+    """Both are wrong, and the plugin is what is reported: nothing, not even the
+    format of the output, is looked at before the plugins are loaded."""
+    argv = ["convert", "-i", str(trace), "--format", "toml", "--load", "pydemo.captur"]
+    assert main(argv) == 2
+    assert "pydemo.captur" in capsys.readouterr().err
+    assert main(argv[:-2]) == 2  # without the plugin, the format is what is wrong
+    assert "toml" in capsys.readouterr().err
+
+
 def test_a_missing_file_is_status_2_from_the_option_and_1_from_the_variable(
     trace, tmp_path, capsys, monkeypatch
 ):
@@ -393,7 +403,7 @@ def test_nothing_a_capture_or_its_directory_holds_is_imported(plugin_module, tmp
     mod = plugin_module()
     work = tmp_path / "work"
     (work / "pktcap").mkdir(parents=True)
-    line = "[pktcap]\nload = %s\n" % mod.name
+    line = "[DEFAULT]\nload = %s\n" % mod.name
     for name in ("pktcap.ini", ".pktcap.ini", ".pkcap.ini", "pktcap/pktcap.ini"):
         (work / name).write_text(line, encoding="utf-8")
     (work / "setup.cfg").write_text(line + "[tool:pytest]\n", encoding="utf-8")
@@ -401,7 +411,7 @@ def test_nothing_a_capture_or_its_directory_holds_is_imported(plugin_module, tmp
         '[tool.pktcap]\nload = ["%s"]\n' % mod.name, encoding="utf-8"
     )
     name = mod.name.encode()
-    payload = frame(b"PKTCAP_LOAD=" + name + b"\n[pktcap]\nload = " + name)
+    payload = frame(b"PKTCAP_LOAD=" + name + b"\n[DEFAULT]\nload = " + name)
     capture = work / (mod.name + ".pcap")
     capture.write_bytes(build.pcap([payload, frame(b"x" + name)]))
     empty = tmp_path / "empty"
