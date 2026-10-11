@@ -27,7 +27,7 @@ class Plugins(Loading):
     "Print one JSON object with configuration, plugins and keys. Omitted: text"
     ("--json",)
 
-    def _text(self, registry: DissectorRegistry, path: Optional[str]) -> List[str]:
+    def _pk_text(self, registry: DissectorRegistry, path: Optional[str]) -> List[str]:
         keys = frame_filter_keys(registry)
         lines = ["configuration: %s" % ("none" if path is None else path)]
         if self.loaded:
@@ -53,7 +53,7 @@ class Plugins(Loading):
         return lines
 
     def __call__(self) -> Optional[int]:
-        registry = self._registry()
+        registry = self._pk_registry()
         configuration = file_read()
         keys = frame_filter_keys(registry)
         if self.layer is not None:
@@ -86,5 +86,5 @@ class Plugins(Loading):
                 )
             )
         else:
-            print("\n".join(self._text(registry, configuration)))
+            print("\n".join(self._pk_text(registry, configuration)))
         return None

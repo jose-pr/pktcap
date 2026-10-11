@@ -64,7 +64,7 @@ class Replay(Selecting):
     'Print the result as one JSON object, {"sent": N, "partial": M}. Omitted: text'
     ("--json",)
 
-    def _destination(self) -> Tuple[str, int]:
+    def _pk_destination(self) -> Tuple[str, int]:
         host, port = split_host(self.to)
         if port is None:
             port = self._default_port_
@@ -74,19 +74,21 @@ class Replay(Selecting):
             )
         return str(host), port
 
-    def _source(self) -> Union[str, BinaryIO]:
+    def _pk_source(self) -> Union[str, BinaryIO]:
         return sys.stdin.buffer if self.input == "-" else self.input
 
     def _datagrams(self, registry: DissectorRegistry) -> Iterator[CapturedDatagram]:
         """The datagrams of the frames the filter keeps, in capture order:
         what ``_replay`` is given."""
         wanted = self._select(registry)
-        for frame in read_dissected(self._source(), dissector=FrameDissector(registry)):
+        for frame in read_dissected(
+            self._pk_source(), dissector=FrameDissector(registry)
+        ):
             datagram = frame.datagram() if wanted(frame) else None
             if datagram is not None:
                 yield datagram
 
-    def _endpoint(self, host: str) -> Optional[UDPEndpoint]:
+    def _pk_endpoint(self, host: str) -> Optional[UDPEndpoint]:
         """A socket for --source-port and --broadcast, of the destination's family."""
         if self.source_port is None and not self.broadcast:
             return None
@@ -100,7 +102,7 @@ class Replay(Selecting):
     ) -> Any:
         """Send the datagrams to the destination, paced and limited by the
         options; returns what ``_report`` is given."""
-        endpoint = self._endpoint(host)
+        endpoint = self._pk_endpoint(host)
         try:
             return replay_to(
                 datagrams,
@@ -125,8 +127,8 @@ class Replay(Selecting):
         return None
 
     def __call__(self) -> Optional[int]:
-        registry = self._registry()
-        host, port = self._destination()
+        registry = self._pk_registry()
+        host, port = self._pk_destination()
         try:
             result = self._replay(self._datagrams(registry), host, port)
         except CaptureFormatError as exc:

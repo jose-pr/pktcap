@@ -235,4 +235,4 @@ def test_a_tool_call_cannot_name_append(tmp_path):
 
 def test_the_origin_of_a_field_nobody_parsed_is_the_argument():
     command = Capture(hook="x:y")
-    assert command._origin("hook") == "argument"
+    assert command._pk_origin("hook") == "argument"

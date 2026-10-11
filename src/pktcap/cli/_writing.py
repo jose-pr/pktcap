@@ -92,18 +92,18 @@ class Writing(Selecting):
         when the file budget turned records away. Runs once, after Ctrl-C in
         a command that is ``_interruptible_`` as well."""
         parts = summary_parts(result, dissector, self.max_files)
-        parts.extend(self._noted())
+        parts.extend(self._pk_noted())
         if self.quiet <= 0 or result.refused:
             print(", ".join(parts), file=sys.stderr)
         return 1 if result.refused else 0
 
     # -- the loop ---------------------------------------------------------
 
-    def _noted(self) -> List[str]:
+    def _pk_noted(self) -> List[str]:
         """Parts a command adds to the summary line."""
         return []
 
-    def _chosen(self) -> Optional[str]:
+    def _pk_chosen(self) -> Optional[str]:
         """The format name to give the writer: ``--format``, else, for
         standard output, ``_format_`` or json, else, for a file whose ending
         names none, ``_format_``. ``None`` leaves a file's ending to decide."""
@@ -117,26 +117,26 @@ class Writing(Selecting):
             return self._format_
         return None
 
-    def _written(self) -> str:
-        """The name of the format the writer writes: what ``_chosen`` gives,
+    def _pk_written(self) -> str:
+        """The name of the format the writer writes: what ``_pk_chosen`` gives,
         else the ending of ``--output``."""
-        return infer_format(self.output, self._chosen())
+        return infer_format(self.output, self._pk_chosen())
 
-    def _writer(self) -> CaptureWriter:
+    def _pk_writer(self) -> CaptureWriter:
         """The writer ``--output`` and ``--format`` name; nothing is opened
         until the first record. Capture octets are never sent to a terminal."""
-        name = self._chosen()
+        name = self._pk_chosen()
         if self.append and self.served():
             raise ValueError("a tool call cannot name append: it adds to a file")
         if self.output != "-":
-            return self._built(self.output, name)
+            return self._pk_built(self.output, name)
         if name in CAPTURE_FORMATS and sys.stdout.isatty():
             raise ValueError(
                 "refusing to write a %s capture to a terminal: name a file with "
                 "--output" % name
             )
         if not self.served():
-            return self._built(sys.stdout.buffer, name)
+            return self._pk_built(sys.stdout.buffer, name)
         # A tool call replaces stdout with a text stream and returns what was
         # written to it as the result: records are ASCII text, a capture is not.
         if name in CAPTURE_FORMATS:
@@ -144,9 +144,9 @@ class Writing(Selecting):
                 "a %s capture cannot be returned as text: name a file with --output"
                 % name
             )
-        return self._built(TextSink(), name)
+        return self._pk_built(TextSink(), name)
 
-    def _built(self, target: object, name: Optional[str]) -> CaptureWriter:
+    def _pk_built(self, target: object, name: Optional[str]) -> CaptureWriter:
         return CaptureWriter(
             target,  # type: ignore[arg-type]
             name,
@@ -157,12 +157,12 @@ class Writing(Selecting):
         )
 
     def __call__(self) -> Optional[int]:
-        registry = self._registry()
+        registry = self._pk_registry()
         select = self._select(registry)
         dissector = FrameDissector(registry)
         hook = self._hook()
-        with self._writer() as writer:
-            self._open = writer
+        with self._pk_writer() as writer:
+            self._pk_open = writer
             frames = Counted(self._frames(dissector))
             before = writer.written
             try:

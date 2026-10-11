@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import (
     Annotated,
@@ -82,7 +83,14 @@ class Loading(LoggingArgs, Cmd):
         replaced by a text stream, which has no ``buffer``."""
         return getattr(sys.stdout, "buffer", None) is None
 
-    def _origin(self, field: str) -> str:
+    def _pk_program(self) -> str:
+        """The name of the program that runs this command: the ``prog`` of the
+        parser duho built for it, else the name it was started by."""
+        parser = type(self).__dict__.get("_duho_last_parser_")
+        words = (getattr(parser, "prog", "") or os.path.basename(sys.argv[0])).split()
+        return words[0] if words else "the program"
+
+    def _pk_origin(self, field: str) -> str:
         """Where the value of a field came from, by duho's record of the
         layers: ``"environment"`` (a variable), ``"file"`` (the settings file
         the root read) or ``"argument"``, which also covers a value the class
@@ -90,26 +98,26 @@ class Loading(LoggingArgs, Cmd):
         layer = value_sources(self).get(field)
         return {"env": "environment", "config": "file"}.get(layer or "", "argument")
 
-    def _taken_from(self, field: str, layers: Tuple[str, ...]) -> None:
+    def _pk_taken_from(self, field: str, layers: Tuple[str, ...]) -> None:
         """``ValueError`` unless the field's value came from one of ``layers``."""
-        layer = self._origin(field)
+        layer = self._pk_origin(field)
         if layer not in layers:
             raise ValueError(
                 "--%s was set from the %s layer of a root's configuration; this "
                 "command takes it from: %s" % (field, layer, ", ".join(layers))
             )
 
-    def _list_source(self) -> str:
+    def _pk_list_source(self) -> str:
         """How the list names where it came from: ``argument``, the variable's
         name, or the settings file's path."""
-        layer = self._origin("load")
+        layer = self._pk_origin("load")
         if layer == "environment":
             return str(next(b.env for b in type(self)._getargs_() if b.name == "load"))
         if layer == "file":
             return file_read() or "file"
         return PLUGINS_ARGUMENT
 
-    def _registry(self) -> DissectorRegistry:
+    def _pk_registry(self) -> DissectorRegistry:
         """A registry of this run's own, with the plugins loaded into it:
         ``_plugins_`` first, then the user's list.
 
@@ -119,14 +127,14 @@ class Loading(LoggingArgs, Cmd):
         imported.
         """
         if self.load is not None:
-            if self.served() and self._origin("load") == "argument":
+            if self.served() and self._pk_origin("load") == "argument":
                 raise ValueError(
                     "a tool call cannot name plugins: the server's PKTCAP_LOAD decides"
                 )
-            self._taken_from("load", self._load_from_)
+            self._pk_taken_from("load", self._load_from_)
         registry = DissectorRegistry()
         self.loaded: Tuple[LoadedPlugin, ...] = load_named(
-            registry, self.load, self._list_source(), self._plugins_
+            registry, self.load, self._pk_list_source(), self._plugins_
         )
         return registry
 

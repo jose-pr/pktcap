@@ -195,8 +195,8 @@ with no privilege.
 - Ctrl-C ends the capture with status 0 and the summary.
 - Off Linux the line is `pktcap: error: live capture needs Linux (AF_PACKET);
   pipe a capture tool's output in instead: tcpdump -w - | pktcap convert --input -`
-  and the status 1. Without the capability the line names `CAP_NET_RAW`,
-  status 1. An interface that matches nothing is status 2.
+  (`pktcap` is the program's name) and the status 1. Without the capability
+  the line names `CAP_NET_RAW`, status 1. No such interface is status 2.
 
 ## `pktcap plugins`
 
@@ -234,8 +234,8 @@ is the protocol's. `from pktcap.cli import Loading, Selecting, Writing, Capture,
 Convert, Replay, Plugins` binds each on first use, so `import pktcap.cli` needs
 no `duho`; without it the name is an `ImportError` (`MissingExtraError`)
 naming `pip install "pktcap[cli]"`. Class attributes ending in `_` and methods
-beginning with `_` listed below are the **override points**; nothing else
-beginning with `_` is promised.
+beginning with `_` listed below are the **override points**; every other name
+the base defines begins `_pk_`, and a subclass defines and uses none.
 
 | Class | Options it declares | Class attributes |
 | --- | --- | --- |
@@ -263,7 +263,7 @@ wants a listing sets `"text"`. Methods, with when each is called:
 | `Writing._report(self, result: CopyResult, dissector: FrameDissector) -> int` | once, at the end, after Ctrl-C too | prints the summary on stderr; returns the status |
 | `Capture._endpoints(self) -> Tuple[UDPEndpoint, ...]` | once, when `--listen` is given | the default is `netimps.bind_listen` of `--listen` read with `_default_port_`; the capture owns what is returned (and closes it if the source refuses it); override for a family, broadcast or one socket per address |
 | `Capture._stop(self) -> bool` | between datagrams, at least once a second, whatever the options | the default is the `--duration` deadline, false without one |
-| `Replay._destination` is private; `Replay._datagrams(self, registry) -> Iterator[CapturedDatagram]` | once | the filtered datagrams in capture order |
+| `Replay._datagrams(self, registry) -> Iterator[CapturedDatagram]` | once | the filtered datagrams in capture order |
 | `Replay._replay(self, datagrams, host: str, port: int) -> Any` | once | default `replay_to` with the options; its result is given to `_report` |
 | `Replay._report(self, result: Any) -> Optional[int]` | once | default prints `sent N, partial M` |
 
@@ -283,7 +283,7 @@ wants a listing sets `"text"`. Methods, with when each is called:
   `hook` in a tool call by the class; do not remove that. A root that has a
   settings file or a variable for a field applies it to the inherited ones too:
   `_load_from_` and `_hook_from_` say which layers a class takes a list and a
-  hook from, and `Loading._origin(field)` names the layer a value came from.
+  hook from.
 - `_names` runs for hooks as well as file names, so it must not raise on a
   frame the filter let through; `_filter_` is how it is guaranteed its layer.
 

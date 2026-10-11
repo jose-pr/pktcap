@@ -25,7 +25,7 @@ class Convert(Writing):
     "Write at most this many frames, then stop reading. Omitted: all of them"
     ("--limit",)
 
-    def _source(self) -> Union[str, BinaryIO]:
+    def _pk_source(self) -> Union[str, BinaryIO]:
         if self.input != "-":
             return self.input
         buffer = getattr(sys.stdin, "buffer", None)
@@ -33,16 +33,16 @@ class Convert(Writing):
             raise ValueError("--input - needs a standard input: name a file")
         return buffer  # type: ignore[no-any-return]
 
-    def _name(self) -> str:
+    def _pk_name(self) -> str:
         return "standard input" if self.input == "-" else self.input
 
     def _limit(self) -> Optional[int]:
         return self.limit
 
     def _frames(self, dissector: FrameDissector) -> Iterator[DissectedFrame]:
-        return self._named(read_dissected(self._source(), dissector=dissector))
+        return self._pk_named(read_dissected(self._pk_source(), dissector=dissector))
 
-    def _named(self, frames: Iterator[DissectedFrame]) -> Iterator[DissectedFrame]:
+    def _pk_named(self, frames: Iterator[DissectedFrame]) -> Iterator[DissectedFrame]:
         try:
             yield from frames
         except CaptureFormatError as exc:
@@ -50,5 +50,5 @@ class Convert(Writing):
             # names the file, so this does.
             raise ValueError(
                 "%s: %s (%d written before it)"
-                % (self._name(), exc, self._open.written)
+                % (self._pk_name(), exc, self._pk_open.written)
             ) from exc

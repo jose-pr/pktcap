@@ -34,7 +34,7 @@ _LOG = logging.getLogger(__name__)
 
 _NOT_LINUX = (
     "live capture needs Linux (AF_PACKET); pipe a capture tool's output in "
-    "instead: tcpdump -w - | pktcap convert --input -"
+    "instead: tcpdump -w - | %s convert --input -"
 )
 _NO_PERMISSION = (
     "opening a packet socket needs the CAP_NET_RAW capability: run as root, or "
@@ -59,7 +59,7 @@ class Capture(Writing):
     _hook_from_: ClassVar[Tuple[str, ...]] = ("argument",)
 
     interface: Annotated[Optional[str], Meta(conflicts="source")] = None
-    "The interface to capture on, by name, address or MAC. Omitted: every interface. Excludes --listen"
+    "The interface to capture on, by name, address or MAC. Omitted: every interface. Cannot be combined with another source of datagrams"
     ("--interface",)
 
     listen: Annotated[Optional[List[str]], Meta(conflicts="source")] = None
@@ -94,30 +94,30 @@ class Capture(Writing):
     def _stop(self) -> bool:
         """Whether the ``--duration`` has passed; called between datagrams and
         at least once a second on a quiet source."""
-        if self._until is None:
-            self._until = self._deadline()
-        return self._until is not None and time.monotonic() >= self._until
+        if self._pk_until is None:
+            self._pk_until = self._pk_deadline()
+        return self._pk_until is not None and time.monotonic() >= self._pk_until
 
     def _endpoints(self) -> Tuple[UDPEndpoint, ...]:
         """The sockets ``--listen`` names, bound by ``netimps.bind_listen`` and
         owned by the capture from the moment they are returned."""
-        return bind_listen(self._listening())
+        return bind_listen(self._pk_listening())
 
     def _frames(self, dissector: FrameDissector) -> Iterator[DissectedFrame]:
-        self._until = self._deadline()
+        self._pk_until = self._pk_deadline()
         stop = self._stop
         if self.listen is not None:
-            endpoints = self._bound()
+            endpoints = self._pk_bound()
             try:
-                self._source = sniff_udp(endpoints, stop=stop, dissector=dissector)
+                self._pk_source = sniff_udp(endpoints, stop=stop, dissector=dissector)
             except BaseException:
                 for endpoint in endpoints:  # the source turned them away
                     getattr(endpoint, "close", lambda: None)()
                 raise
-            return self._source  # type: ignore[no-any-return]
+            return self._pk_source  # type: ignore[no-any-return]
         if not has_live_capture():
-            raise LiveCaptureError(_NOT_LINUX)
-        return self._permitted(
+            raise LiveCaptureError(_NOT_LINUX % self._pk_program())
+        return self._pk_permitted(
             sniff_frames(self.interface, stop=stop, dissector=dissector)
         )
 
@@ -126,9 +126,9 @@ class Capture(Writing):
             return None
         if self.served():
             raise ValueError("a tool call cannot name a hook")
-        self._taken_from("hook", self._hook_from_)
-        name = self._written()
-        self._hooked = make_hook(
+        self._pk_taken_from("hook", self._hook_from_)
+        name = self._pk_written()
+        self._pk_hooked = make_hook(
             self.hook,
             format=name if name in RECORD_FORMATS else "json",
             timeout=self.hook_timeout,
@@ -136,28 +136,28 @@ class Capture(Writing):
             names=self._names,
             datagrams=self.datagrams,
         )
-        hooked: Callable[[DissectedFrame], object] = self._hooked
+        hooked: Callable[[DissectedFrame], object] = self._pk_hooked
         return hooked
 
     # -- private ----------------------------------------------------------
 
-    _until: Optional[float] = None
-    _hooked: Any = None
-    _source: Any = None
+    _pk_until: Optional[float] = None
+    _pk_hooked: Any = None
+    _pk_source: Any = None
 
-    def _deadline(self) -> Optional[float]:
+    def _pk_deadline(self) -> Optional[float]:
         if self.duration is None:
             return None
         if not self.duration >= 0:
             raise ValueError("--duration must not be below zero")
         return time.monotonic() + self.duration
 
-    def _listening(self) -> Any:
+    def _pk_listening(self) -> Any:
         """The specification ``--listen`` writes, read but not bound."""
         ports = self._default_port_
         return parse_listen(self.listen, () if ports is None else ports)
 
-    def _bound(self) -> Tuple[UDPEndpoint, ...]:
+    def _pk_bound(self) -> Tuple[UDPEndpoint, ...]:
         """``_endpoints()``, a failure of which is one line naming what was
         asked for."""
         try:
@@ -177,22 +177,24 @@ class Capture(Writing):
         )
         return endpoints
 
-    def _permitted(self, frames: Iterator[DissectedFrame]) -> Iterator[DissectedFrame]:
+    def _pk_permitted(
+        self, frames: Iterator[DissectedFrame]
+    ) -> Iterator[DissectedFrame]:
         try:
             yield from frames
         except PermissionError:
             raise PermissionError(_NO_PERMISSION) from None
 
-    def _noted(self) -> List[str]:
+    def _pk_noted(self) -> List[str]:
         parts = []
         for attribute, text in (
             ("not_admitted", "%d not admitted"),
             ("truncated", "%d over the size limit"),
         ):
-            count = getattr(self._source, attribute, 0)
+            count = getattr(self._pk_source, attribute, 0)
             if count:
                 parts.append(text % count)
-        failures = getattr(self._hooked, "failures", 0)
+        failures = getattr(self._pk_hooked, "failures", 0)
         if failures:
             parts.append("%d hook failures" % failures)
         return parts

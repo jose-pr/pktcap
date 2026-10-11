@@ -8,9 +8,12 @@ option, so the first meets no clash. What is shown working here is what
 ``cli/AGENTS.md`` promises.
 """
 
+import ast
 import json
 import pathlib
+import re
 import socket
+import sys
 import threading
 import time
 from typing import Optional
@@ -29,6 +32,7 @@ from pktcap.cli import (
     Capture,
     Convert,
     Loading,
+    Plugins,
     Replay,
     Selecting,
     Writing,
@@ -436,3 +440,160 @@ def test_the_worked_subclass_of_the_header_runs(trace, capsys):
     assert status_of(namespace["Listing"], ["-i", str(trace)]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == 3 and all("10.0.0.5:50000" in line for line in lines)
+
+
+# -- the base's private names are its own --------------------------------------------
+
+#: Every private member the base once had without a prefix: a subclass that
+#: keeps its own data in one of them must not change what the base does.
+FORMER_PRIVATE_NAMES = (
+    "_origin", "_taken_from", "_list_source", "_registry", "_built", "_chosen",
+    "_noted", "_writer", "_written", "_open", "_bound", "_deadline", "_hooked",
+    "_listening", "_permitted", "_source", "_until", "_name", "_named",
+    "_destination", "_endpoint", "_text",
+)  # fmt: skip
+#: Names duho reads on a class (and the ones it adds, which begin `_duho_`).
+DUHO_NAMES = {"_parsername_", "_logger_name_", "_mcp_"}
+THE_SEVEN = (
+    "Loading",
+    "Selecting",
+    "Writing",
+    "Capture",
+    "Convert",
+    "Replay",
+    "Plugins",
+)
+
+
+def _shadowing(base):
+    attributes = {name: "mine" for name in FORMER_PRIVATE_NAMES}
+    attributes["_parsername_"] = base._parsername_
+    return type("Shadowing" + base.__name__, (base,), attributes)
+
+
+def _subclassing_section():
+    header = pathlib.Path(pktcap.cli.__file__).with_name("AGENTS.md")
+    return header.read_text(encoding="utf-8").split("## Subclassing", 1)[1]
+
+
+def test_every_private_name_a_command_class_defines_is_listed_or_carries_the_prefix():
+    section = _subclassing_section()
+    listed = set(re.findall(r"(?<![A-Za-z0-9_])(_[a-z][a-z_]*)", section))
+    assert "_pk_" in listed, "the header must say what the prefix is"
+    stray = {}
+    for name in THE_SEVEN:
+        defined = [
+            n
+            for n in vars(getattr(pktcap.cli, name))
+            if n.startswith("_") and not (n.startswith("__") and n.endswith("__"))
+        ]
+        stray[name] = sorted(
+            n
+            for n in defined
+            if n not in listed
+            and n not in DUHO_NAMES
+            and not n.startswith(("_pk_", "_duho_"))
+        )
+    assert stray == {name: [] for name in THE_SEVEN}
+
+
+def test_no_command_class_stores_an_instance_attribute_outside_the_prefix():
+    directory = pathlib.Path(pktcap.cli.__file__).parent
+    stray = []
+    for path in sorted(directory.glob("*.py")):
+        for cls in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(cls, ast.ClassDef) and cls.name in THE_SEVEN):
+                continue
+            for node in ast.walk(cls):
+                if (
+                    isinstance(node, ast.Attribute)
+                    and isinstance(node.ctx, ast.Store)
+                    and isinstance(node.value, ast.Name)
+                    and node.value.id == "self"
+                    and node.attr.startswith("_")
+                    and not node.attr.startswith("_pk_")
+                ):
+                    stray.append("%s.%s" % (cls.name, node.attr))
+    assert stray == []
+
+
+def test_a_subclass_that_keeps_data_in_a_former_private_name_still_converts(
+    trace, capsys
+):
+    assert status_of(_shadowing(Convert), ["-i", str(trace), "--format", "json"]) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 3
+
+
+def test_a_subclass_that_keeps_data_in_a_former_private_name_still_lists_plugins(
+    capsys,
+):
+    assert status_of(_shadowing(Plugins), ["--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["plugins"] == []
+
+
+def test_a_subclass_that_keeps_data_in_a_former_private_name_still_replays(
+    trace, capsys
+):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    sock.settimeout(WAIT)
+    try:
+        to = "127.0.0.1:%d" % sock.getsockname()[1]
+        argv = ["-i", str(trace), "--to", to, "--no-delay", "--source-port", "0"]
+        assert status_of(_shadowing(Replay), argv) == 0
+        assert sock.recvfrom(2048)[0] == b"\x01boot"
+    finally:
+        sock.close()
+    assert capsys.readouterr().out.strip() == "sent 3, partial 0"
+
+
+def test_a_subclass_that_keeps_data_in_a_former_private_name_still_captures_with_a_hook(
+    tmp_path, monkeypatch, caplog
+):
+    from test_cli_listen import listen_and_send
+
+    directory = tmp_path / "mods"
+    directory.mkdir()
+    (directory / "shadowmod.py").write_bytes(
+        b"seen = []\n\ndef keep(frame):\n    seen.append(frame.datagram().payload)\n"
+    )
+    monkeypatch.syspath_prepend(str(directory))
+    Shadowing = _shadowing(Capture)
+    Shadowing._hook_from_ = ("argument",)
+    Shadowing._default_port_ = 0
+    argv = ["--listen", "127.0.0.1:0", "--count", "1", "--format", "text"]
+    argv += ["--hook", "shadowmod:keep"]
+    status, _ = listen_and_send(
+        argv, caplog, [b"hello"], runner=lambda a: status_of(Shadowing, a)
+    )
+    import shadowmod
+
+    try:
+        assert status == 0 and shadowmod.seen == [b"hello"]
+    finally:
+        sys.modules.pop("shadowmod", None)
+
+
+def test_the_missing_live_capture_line_names_the_program_that_runs(monkeypatch):
+    from duho import Cli, LoggingArgs
+
+    from pktcap import LiveCaptureError
+
+    monkeypatch.setattr("pktcap.cli.capture.has_live_capture", lambda: False)
+
+    class Mine(Capture):
+        _parsername_ = "capture"
+
+    root = type(
+        "Root", (LoggingArgs, Cli), {"_parsername_": "mytool", "_subcommands_": [Mine]}
+    )
+    with pytest.raises(LiveCaptureError) as caught:
+        run(root, ["capture"])
+    text = str(caught.value)
+    assert "tcpdump -w - | mytool convert --input -" in text and "pktcap" not in text
+
+
+def test_the_help_of_interface_names_no_option_a_subclass_may_not_have():
+    parser = Capture._parser_()
+    (action,) = [a for a in parser._actions if "--interface" in a.option_strings]
+    assert "--listen" not in action.help
