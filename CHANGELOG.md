@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is only white space is a list with no plugin and not unset; only an empty one
   is unset.
   pktcap needs netimps 0.4.1.
+- Every private member of the command classes that is not an override point
+  begins `_pk_` (`_written` is `_pk_written`, `_source` is `_pk_source`, and
+  so on), and the header says a subclass defines and uses none, so a subclass
+  that keeps its own data in an attribute named like one no longer replaces it.
+  The line for a missing live capture names the program that runs, and the
+  help of `--interface` names no option a subclass may not have.
 - Dissecting an IPv6 frame costs about half. An IPv6 address keeps its text
   (the 1,024 a process used last), since a capture names few hosts and every
   frame names two. What a caller gets back is the same.
