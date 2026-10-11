@@ -5,6 +5,7 @@ or as a process; ``--help`` is not a check. The commands themselves are in
 ``test_cli_convert.py``, ``test_cli_replay.py`` and ``test_cli_capture.py``.
 """
 
+import errno
 import re
 import subprocess
 import sys
@@ -159,4 +160,121 @@ def test_a_closed_standard_output_is_a_status_and_no_traceback(monkeypatch, caps
     monkeypatch.setattr(_root, "run", broken)
     monkeypatch.setattr(_root, "_silence_stdout", lambda: None)
     assert _root.execute([]) == 1
+    assert capsys.readouterr().err == ""
+
+
+# -- a reader that closes standard output ------------------------------------------
+
+
+@pytest.mark.parametrize("format", ["text", "json"])
+def test_a_reader_that_closes_standard_output_ends_the_command_with_status_1_and_no_line(
+    format, tmp_path
+):
+    """The real command, on every platform: Windows reports the closed pipe as
+    EINVAL and not as a broken pipe, and the interpreter's own flush at exit
+    used to fail again (status 120)."""
+    path = tmp_path / "long.pcap"
+    with pktcap.PcapWriter(str(path)) as writer:
+        for index in range(30000):
+            writer.write(
+                1.0 + index, ("192.0.2.5", 50000), ("192.0.2.1", 9999), b"x" * 40
+            )
+    child = subprocess.Popen(
+        [sys.executable, "-m", "pktcap", "convert", "--input", str(path)]
+        + ["--format", format],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        assert child.stdout is not None and child.stdout.readline()
+        child.stdout.close()
+        child.stdout = None
+        _, err = child.communicate(timeout=60)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+    assert (child.returncode, err) == (1, b"")
+
+
+class _Stdout:
+    """A standard output whose flush fails the way a closed pipe's does."""
+
+    def __init__(self, error=None):
+        self.error = error
+
+    def flush(self):
+        if self.error is not None:
+            raise self.error
+
+    def fileno(self):
+        raise ValueError("no descriptor")
+
+
+def _einval():
+    return OSError(errno.EINVAL, "Invalid argument")
+
+
+def test_einval_is_a_closed_pipe_only_on_windows_and_only_for_standard_output(
+    monkeypatch,
+):
+    from pktcap.cli import _root
+
+    monkeypatch.setattr(sys, "stdout", _Stdout(_einval()))
+    assert _root._closed_pipe(_einval(), windows=True) is True
+    assert _root._closed_pipe(_einval(), windows=False) is False
+    assert _root._closed_pipe(BrokenPipeError(), windows=False) is True
+    monkeypatch.setattr(sys, "stdout", _Stdout())
+    assert _root._closed_pipe(_einval(), windows=True) is False  # a file's EINVAL
+    assert _root._closed_pipe(OSError(errno.ENOENT, "x"), windows=True) is False
+
+
+def test_an_einval_from_a_closed_standard_output_is_status_1_and_no_line(
+    monkeypatch, capsys
+):
+    from pktcap.cli import _root
+
+    def broken(cls, argv):
+        raise _einval()
+
+    stdout = _Stdout(_einval())
+    silenced = []
+
+    def silence():  # the descriptor now leads to the null device
+        silenced.append(True)
+        stdout.error = None
+
+    monkeypatch.setattr(_root, "run", broken)
+    monkeypatch.setattr(_root, "_WINDOWS", True)
+    monkeypatch.setattr(_root, "_silence_stdout", silence)
+    monkeypatch.setattr(sys, "stdout", stdout)
+    assert _root.execute([]) == 1
+    assert silenced == [True] and capsys.readouterr().err == ""
+
+
+def test_an_einval_from_somewhere_else_is_an_error_with_its_line(monkeypatch, capsys):
+    from pktcap.cli import _root
+
+    def broken(cls, argv):
+        raise _einval()
+
+    monkeypatch.setattr(_root, "run", broken)
+    monkeypatch.setattr(_root, "_WINDOWS", True)
+    assert _root.execute([]) == 1
+    assert capsys.readouterr().err.startswith("pktcap: error: ")
+
+
+@pytest.mark.parametrize("error", [BrokenPipeError(), _einval()])
+def test_the_flush_at_the_end_of_a_run_is_where_a_closed_pipe_is_found_too(
+    error, monkeypatch, capsys
+):
+    from pktcap.cli import _root
+
+    silenced = []
+    monkeypatch.setattr(_root, "run", lambda cls, argv: None)
+    monkeypatch.setattr(_root, "_WINDOWS", True)
+    monkeypatch.setattr(_root, "_silence_stdout", lambda: silenced.append(True))
+    monkeypatch.setattr(sys, "stdout", _Stdout(error))
+    assert _root.execute([]) == 1
+    assert silenced == [True]
     assert capsys.readouterr().err == ""

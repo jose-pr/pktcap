@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import pathlib
 import sys
@@ -41,6 +42,27 @@ class Pktcap(ConfigArgs, LoggingArgs, Cli):  # type: ignore[misc]
     _subcommands_ = [Capture, Replay, Convert, Plugins]
 
 
+#: Windows reports a pipe closed by its reader as ``EINVAL`` on a write, not as
+#: a broken pipe (measured 2026-10-12, Windows 11, Python 3.9 and 3.14).
+_WINDOWS = sys.platform == "win32"
+
+
+def _closed_pipe(exc: OSError, windows: Optional[bool] = None) -> bool:
+    """Whether ``exc`` is standard output closed by its reader: a broken pipe,
+    or on Windows an ``EINVAL`` while standard output fails again when flushed
+    (its data is kept, so the retry fails the same way). An ``EINVAL`` of a
+    file or a socket is an error with its line."""
+    if isinstance(exc, BrokenPipeError):
+        return True
+    if not (_WINDOWS if windows is None else windows) or exc.errno != errno.EINVAL:
+        return False
+    try:
+        getattr(sys.stdout, "flush", lambda: None)()
+    except (OSError, ValueError):
+        return True
+    return False
+
+
 def _silence_stdout() -> None:
     """Nobody reads stdout any more: point it at the null device so the flush
     at exit does not fail again."""
@@ -50,6 +72,26 @@ def _silence_stdout() -> None:
         pass
 
 
+def _flushed(status: int) -> int:
+    """``status``, after the flush of standard output the interpreter would
+    make at exit, where a reader that left is found too: status 1 and no
+    line."""
+    flush = getattr(sys.stdout, "flush", None)
+    if flush is None:
+        return status
+    try:
+        flush()
+    except OSError as exc:
+        if _closed_pipe(exc):
+            _silence_stdout()
+        else:
+            error(str(exc))
+        return 1
+    except ValueError:  # standard output is closed: nothing to flush
+        pass
+    return status
+
+
 def execute(argv: Optional[Sequence[str]]) -> int:
     """Run the command line and return its exit status.
 
@@ -57,7 +99,12 @@ def execute(argv: Optional[Sequence[str]]) -> int:
     a writer's file budget), ``2`` the invocation was wrong (the parser's own
     errors, and a ``ValueError`` from the library: a bad filter, an unknown
     format, a damaged capture), ``130`` interrupted outside ``capture``.
+    Standard output closed by the reader is ``1`` with no line.
     """
+    return _flushed(_execute(argv))
+
+
+def _execute(argv: Optional[Sequence[str]]) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
     try:
         check_variable()
@@ -73,9 +120,6 @@ def execute(argv: Optional[Sequence[str]]) -> int:
             return stop.code or 0
         error(str(stop.code))
         return 1
-    except BrokenPipeError:
-        _silence_stdout()
-        return 1
     except KeyboardInterrupt:
         error("interrupted")
         return 130
@@ -86,7 +130,9 @@ def execute(argv: Optional[Sequence[str]]) -> int:
         error(str(exc))
         return 2
     except OSError as exc:
-        error(str(exc))
+        # A closed pipe is found again, and silenced, by the flush that follows.
+        if not _closed_pipe(exc):
+            error(str(exc))
         return 1
     finally:
         Pktcap._config_ = None
