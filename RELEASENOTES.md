@@ -4,7 +4,7 @@ The detailed companion to [`CHANGELOG.md`](CHANGELOG.md): benchmark figures,
 their caveats and the validation evidence behind each release. The changelog
 says *what changed*; this says *what it costs and how it was checked*.
 
-## [Unreleased]
+## 0.1.0 — 2026-10-12
 
 The first release of `pktcap`: reading, dissecting, filtering, writing and
 replaying pcap and pcapng captures, TCP stream reassembly, live and UDP-socket
