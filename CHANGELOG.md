@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The settings file is read with what duho 0.7.3 provides. The user's own file
+  is the root's `_config_` (`duho.config.user_path`), told from a named one by
+  the `source` duho gives the loader, so no per-run state remembers which is
+  the default; duho refuses a key or table nobody has (`_config_validate_`),
+  with a usage error that names the key and never holds a value, so a key of
+  any length is named whole. An empty path (`--config ""`, `PKTCAP_CONFIG=`)
+  means no file, the user's own included. A served tree reads the server's own
+  default file, checked as any default is, and neither `PKTCAP_CONFIG` nor a
+  `config` a call names. A relative `APPDATA` is no longer ignored on Windows
+  (duho's `user_path` takes it as it is).
 - What a library that subclasses the commands had to work round is given by the
   base. `Capture._endpoints(self, dissector)` is given the dissector the frames
   are read with, so a protocol is registered on the port that was bound

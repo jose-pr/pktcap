@@ -48,20 +48,18 @@ returns the status and does not call `sys.exit`.
   tool may have just read a capture's text, and the server's own variable
   decides.
 - **Output and statuses.** What a command produces goes to standard output or
-  to `--output`; its one-line summary and every diagnostic go to standard
-  error, because standard output may be a capture. Every failure is one line,
-  `pktcap: error: <text>`. Status **0** done (Ctrl-C during `capture`
-  included), **1** the operation failed (a file that cannot be opened or
-  written, a send that failed, no live capture here, no permission, a missing
-  format extra, a writer that refused records for its file budget), **2** the
-  invocation was wrong (the parser's own errors, a bad filter, an unknown
-  format, a combination that cannot work, a capture that is not one or is
-  damaged), **130** Ctrl-C in `convert` or `replay`. Standard output closed by
-  the reader is status 1 with no line.
+  to `--output`; its summary and every diagnostic go to standard error, because
+  standard output may be a capture. A failure is one line, `pktcap: error:
+  <text>`. Status **0** done (Ctrl-C during `capture` included), **1** the
+  operation failed (a file that cannot be opened or written, a send that
+  failed, no live capture here, no permission, a missing format extra, records
+  refused for the file budget), **2** the invocation was wrong (the parser's
+  own errors, a bad filter, an unknown format, a combination that cannot work,
+  a capture that is not one or is damaged), **130** Ctrl-C in `convert` or
+  `replay`. Standard output closed by the reader is status 1 with no line.
 - **A capture is untrusted input** and the library's bounds hold through every
-  command: a frame larger than the reader's ceiling, the reassembly limits and
-  `--max-files` apply as they do to a program, and the commands keep no state
-  of their own that a file could grow.
+  command (the reader's frame ceiling, the reassembly limits, `--max-files`),
+  and the commands keep no state of their own that a file could grow.
 
 ## The settings file
 
@@ -69,29 +67,31 @@ The root takes it, before the command's name (`pktcap -c FILE convert ...`; afte
 it is the parser's own error): `--config`/`-c FILE`, else `PKTCAP_CONFIG` (an
 absolute path), else the user's own `pktcap/pktcap.ini` under `$XDG_CONFIG_HOME`
 (else `~/.config`) on Linux, macOS and the BSDs and `%APPDATA%` on Windows, which
-may be absent. It is duho's layout, read by `duho.config` in the format its name
-says (`.ini`/`.cfg`, `.toml`, `.json`, `.yaml`/`.yml`; TOML before Python 3.11 and
-YAML need duho's `config` and `yaml` extras; another name is refused): top-level
-keys for the root's options (`verbose`), a table for each command with the
-command's field names as keys. In INI the keys of `[DEFAULT]` are the top level
-(examples in `_plugins/AGENTS.md`).
+may be absent. **An empty path (`--config ""`, `PKTCAP_CONFIG=`) means no file**,
+the user's own included. It is duho's layout, read by `duho.config` in the format
+its name says (`.ini`/`.cfg`, `.toml`, `.json`, `.yaml`/`.yml`; TOML before Python
+3.11 and YAML need duho's `config` and `yaml` extras; another name is refused):
+top-level keys for the root's options (`verbose`), a table for each command with
+the command's field names as keys; in INI the keys of `[DEFAULT]` are the top
+level (examples in `_plugins/AGENTS.md`).
 
 - **Order**, nearest first: the argument, the variable the field declares
   (`PKTCAP_LOAD` for `load`; a class's `_env_prefix_` names the rest), the file,
-  the default; a higher layer
-  replaces a lower for that option only, so lists do not add up. A top-level
-  `load` is the list of every command whose table names none.
-- **Refused**, status 2, one line naming the file and the key and never text of
-  it: a key or table nobody has, a `config` key, a `[pktcap]` table (`load` goes
-  at the top level), a table that is no table, an invalid document, a file over
-  65,536 octets. A named file that does not exist is status 2 from `--config`
+  the default; a higher layer replaces a lower for that option only, so lists
+  do not add up. A top-level `load` is the list of every command whose table
+  names none.
+- **Refused**, status 2, never with text of a value: a key or table nobody has
+  (duho's usage error, `unknown key 'convert.nosuch'`, which names the key), a
+  `config` key, a `[pktcap]` table (`load` goes at the top level), an invalid
+  document, a file over 65,536 octets. A named file that does not exist is status 2 from `--config`
   and 1 from the variable.
 - **Trust.** A list and a hook run code: `Loading._load_from_` and
   `Capture._hook_from_` name the layers each may come from. The file found by
   default must be yours or root's and not writable by everyone (POSIX); a file
-  you name is read as it is: as root, `sudo pktcap -c ~/.config/pktcap/pktcap.ini capture`.
-- **A served tree** (`PKTCAP_MCP`) is given no settings file, and a tool call
-  that names `config` reads none, nor names a `load` or a `hook`.
+  you name is read as it is: `sudo pktcap -c ~/.config/pktcap/pktcap.ini capture`.
+- **A served tree** (`PKTCAP_MCP`) reads the server's own default file, checked
+  as any default is, and neither `PKTCAP_CONFIG` nor a `config` a tool call names;
+  a call names no `load` or `hook` either.
 
 ## Writing options
 
