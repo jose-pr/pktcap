@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (default `None`) gives every option of a class that names no variable,
   inherited ones among them, the variable made of the prefix and its field name
   in upper case (`MYPROG_CAPTURE_FORMAT`); the logging options and `--load`,
-  which keeps `PKTCAP_LOAD`, are not renamed. `--format toml` or `ini` without
+  which keeps `PKTCAP_LOAD`, are not renamed, and `Meta(env="")` keeps an
+  option without a variable. `--format toml` or `ini` without
   `--per-record` is status 2 with a line that names `--per-record`, the option,
   and not `per_record=True`, the library's keyword.
 - `CaptureWriter.write(item, record=None, *, names=None)` has no `text=`
