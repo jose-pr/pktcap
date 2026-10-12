@@ -133,17 +133,26 @@ def test_several_values_bind_several_sockets_in_the_order_written(caplog):
     # Three ports of the one loopback address every host has: macOS and
     # FreeBSD configure 127.0.0.1 alone (measured 2026-10-09), so 127.0.0.2
     # cannot be bound there. The ports are free when asked for and may be taken
-    # a moment later, which the status would then say.
-    ports = []
-    while len(ports) < 3:
-        port = get_free_port("127.0.0.1")
-        if port not in ports:
-            ports.append(port)
-    first, second, third = ports
-    argv = ["capture", "--count", "1", "--format", "text"]
-    argv += ["--listen", "127.0.0.1:%d" % first]
-    argv += ["--listen", "127.0.0.1:%d,127.0.0.1:%d" % (second, third)]
-    status, addresses = listen_and_send(argv + SAFETY, caplog, [b"x"], wanted=3)
+    # a moment later by another process (seen twice on a busy host), so a run
+    # that could not bind is tried again with other ports, three times in all.
+    for attempt in range(3):
+        ports = []
+        while len(ports) < 3:
+            port = get_free_port("127.0.0.1")
+            if port not in ports:
+                ports.append(port)
+        first, second, third = ports
+        argv = ["capture", "--count", "1", "--format", "text"]
+        argv += ["--listen", "127.0.0.1:%d" % first]
+        argv += ["--listen", "127.0.0.1:%d,127.0.0.1:%d" % (second, third)]
+        caplog.clear()
+        try:
+            status, addresses = listen_and_send(argv + SAFETY, caplog, [b"x"], wanted=3)
+        except AssertionError:
+            if attempt == 2:
+                raise
+            continue
+        break
     assert status == 0
     assert addresses == [("127.0.0.1", port) for port in ports]
 
