@@ -225,7 +225,7 @@ the base defines begins `_pk_`, and a subclass defines and uses none.
 
 | Class | Options it declares | Class attributes |
 | --- | --- | --- |
-| `Loading(LoggingArgs, Cmd)` | `--load` (`load`) | `_plugins_ = ()`: dotted plugin names always loaded, first, source `always`; code's, never read from input. `_load_from_ = ("argument", "environment", "file")`: the layers `--load` may come from; `_env_prefix_ = None`: a prefix such as `"MYPROG_CAPTURE_"` gives every option of the class (inherited ones too) that names no variable `PREFIX` + its field name in upper case (`MYPROG_CAPTURE_FORMAT`), the logging options excepted and `--load` keeping `PKTCAP_LOAD` |
+| `Loading(LoggingArgs, Cmd)` | `--load` (`load`) | `_plugins_ = ()`: dotted plugin names always loaded, first, source `always`; code's, never read from input. `_load_from_ = ("argument", "environment", "file")`: the layers `--load` may come from; `_env_prefix_ = None`: a prefix such as `"MYPROG_CAPTURE_"` gives every option of the class (inherited ones too) that names no variable `PREFIX` + its field name in upper case (`MYPROG_CAPTURE_FORMAT`), the logging options excepted, `--load` keeping `PKTCAP_LOAD`, and `Meta(env="")` keeping an option without one |
 | `Selecting(Loading)` | `--filter`/`-f` | `_filter_ = None`: own clauses, ANDed with `--filter` |
 | `Writing(Selecting)` | `--output`, `--format`, `--per-record`, `--max-files`, `--datagrams`, `--append` | `_fields_ = ()` file-name fields beyond `timestamp`, `index`, `format`; `_interruptible_ = False`; `_format_ = None` |
 | `Convert(Writing)` | `--input`/`-i`, `--limit` | |

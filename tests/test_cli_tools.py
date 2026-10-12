@@ -189,3 +189,23 @@ def test_duho_runs_a_tool_with_standard_output_that_has_no_buffer(probed):
 
     run(Pktcap, ["plugins"])
     assert probed[1][1] is True
+
+
+# -- a duho that publishes running_mode() ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "mode, buffered, served",
+    [("mcp", True, True), ("cli", False, False), ("mcp", False, True)],
+)
+def test_served_follows_running_mode_and_ignores_standard_output(
+    mode, buffered, served, monkeypatch
+):
+    import io
+
+    from pktcap.cli import Plugins
+
+    monkeypatch.setattr("pktcap.cli._common._running_mode", lambda: mode, raising=False)
+    stream = io.TextIOWrapper(io.BytesIO()) if buffered else io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stream)
+    assert Plugins.served(object()) is served

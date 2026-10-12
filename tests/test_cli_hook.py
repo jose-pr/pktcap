@@ -9,6 +9,7 @@ runs on this host on every platform. A hook is a real program from
 import json
 import logging
 import sys
+import threading
 import time
 
 import pytest
@@ -202,11 +203,23 @@ def test_a_tool_call_cannot_name_a_hook(tmp_path, monkeypatch, caplog):
         monkeypatch, tmp_path, "mark", '(HERE / "ran").write_text("ran")\n'
     )
     marker = tmp_path / "ran"
-    result = call_tool(
-        ServedRoot,
-        "pktcap.capture",
-        {"listen": ["127.0.0.1:0"], "count": 1, "hook": program},
+    # A call that was not told apart from a command line would wait for a
+    # datagram that never comes: a bound makes that a failure and not a hang.
+    outcome = {}
+    thread = threading.Thread(
+        target=lambda: outcome.update(
+            result=call_tool(
+                ServedRoot,
+                "pktcap.capture",
+                {"listen": ["127.0.0.1:0"], "count": 1, "hook": program},
+            )
+        ),
+        daemon=True,
     )
+    thread.start()
+    thread.join(30)
+    assert not thread.is_alive(), "the call was taken for a command line and ran"
+    result = outcome["result"]
     assert result["isError"] is True
     assert "cannot name a hook" in result["content"][0]["text"]
     assert not marker.exists()

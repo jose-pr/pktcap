@@ -18,14 +18,14 @@ import socket
 import sys
 import threading
 import time
-from typing import Optional
+from typing import Annotated, Optional
 
 import pytest
 
 pytest.importorskip("duho")
 
 import captures as build  # noqa: E402
-from duho import Cmd, main as run  # noqa: E402
+from duho import Cmd, Meta, main as run  # noqa: E402
 from netimps import UDPEndpoint, bind  # noqa: E402
 
 import pktcap.cli  # noqa: E402
@@ -342,6 +342,31 @@ def test_a_class_with_an_env_prefix_takes_an_inherited_option_from_its_variable(
     monkeypatch.setenv("MYPROG_CONVERT_FILTER", "proto=nothing")
     assert status_of(Prefixed, ["-i", str(trace)]) == 0
     assert capsys.readouterr().out == ""
+
+
+def test_the_variable_names_are_the_prefix_and_the_field_in_upper_case():
+    found = {b.name: b.env for b in Prefixed._getargs_()}
+    assert found["format"] == "MYPROG_CONVERT_FORMAT"
+    assert found["per_record"] == "MYPROG_CONVERT_PER_RECORD"
+    assert found["input"] == "MYPROG_CONVERT_INPUT"
+    assert found["load"] == "PKTCAP_LOAD"
+    assert {found[n] for n in ("verbose", "quiet", "loglevels")} == {None}
+    assert {b.env for b in Unprefixed._getargs_()} == {None, "PKTCAP_LOAD"}
+
+
+def test_an_empty_variable_name_keeps_an_option_without_one(trace, monkeypatch, capsys):
+    class Quiet(Prefixed):
+        _parsername_ = "convert"
+
+        limit: Annotated[Optional[int], Meta(env="")] = None
+        "the most frames"
+        ("--limit",)
+
+    monkeypatch.setenv("MYPROG_CONVERT_LIMIT", "1")
+    monkeypatch.setenv("MYPROG_CONVERT_FORMAT", "text")
+    assert status_of(Quiet, ["-i", str(trace)]) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 3  # the limit was not read
+    assert {b.name: b.env for b in Quiet._getargs_()}["limit"] == ""
 
 
 def test_the_command_line_beats_the_variable_of_a_prefixed_class(
