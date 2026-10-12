@@ -140,3 +140,52 @@ def test_the_server_over_a_pipe_lists_convert_and_converts(trace):
     ]
     text = replies[3]["result"]["content"][0]["text"]
     assert json.loads(text)["linktype"] == 1
+
+
+# -- how a command tells that it is a tool call -------------------------------------
+#
+# Loading.served() answers true when standard output is a stream with no
+# `buffer`. That is what duho 0.7.2 does to run a tool (a StringIO in place of
+# standard output) and not something it documents. These two tests hold the
+# answer in each kind of call, and the property it is read from, against the
+# installed duho; both are replaced by duho's own call when a release publishes
+# one and the floor of the `cli` extra moves to it.
+
+
+@pytest.fixture
+def probed(monkeypatch):
+    """What `plugins` saw when it ran: whether it was served, and whether the
+    standard output it was given had a `buffer`."""
+    from pktcap.cli import Plugins
+
+    seen = []
+    original = Plugins.__call__
+
+    def probe(self):
+        seen.append((self.served(), getattr(sys.stdout, "buffer", None) is not None))
+        return original(self)
+
+    monkeypatch.setattr(Plugins, "__call__", probe)
+    return seen
+
+
+def test_served_is_true_in_a_tool_call_and_false_on_the_command_line(probed):
+    from pktcap.cli import main
+
+    result = call_tool(Pktcap, "pktcap.plugins", {})
+    assert not result.get("isError")
+    assert probed == [(True, False)]
+    assert main(["plugins"]) == 0
+    assert probed[1] == (False, True)
+
+
+def test_duho_runs_a_tool_with_standard_output_that_has_no_buffer(probed):
+    # Fails the day duho gives a tool a standard output with a `buffer`, or a
+    # command line one without: `served()` would then answer wrongly.
+    call_tool(Pktcap, "pktcap.plugins", {})
+    _, had_buffer = probed[0]
+    assert had_buffer is False
+    from duho import main as run
+
+    run(Pktcap, ["plugins"])
+    assert probed[1][1] is True
