@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from typing import (
     Annotated,
@@ -16,8 +15,7 @@ from typing import (
     Tuple,
 )
 
-import duho
-from duho import Cmd, LoggingArgs, Meta, value_sources
+from duho import Cmd, LoggingArgs, Meta, app_name, running_mode, value_sources
 
 from .._dissect import DissectedFrame
 from .._dissectors import DissectorRegistry
@@ -28,10 +26,6 @@ from .._plugins._load import LoadedPlugin, load_named
 from ._settings import file_read
 
 __all__ = ["Counted", "Loading", "Selecting", "error"]
-
-#: duho's published way to ask how a command was started, where the installed
-#: duho has one; ``None`` before it.
-_running_mode = getattr(duho, "running_mode", None)
 
 
 def error(text: str) -> None:
@@ -100,18 +94,12 @@ class Loading(LoggingArgs, Cmd):
         return builders
 
     def served(self) -> bool:
-        """Whether this is a tool call: duho's ``running_mode()`` says ``"mcp"``.
-        A duho without it runs a tool with standard output replaced by a text
-        stream, which has no ``buffer``."""
-        if _running_mode is not None:
-            return bool(_running_mode() == "mcp")
-        return getattr(sys.stdout, "buffer", None) is None
+        """Whether this is a tool call: duho's ``running_mode()`` says ``"mcp"``."""
+        return bool(running_mode() == "mcp")
 
     def _pk_program(self) -> str:
-        """The name of the program that runs this command: the ``prog`` of the
-        parser duho built for it, else the name it was started by."""
-        parser = type(self).__dict__.get("_duho_last_parser_")
-        words = (getattr(parser, "prog", "") or os.path.basename(sys.argv[0])).split()
+        """The name of the program that runs this command, as duho gives it."""
+        words = app_name(self).split()
         return words[0] if words else "the program"
 
     def _pk_origin(self, field: str) -> str:

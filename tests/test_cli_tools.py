@@ -144,12 +144,8 @@ def test_the_server_over_a_pipe_lists_convert_and_converts(trace):
 
 # -- how a command tells that it is a tool call -------------------------------------
 #
-# Loading.served() answers true when standard output is a stream with no
-# `buffer`. That is what duho 0.7.2 does to run a tool (a StringIO in place of
-# standard output) and not something it documents. These two tests hold the
-# answer in each kind of call, and the property it is read from, against the
-# installed duho; both are replaced by duho's own call when a release publishes
-# one and the floor of the `cli` extra moves to it.
+# Loading.served() is duho.running_mode() == "mcp" and looks at nothing else: a
+# served tool has a standard output with a `buffer`, as a command line has.
 
 
 @pytest.fixture
@@ -174,38 +170,25 @@ def test_served_is_true_in_a_tool_call_and_false_on_the_command_line(probed):
 
     result = call_tool(Pktcap, "pktcap.plugins", {})
     assert not result.get("isError")
-    assert probed == [(True, False)]
+    # The call is told by duho's mode and not by the shape of standard output.
+    assert probed == [(True, True)]
     assert main(["plugins"]) == 0
     assert probed[1] == (False, True)
+    assert main(["plugins"]) == 0 and probed[2][0] is False  # after a call too
 
 
-def test_duho_runs_a_tool_with_standard_output_that_has_no_buffer(probed):
-    # Fails the day duho gives a tool a standard output with a `buffer`, or a
-    # command line one without: `served()` would then answer wrongly.
-    call_tool(Pktcap, "pktcap.plugins", {})
-    _, had_buffer = probed[0]
-    assert had_buffer is False
-    from duho import main as run
-
-    run(Pktcap, ["plugins"])
-    assert probed[1][1] is True
-
-
-# -- a duho that publishes running_mode() ----------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "mode, buffered, served",
-    [("mcp", True, True), ("cli", False, False), ("mcp", False, True)],
-)
-def test_served_follows_running_mode_and_ignores_standard_output(
-    mode, buffered, served, monkeypatch
-):
+def test_served_follows_running_mode_and_ignores_standard_output(monkeypatch):
     import io
 
     from pktcap.cli import Plugins
 
-    monkeypatch.setattr("pktcap.cli._common._running_mode", lambda: mode, raising=False)
-    stream = io.TextIOWrapper(io.BytesIO()) if buffered else io.StringIO()
-    monkeypatch.setattr(sys, "stdout", stream)
-    assert Plugins.served(object()) is served
+    for mode, buffered, served in (
+        ("mcp", True, True),
+        ("cli", False, False),
+        ("mcp", False, True),
+        ("cli", True, False),
+    ):
+        monkeypatch.setattr("pktcap.cli._common.running_mode", lambda: mode)
+        stream = io.TextIOWrapper(io.BytesIO()) if buffered else io.StringIO()
+        monkeypatch.setattr(sys, "stdout", stream)
+        assert Plugins.served(object()) is served

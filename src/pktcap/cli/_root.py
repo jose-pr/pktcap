@@ -29,7 +29,7 @@ def _settings_of(path: pathlib.Path) -> Dict[str, Any]:
     return read_settings(path, Pktcap) or {}
 
 
-class Pktcap(ConfigArgs, LoggingArgs, Cli):  # type: ignore[misc]
+class Pktcap(ConfigArgs, LoggingArgs, Cli):
     """Capture, replay and convert packet captures (pcap and pcapng), with the protocol plugins you name."""
 
     _parsername_ = "pktcap"
