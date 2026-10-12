@@ -65,9 +65,9 @@ context manager.
   `sys.stdout`); a stream stays the caller's to close.
 - `format=None` takes the format from the ending of the target's name
   (`.pcap`, `.cap`, `.pcapng`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`,
-  `.toml`, `.ini`, `.txt`, `.log`; letter case ignored, the longest ending wins). A name given
-  wins over the ending. Content is never sniffed. `UnsupportedFormatError`,
-  listing the formats, when neither says.
+  `.toml`, `.ini`, `.txt`, `.log`; letter case ignored, the longest ending
+  wins). A name given wins over the ending. Content is never sniffed.
+  `UnsupportedFormatError`, listing the formats, when neither says.
 - **`CaptureWriter.write(item, record=None, *, text=None, names=None) -> None`** —
   `item` is a `CapturedDatagram` or a `DissectedFrame`. `pcap` and `pcapng`
   write it (a datagram under synthesised headers, a frame as captured) and
@@ -232,12 +232,12 @@ its text** (`op = BOOTREQUEST`, `NaN`). No section, or text before the first,
 is an error.
 
 **The law** `loads_record(dumps_record(r, f), f) == r` holds except: a non-text
-key comes back as text in `json` and `ini`; `ini` cannot read the empty name
-and reads `{"record": {...}}` alone as its contents; `toml` writes a lone
-surrogate as U+FFFD, so two names that differ only in those collide; `json` and
-`ini` read a high surrogate followed by a low one as the character they spell;
-a NaN is not equal to itself; a tuple is a list. `toml` and `ini` list mappings
-after the other values.
+key comes back as text in `json` and `ini`; `ini` reads `{"record": {...}}`
+alone as its contents; `toml` writes a lone surrogate in a value as U+FFFD;
+`json` and `ini` read a high surrogate followed by a low one as the character
+they spell; a NaN is not equal to itself; a tuple is a list. `toml` and `ini`
+list mappings after the other values. A name that would not read back is
+refused, not an exception (`toml` and `ini` below).
 
 ## The formats
 
@@ -271,7 +271,7 @@ marker. `bytes` is `!!binary`.
 One document per record. TOML has no null: a record holding `None` anywhere
 is a `TypeError`. Keys must be text. Characters outside ASCII are written as
 `\uXXXX` or `\UXXXXXXXX`; half of a surrogate pair, which is not a character,
-is written as U+FFFD.
+is written as U+FFFD in a value, and a key that holds one is a `ValueError`.
 
 ### `ini`
 
@@ -296,5 +296,5 @@ assert pktcap.loads_record(text, "ini") == record
   letter encoded, since `configparser` reads that section as defaults. Names
   keep their case (`optionxform = str`), and the file is read without
   interpolation.
-- `ValueError` for two names that would be one section or one option, and for
-  a record that has both top-level values and a mapping named `record`.
+- `ValueError` for two names that would be one, an empty name, a lone
+  surrogate in a name, and top-level values beside a mapping named `record`.

@@ -154,8 +154,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `dumps_record` writes, in the same four formats, as its inverse: for every
   record `dumps_record` takes, `loads_record(dumps_record(r, f), f) == r`,
   with the exceptions the formats force, which the header lists (a key that
-  was not text comes back as text in JSON and INI, a lone surrogate is U+FFFD
-  in TOML, and a few more). Text that is not one record raises the new
+  was not text comes back as text in JSON and INI, a lone surrogate in a value
+  is U+FFFD in TOML, and a few more). A name a format could not write so that
+  it reads back is refused with a `ValueError` that quotes nothing of the
+  record: a lone surrogate in a TOML key, a lone surrogate or an empty name in
+  an INI section or option name. Text that is not one record raises the new
   `RecordFormatError(message, *, format, lineno=None)`, a `PktcapError` and a
   `ValueError`, whose message never quotes the text and which chains nothing.
   The text is untrusted: a key written twice, `NaN` and the infinities in
