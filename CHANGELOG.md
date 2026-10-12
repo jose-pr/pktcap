@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- What a library that subclasses the commands had to work round is given by the
+  base. `Capture._endpoints(self, dissector)` is given the dissector the frames
+  are read with, so a protocol is registered on the port that was bound
+  without keeping the dissector in an attribute; it was `_endpoints(self)`.
+  `Capture._listen_` (default `None`: every interface) is what the command
+  listens on when neither `--listen` nor `--interface` is given, so a class
+  need not override `_frames` to make listening its default. `Loading._env_prefix_`
+  (default `None`) gives every option of a class that names no variable,
+  inherited ones among them, the variable made of the prefix and its field name
+  in upper case (`MYPROG_CAPTURE_FORMAT`); the logging options and `--load`,
+  which keeps `PKTCAP_LOAD`, are not renamed. `--format toml` or `ini` without
+  `--per-record` is status 2 with a line that names `--per-record`, the option,
+  and not `per_record=True`, the library's keyword.
 - `CaptureWriter.write(item, record=None, *, names=None)` has no `text=`
   argument: a caller hands over the record and the writer renders it, so the
   octets of a record are one library's. Nothing released took it.
@@ -71,7 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `pktcap.cli` exports `main`, `Loading`, `Selecting` (was `Base`), `Writing`,
   `Capture`, `Convert`, `Replay` and `Plugins`, bound on first use so that
   importing it still needs no `duho`. A subclass sets `_plugins_`, `_filter_`,
-  `_fields_`, `_format_`, `_interruptible_` and `_default_port_`, and
+  `_fields_`, `_format_`, `_interruptible_`, `_default_port_`, `_listen_` and
+  `_env_prefix_`, and
   overrides `_select`, `_frames`, `_names`, `_limit`, `_hook`, `_report`,
   `_endpoints`, `_stop`, `_datagrams` and `_replay`; the loop that `convert`
   and `capture` each held is `Writing.__call__`. `Replay` is split into

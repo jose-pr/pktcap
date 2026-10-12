@@ -171,6 +171,25 @@ it, or from a capture or anything a capture holds. The first source that names
 a list is the list: lists never add up, and a source below it is not opened.
 What each source is and what is refused is in `pktcap/cli/AGENTS.md`.
 
+The settings file, in INI (the keys of `[DEFAULT]` are the top level) and in TOML:
+
+```ini
+[DEFAULT]
+load = pydhcp.capture.register_dhcp_dissector, tftp.capture.register_tftp_dissector
+
+[convert]
+format = text
+per_record = true
+```
+
+```toml
+load = ["pydhcp.capture.register_dhcp_dissector", "tftp.capture.register_tftp_dissector"]
+
+[convert]
+format = "text"
+per_record = true
+```
+
 `import pktcap` reads no variable and imports no plugin; the one variable the
 library reads is the copy of the environment a hook command's process starts
 from.

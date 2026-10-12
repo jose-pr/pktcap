@@ -73,27 +73,12 @@ may be absent. It is duho's layout, read by `duho.config` in the format its name
 says (`.ini`/`.cfg`, `.toml`, `.json`, `.yaml`/`.yml`; TOML before Python 3.11 and
 YAML need duho's `config` and `yaml` extras; another name is refused): top-level
 keys for the root's options (`verbose`), a table for each command with the
-command's field names as keys. In INI the keys of `[DEFAULT]` are the top level:
-
-```ini
-[DEFAULT]
-load = pydhcp.capture.register_dhcp_dissector, tftp.capture.register_tftp_dissector
-
-[convert]
-format = text
-per_record = true
-```
-
-```toml
-load = ["pydhcp.capture.register_dhcp_dissector", "tftp.capture.register_tftp_dissector"]
-
-[convert]
-format = "text"
-per_record = true
-```
+command's field names as keys. In INI the keys of `[DEFAULT]` are the top level
+(examples in `_plugins/AGENTS.md`).
 
 - **Order**, nearest first: the argument, the variable the field declares
-  (`PKTCAP_LOAD`, for `load` alone), the file, the default; a higher layer
+  (`PKTCAP_LOAD` for `load`; a class's `_env_prefix_` names the rest), the file,
+  the default; a higher layer
   replaces a lower for that option only, so lists do not add up. A top-level
   `load` is the list of every command whose table names none.
 - **Refused**, status 2, one line naming the file and the key and never text of
@@ -143,7 +128,8 @@ Copies a pcap or pcapng capture into pcap, pcapng or records.
   then ends with status 2 and a line naming the file and how many were
   written. A file that is not a capture is status 2; one that cannot be opened
   is status 1.
-- `--format toml` or `ini` without `--per-record` is status 2 saying why.
+- `--format toml` or `ini`, or an `--output` ending `.toml` or `.ini`, without
+  `--per-record` is status 2 naming `--per-record` (also in `capture`).
 
 ## `pktcap replay`
 
@@ -180,7 +166,7 @@ is **Linux only** (`AF_PACKET`), and the process needs `CAP_NET_RAW` (root, or
 `setcap cap_net_raw+ep` on the interpreter). From `--listen` it runs anywhere,
 with no privilege.
 
-- `--interface NAME`: a name, an address or a MAC. Omitted: every interface.
+- `--interface NAME`: a name, an address or a MAC. Omitted: every interface (or `_listen_`).
 - `--listen SPEC` (repeatable, and excludes `--interface`, status 2): capture
   the datagrams that arrive at sockets the command binds, read with
   `netimps.parse_listen`; the grammar, the ports and the counts are in
@@ -239,11 +225,11 @@ the base defines begins `_pk_`, and a subclass defines and uses none.
 
 | Class | Options it declares | Class attributes |
 | --- | --- | --- |
-| `Loading(LoggingArgs, Cmd)` | `--load` (`load`) | `_plugins_ = ()`: dotted plugin names always loaded, first, source `always`; code's, never read from input. `_load_from_ = ("argument", "environment", "file")`: the layers `--load` may come from |
+| `Loading(LoggingArgs, Cmd)` | `--load` (`load`) | `_plugins_ = ()`: dotted plugin names always loaded, first, source `always`; code's, never read from input. `_load_from_ = ("argument", "environment", "file")`: the layers `--load` may come from; `_env_prefix_ = None`: a prefix such as `"MYPROG_CAPTURE_"` gives every option of the class (inherited ones too) that names no variable `PREFIX` + its field name in upper case (`MYPROG_CAPTURE_FORMAT`), the logging options excepted and `--load` keeping `PKTCAP_LOAD` |
 | `Selecting(Loading)` | `--filter`/`-f` | `_filter_ = None`: own clauses, ANDed with `--filter` |
 | `Writing(Selecting)` | `--output`, `--format`, `--per-record`, `--max-files`, `--datagrams`, `--append` | `_fields_ = ()` file-name fields beyond `timestamp`, `index`, `format`; `_interruptible_ = False`; `_format_ = None` |
 | `Convert(Writing)` | `--input`/`-i`, `--limit` | |
-| `Capture(Writing)` | `--interface`, `--listen`, `--count`, `--duration`/`-d`, `--hook`, `--hook-fail-fast`, `--hook-timeout`; `_interruptible_ = True` | `_default_port_ = None` (`None`, an `int` or a tuple of them); `_hook_from_ = ("argument",)`: the layers `--hook` may come from, as `_load_from_` |
+| `Capture(Writing)` | `--interface`, `--listen`, `--count`, `--duration`/`-d`, `--hook`, `--hook-fail-fast`, `--hook-timeout`; `_interruptible_ = True` | `_default_port_ = None` (`None`, an `int` or a tuple of them); `_listen_ = None`: what the command listens on, read as `--listen` is, when neither `--listen` nor `--interface` is given (`None`: every interface); `_hook_from_ = ("argument",)`: the layers `--hook` may come from, as `_load_from_` |
 | `Replay(Selecting)` | `--input`/`-i`, `--to`, `--speed`, `--no-delay`, `--max-delay`, `--limit`, `--source-port`, `--broadcast`, `--json` | `_default_port_ = None` (an `int` or `None`) |
 | `Plugins(Loading)` | `--layer`, `--json` | |
 
@@ -261,7 +247,7 @@ wants a listing sets `"text"`. Methods, with when each is called:
 | `Writing._limit(self) -> Optional[int]` | once | the most items written; `Convert` gives `--limit`, `Capture` `--count` |
 | `Writing._hook(self) -> Optional[Callable[[DissectedFrame], object]]` | once, before the source | called after a frame is written, never for one the filter dropped |
 | `Writing._report(self, result: CopyResult, dissector: FrameDissector) -> int` | once, at the end, after Ctrl-C too | prints the summary on stderr; returns the status |
-| `Capture._endpoints(self) -> Tuple[UDPEndpoint, ...]` | once, when `--listen` is given | the default is `netimps.bind_listen` of `--listen` read with `_default_port_`; the capture owns what is returned (and closes it if the source refuses it); override for a family, broadcast or one socket per address |
+| `Capture._endpoints(self, dissector: FrameDissector) -> Tuple[UDPEndpoint, ...]` | once, when `--listen` is given or `_listen_` applies | `dissector` is the one `_frames` was given, so a protocol can be registered (`dissector.registry.register("udp", port, fn)`) on a port that was bound; the default is `netimps.bind_listen` of `--listen`, else `_listen_`, read with `_default_port_`; the capture owns what is returned (and closes it if the source refuses it); override for a family, broadcast or one socket per address |
 | `Capture._stop(self) -> bool` | between datagrams, at least once a second, whatever the options | the default is the `--duration` deadline, false without one |
 | `Replay._datagrams(self, registry) -> Iterator[CapturedDatagram]` | once | the filtered datagrams in capture order |
 | `Replay._replay(self, datagrams, host: str, port: int) -> Any` | once | default `replay_to` with the options; its result is given to `_report` |
@@ -281,14 +267,12 @@ wants a listing sets `"text"`. Methods, with when each is called:
   and `CaptureHookError` (an `OSError`) to status 1; `main`'s does.
 - A subclass that serves `Capture` as a tool (`_mcp_ = True`) is refused a
   `hook` in a tool call by the class; do not remove that. A root that has a
-  settings file or a variable for a field applies it to the inherited ones too:
-  `_load_from_` and `_hook_from_` say which layers a class takes a list and a
-  hook from.
+  settings file or a variable for a field applies it to the inherited ones too.
 - `_names` runs for hooks as well as file names, so it must not raise on a
   frame the filter let through; `_filter_` is how it is guaranteed its layer.
 
 ```python
-from pktcap.cli import Convert
+from pktcap.cli import Capture, Convert
 
 
 class Listing(Convert):
@@ -297,4 +281,20 @@ class Listing(Convert):
     _parsername_ = "listing"
     _filter_ = "proto=udp"
     _format_ = "text"
+
+
+class Watching(Capture):
+    """Capture on ports of its own, with MYPROG_WATCHING_* variables."""
+
+    _parsername_ = "watching"
+    _listen_ = "*"  # listen with no option; --interface still wins
+    _default_port_ = (6767, 6768)
+    _env_prefix_ = "MYPROG_WATCHING_"
+
+    def _endpoints(self, dissector):
+        endpoints = super()._endpoints(dissector)
+        for endpoint in endpoints:  # dissect: the protocol's own function
+            port = endpoint.socket.getsockname()[1]
+            dissector.registry.register("udp", port, dissect)
+        return endpoints
 ```
