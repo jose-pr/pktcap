@@ -143,10 +143,19 @@ def test_a_file_that_cannot_be_opened_is_status_1(tmp_path, capsys):
     assert "pktcap: error: " in capsys.readouterr().err
 
 
-def test_a_format_of_one_record_per_file_needs_per_record(trace, capsys):
-    assert main(["convert", "-i", str(trace), "--format", "toml"]) == 2
+@pytest.mark.parametrize("name", ["toml", "ini"])
+def test_a_format_of_one_record_per_file_names_the_option_to_pass(name, trace, capsys):
+    assert main(["convert", "-i", str(trace), "--format", name]) == 2
     err = capsys.readouterr().err
-    assert "per_record" in err and "toml" in err
+    assert err.count("\n") == 1 and err.startswith("pktcap: error: ")
+    assert "--per-record" in err and "per_record" not in err and name in err
+    assert "--output" in err
+
+
+def test_the_ending_of_the_output_can_name_such_a_format_too(trace, tmp_path, capsys):
+    out = tmp_path / "all.ini"
+    assert main(["convert", "-i", str(trace), "-o", str(out)]) == 2
+    assert "--per-record" in capsys.readouterr().err and not out.exists()
 
 
 def test_toml_per_record_writes_one_file_each(trace, tmp_path):

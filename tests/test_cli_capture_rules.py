@@ -117,7 +117,7 @@ class Ports(Capture):
     "ports"
     ("--listen",)
 
-    def _endpoints(self):
+    def _endpoints(self, dissector):
         SEEN.append(list(self.listen))
         return (UDPEndpoint(bind("127.0.0.1", 0)),)
 
@@ -132,7 +132,7 @@ def test_a_subclass_whose_listen_is_not_text_reaches_its_endpoints(tmp_path):
 
 def test_a_bind_that_fails_names_what_was_asked_for_as_text(tmp_path):
     class Refuses(Ports):
-        def _endpoints(self):
+        def _endpoints(self, dissector):
             raise OSError("no such address")
 
     alive, outcome = in_a_thread(
@@ -177,7 +177,7 @@ def test_the_endpoints_a_command_bound_are_closed_when_the_source_refuses_them(
     class TooMany(Capture):
         _parsername_ = "capture"
 
-        def _endpoints(self):
+        def _endpoints(self, dissector):
             made.extend(UDPEndpoint(bind("127.0.0.1", 0)) for _ in range(257))
             return tuple(made)
 
@@ -251,3 +251,14 @@ def test_append_alone_still_adds_to_a_file(tmp_path):
     with CaptureWriter(str(target), append=True):
         pass
     assert json.loads(target.read_text().splitlines()[0]) == {"kept": True}
+
+
+@pytest.mark.parametrize("name", ["toml", "ini"])
+def test_capture_in_a_one_record_file_format_names_per_record_before_binding(
+    name, capsys
+):
+    argv = ["capture", "--listen", "127.0.0.1:0", "--format", name, "-v"]
+    assert main(argv) == 2
+    err = capsys.readouterr().err
+    assert "--per-record" in err and "per_record" not in err
+    assert "listening on" not in err  # nothing was bound

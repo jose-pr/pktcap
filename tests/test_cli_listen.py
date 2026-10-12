@@ -18,6 +18,7 @@ pytest.importorskip("duho")
 
 from netimps import UDPEndpoint, bind, get_free_port, get_interface  # noqa: E402
 
+from pktcap import LiveCaptureError  # noqa: E402
 from pktcap.cli import Capture, main  # noqa: E402
 
 WAIT = 10.0
@@ -285,3 +286,68 @@ def test_the_real_command_prints_one_line_for_a_datagram_sent_to_it():
             process.communicate()
     assert process.returncode == 0
     assert len(out.splitlines()) == 1 and "127.0.0.1:%d" % port in out
+
+
+# -- _listen_: what a class listens on when no option names a source ---------------
+
+
+class Watching(Capture):
+    _parsername_ = "watching"
+    _listen_ = "127.0.0.1"
+    _default_port_ = 0
+    bound = 0  # how many times `_endpoints` ran
+
+    def _endpoints(self, dissector):
+        type(self).bound += 1
+        return super()._endpoints(dissector)
+
+
+def _watching(argv):
+    from duho import main as run
+
+    return run(Watching, argv)
+
+
+def test_a_class_listens_where_it_says_when_no_option_names_a_source(caplog, capsys):
+    argv = ["--count", "1", "--format", "text"]
+    status, addresses = listen_and_send(
+        argv + SAFETY, caplog, [b"watched"], runner=_watching
+    )
+    out = capsys.readouterr().out
+    assert status == 0 and addresses[0][0] == "127.0.0.1"
+    (line,) = out.splitlines()
+    assert "127.0.0.1:%d" % addresses[0][1] in line
+
+
+def test_the_listen_option_beats_the_class_spec(caplog, capsys):
+    # The class's address is not on this host: only the option can be bound.
+    class Elsewhere(Watching):
+        _listen_ = "198.51.100.1"
+
+    def run(argv):
+        from duho import main
+
+        return main(Elsewhere, argv)
+
+    argv = ["--listen", "127.0.0.1:0", "--count", "1", "--format", "text"]
+    status, addresses = listen_and_send(argv + SAFETY, caplog, [b"x"], runner=run)
+    assert status == 0 and addresses[0][0] == "127.0.0.1"
+
+
+def test_the_interface_option_beats_the_class_spec(monkeypatch):
+    monkeypatch.setattr("pktcap._live._AF_PACKET", None)  # a platform with no capture
+    before = Watching.bound
+    with pytest.raises(LiveCaptureError, match="needs Linux"):
+        _watching(["--interface", "lo", "--count", "1"])
+    assert Watching.bound == before  # nothing was bound
+
+
+def test_a_class_without_a_spec_captures_from_an_interface(monkeypatch):
+    from duho import main as run
+
+    class Plain(Capture):
+        _parsername_ = "plain"
+
+    monkeypatch.setattr("pktcap._live._AF_PACKET", None)
+    with pytest.raises(LiveCaptureError, match="needs Linux"):
+        run(Plain, ["--count", "1"])

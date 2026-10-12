@@ -22,7 +22,7 @@ from .._exceptions import UnsupportedFormatError
 from .._formats import CAPTURE_FORMATS, OUTPUT_FORMATS, infer_format
 from .._output import CaptureWriter
 from ._common import Counted, Selecting
-from ._line import TextSink, summary_parts
+from ._line import TextSink, refuse_one_file, summary_parts
 
 __all__ = ["Writing"]
 
@@ -128,6 +128,7 @@ class Writing(Selecting):
         name = self._pk_chosen()
         if self.append and self.served():
             raise ValueError("a tool call cannot name append: it adds to a file")
+        refuse_one_file(self._pk_written(), self.per_record)
         if self.output != "-":
             return self._pk_built(self.output, name)
         if name in CAPTURE_FORMATS and sys.stdout.isatty():

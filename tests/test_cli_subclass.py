@@ -9,6 +9,8 @@ option, so the first meets no clash. What is shown working here is what
 """
 
 import ast
+import importlib
+import inspect
 import json
 import pathlib
 import re
@@ -317,6 +319,71 @@ def test_selecting_alone_is_a_base_with_no_source():
     }  # fmt: skip
 
 
+# -- _env_prefix_: a variable for every option ---------------------------------------
+
+
+class Prefixed(Convert):
+    _parsername_ = "convert"
+    _env_prefix_ = "MYPROG_CONVERT_"
+
+
+class Unprefixed(Convert):
+    _parsername_ = "convert"
+
+
+def test_a_class_with_an_env_prefix_takes_an_inherited_option_from_its_variable(
+    trace, monkeypatch, capsys
+):
+    monkeypatch.setenv("MYPROG_CONVERT_FORMAT", "text")
+    monkeypatch.setenv("MYPROG_CONVERT_LIMIT", "2")
+    assert status_of(Prefixed, ["-i", str(trace)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 2 and not any(line.startswith("{") for line in lines)
+    monkeypatch.setenv("MYPROG_CONVERT_FILTER", "proto=nothing")
+    assert status_of(Prefixed, ["-i", str(trace)]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_the_command_line_beats_the_variable_of_a_prefixed_class(
+    trace, monkeypatch, capsys
+):
+    monkeypatch.setenv("MYPROG_CONVERT_FORMAT", "text")
+    assert status_of(Prefixed, ["-i", str(trace), "--format", "json"]) == 0
+    assert capsys.readouterr().out.startswith("{")
+
+
+def test_a_class_without_a_prefix_reads_no_variable(trace, monkeypatch, capsys):
+    monkeypatch.setenv("MYPROG_CONVERT_FORMAT", "text")
+    monkeypatch.setenv("CONVERT_FORMAT", "text")
+    assert status_of(Unprefixed, ["-i", str(trace)]) == 0
+    assert capsys.readouterr().out.startswith("{")
+
+
+def test_a_prefix_gives_no_variable_to_an_option_that_has_one(
+    demo, trace, monkeypatch, capsys
+):
+    # `load` is PKTCAP_LOAD whatever the prefix, as the header says; the
+    # prefixed name for it is not read.
+    monkeypatch.setenv("MYPROG_CONVERT_LOAD", "no.such.module")
+    monkeypatch.setenv("PKTCAP_LOAD", demo.mod)
+    argv = ["-i", str(trace), "-f", "demo.opcode=1"]
+    assert status_of(Prefixed, argv) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 1
+
+
+def test_a_subclass_of_a_prefixed_class_can_change_the_prefix(
+    trace, monkeypatch, capsys
+):
+    class Other(Prefixed):
+        _parsername_ = "convert"
+        _env_prefix_ = "OTHER_"
+
+    monkeypatch.setenv("MYPROG_CONVERT_FORMAT", "text")
+    monkeypatch.setenv("OTHER_FORMAT", "yaml")
+    assert status_of(Other, ["-i", str(trace)]) == 0
+    assert capsys.readouterr().out.startswith("---")
+
+
 # -- Capture --------------------------------------------------------------------
 
 
@@ -326,7 +393,7 @@ def test_endpoints_and_stop_and_default_port_are_the_subclasses(demo, calls, cap
     published = {}
 
     class Mine(Foreign, demo.Loop):
-        def _endpoints(self):
+        def _endpoints(self, dissector):
             calls.append("endpoints")
             endpoint = UDPEndpoint(bind("127.0.0.1", 0))
             published["port"] = endpoint.socket.getsockname()[1]
@@ -359,7 +426,7 @@ def test_endpoints_and_stop_and_default_port_are_the_subclasses(demo, calls, cap
 
 def test_stop_ends_a_capture_whose_source_is_quiet(demo, capsys):
     class Quiet(demo.Loop):
-        def _endpoints(self):
+        def _endpoints(self, dissector):
             return (UDPEndpoint(bind("127.0.0.1", 0)),)
 
         def _stop(self):
@@ -377,6 +444,45 @@ def test_stop_ends_a_capture_whose_source_is_quiet(demo, capsys):
     thread.join(WAIT)
     assert not thread.is_alive() and outcome["status"] == 0
     assert "0 frames read, 0 written" in capsys.readouterr().err
+
+
+def test_endpoints_is_given_the_dissector_the_frames_are_read_with(demo, capsys):
+    """A subclass registers its protocol on the port it bound, whichever the
+    kernel chose, in the registry the frames are dissected with."""
+    module = importlib.import_module(demo.mod)
+    seen = {}
+
+    class Mine(demo.Loop):
+        _plugins_ = (demo.mod,)
+
+        def _frames(self, dissector):
+            seen["frames"] = dissector
+            return super()._frames(dissector)
+
+        def _endpoints(self, dissector):
+            seen["endpoints"] = dissector
+            endpoint = UDPEndpoint(bind("127.0.0.1", 0))
+            seen["port"] = endpoint.socket.getsockname()[1]
+            dissector.registry.register("udp", seen["port"], module.dissect)
+            return (endpoint,)
+
+    result = {}
+    thread = threading.Thread(
+        target=lambda: result.update(
+            status=status_of(Mine, ["--listen", "x", "--count", "1"])
+        )
+    )
+    thread.start()
+    deadline = time.monotonic() + WAIT
+    while "port" not in seen and time.monotonic() < deadline:
+        time.sleep(0.02)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
+        sender.sendto(b"\x01boot", ("127.0.0.1", seen["port"]))
+    thread.join(WAIT)
+    assert result["status"] == 0
+    assert seen["endpoints"] is seen["frames"]
+    (record,) = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
+    assert record["layers"][-1]["name"] == "boot"
 
 
 def test_a_subclass_without_a_listen_of_its_own_keeps_the_exclusion(demo):
@@ -440,6 +546,15 @@ def test_the_worked_subclass_of_the_header_runs(trace, capsys):
     assert status_of(namespace["Listing"], ["-i", str(trace)]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == 3 and all("10.0.0.5:50000" in line for line in lines)
+    # The capture subclass uses the three points of the Capture class: it
+    # listens with no option, reads its protocol on the ports it bound, and
+    # has a variable for each option.
+    watching = namespace["Watching"]
+    assert watching._listen_ == "*" and watching._default_port_ == (6767, 6768)
+    names = {builder.name: builder.env for builder in watching._getargs_()}
+    assert names["format"] == "MYPROG_WATCHING_FORMAT"
+    assert names["load"] == "PKTCAP_LOAD" and names["verbose"] is None
+    assert "dissector" in inspect.signature(watching._endpoints).parameters
 
 
 # -- the base's private names are its own --------------------------------------------
@@ -453,7 +568,7 @@ FORMER_PRIVATE_NAMES = (
     "_destination", "_endpoint", "_text",
 )  # fmt: skip
 #: Names duho reads on a class (and the ones it adds, which begin `_duho_`).
-DUHO_NAMES = {"_parsername_", "_logger_name_", "_mcp_"}
+DUHO_NAMES = {"_parsername_", "_logger_name_", "_mcp_", "_getargs_"}
 THE_SEVEN = (
     "Loading",
     "Selecting",
