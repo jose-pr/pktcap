@@ -6,8 +6,11 @@ says *what changed*; this says *what it costs and how it was checked*.
 
 ## [Unreleased]
 
-Nothing has been released. The package is prepared at version 0.1.0; no tag
-exists and nothing has been published.
+The first release of `pktcap`: reading, dissecting, filtering, writing and
+replaying pcap and pcapng captures, TCP stream reassembly, live and UDP-socket
+capture, hooks, plugins, and a `duho` command line that is also served as MCP
+tools and is a base a protocol library subclasses. What it contains is in
+[`CHANGELOG.md`](CHANGELOG.md); this is what it costs and how it was checked.
 
 ### The commands as a base, the socket source and hooks
 
@@ -21,16 +24,24 @@ How it was checked:
   tests own, and once through `python -m pktcap` as a child process, which
   prints one line for a datagram sent to the address `-v` reports.
 - `tests/test_cli_hook.py` runs real programs and Python functions as hooks.
-- 63 mutations (the override points being called, each bound of the socket
+- Mutations of the override points being called, each bound of the socket
   source and of the hook program, the datagram an endpoint does not admit, the
-  `always` rule of the plugin list, the escaping and the cut of a text line)
-  each make a test fail. Six first survived: an equivalent redundancy in
-  the cut was removed, and five tests were added or strengthened.
+  `always` rule of the plugin list, and the escaping and the cut of a text
+  line each make a test fail (the counts are under "Validation").
 - Measured 2026-10-09: a socket on macOS 15.7 and FreeBSD 16.0 cannot send a UDP
   datagram above `net.inet.udp.maxdgram` (9216 octets by default), so the test
   of the largest datagram sends what the host will.
 
 ### The settings file of the command line
+
+The rules a user needs: the argument wins over the variable, the variable over
+the file, and a layer replaces a lower one for that option only. The default
+file must be the user's or root's and not writable by everyone (POSIX); a file
+named by `--config` or `PKTCAP_CONFIG` is read as it is. A key or table nobody
+has, a `config` key, a `[pktcap]` table, an invalid document and a file over
+65,536 octets are status 2 with one line that never holds text of the file.
+An empty path means no file. A hook and a plugin list are taken from the
+layers a class lists and from no other, because both run code.
 
 How it was checked:
 
@@ -42,12 +53,11 @@ How it was checked:
   the owner); a real server (`PKTCAP_MCP=stdio`) given the user's file, the
   variable and a call naming `config`, reading the user's own file and neither
   of the others; a subclass that narrows the layers a list may come from.
-- 42 mutations (the loader's refusals, the cap, the default file's checks,
-  the layers a list or a hook may come from, a served tree, the library
-  reading a variable or a file) each make a test fail; the 36 of them that do
-  not depend on file permissions run on Windows, the other six under Linux.
-  One more was added when a repointed mutation first survived: the plugins are
-  loaded before the output is looked at.
+- Mutations of the loader's refusals, the cap, the default file's checks, the
+  layers a list or a hook may come from, a served tree, the library reading a
+  variable or a file, and the plugins being loaded before the output is looked
+  at each make a test fail; those that depend on file permissions run under
+  Linux (the counts are under "Validation").
 - Measured 2026-10-12 on duho 0.7.3 (Python 3.9 and 3.14): the loader is told
   where its path came from (`field`, `env` or `default`); a real server applies
   the class-level default file but not the variable's file or a call's `config`;
@@ -58,7 +68,13 @@ How it was checked:
 ### TCP stream reassembly
 
 `TCPReassembler` and `read_tcp_streams` put each direction of a TCP connection
-back together. How it was checked:
+back together. A reader of a capture is passive, so what it refuses is
+stated: a hole is waited for and given up at an acknowledgment past it, a
+bound or the end; a segment, FIN or reset more than 16,777,216 octets beyond
+what the sender is believed to have sent, and a SYN that is not a live
+connection's own, are set aside until a later segment confirms them, so one
+forged number moves nothing; every table a capture can grow is bounded. How it
+was checked:
 
 - `tests/test_tcp_streams.py` builds segments with the suite's own builders,
   has a real `FrameDissector` read them and compares the octets handed out with
@@ -76,11 +92,11 @@ back together. How it was checked:
   connection (200 numbers, no octet lost); a capture cut at 64 octets a
   segment; 5,000 segments in order behind one lost segment.
 - `tests/conformance/` replays what tshark 4.6.8's `follow,tcp,raw` said about
-  twelve built captures and the seven existing ones that hold TCP: the same
-  octets in each direction, with the same gaps. pktcap differs in three cases,
-  each by a rule it states: octets beyond a hole that is never acknowledged
-  (given up when the capture ends), and what follows a reset in sequence (a new
-  stream). They are listed in the README and asserted.
+  the captures that hold TCP: the same octets in each direction, with the same
+  gaps. pktcap differs in three cases, each by a rule it states: octets beyond
+  a hole that is never acknowledged (given up when the capture ends), what
+  follows a reset in sequence (a new stream), and the numbering of the streams
+  after one. They are listed in the README and asserted.
 - A model written apart from the code, a dictionary of the first captured
   copy of each octet, agrees with one direction's items on 300 seeded streams
   of segments that overlap, repeat, disagree and start near the wrap.
@@ -109,13 +125,14 @@ somebody hands the library, so how it was checked is mostly about refusals:
   100,000 digits; 4,000 texts of random octets per format; a written record
   cut at every position and with random edits, a marker planted in the text
   and searched for in every message and chained exception.
-- 54 mutations (one or more for each refusal and each error) are all caught on
-  Python 3.14; two more, for the TOML reader on Python before 3.11, on 3.9.
+- Mutations of each refusal and each error are all caught on Python 3.14, and
+  those of the TOML reader on Python before 3.11 on 3.9 (the counts are under
+  "Validation").
 
 ### Benchmark baseline
 
 `benchmarks/results/0.1.0-win_arm64-py3.14.json` and `...-py3.9.json`, the
-first results there are, so there is no previous figure to compare with.
+baseline a later release is compared with.
 Median milliseconds per call, 25 samples, Windows on ARM64, measured
 2026-10-05 on a developer's machine that was doing other work:
 
@@ -154,24 +171,23 @@ so it does not depend on a clock being quiet.
 
 `read_dissected/ethernet-ipv4-udp-2000` is the figure every reader depends on:
 the datagram view, the filter keys and live capture are all built on the walk.
-It was measured on hosted runners before anything was changed, and one cost
-stood out: writing an IPv6 address as text, twice a frame, took about half of
-an IPv6 frame's dissection. An address now keeps its text (the 1,024 used
-last), so a capture of addresses that never repeat is bounded and costs what
-it did.
+Writing an IPv6 address as text, twice a frame, took about half of an IPv6
+frame's dissection, so an address keeps its text (the 1,024 used last): a
+capture of addresses that never repeat is bounded and costs what an uncached
+walk costs, and a capture that repeats them costs about half.
 
 Median milliseconds per call, 25 samples, `ubuntu-latest`, Python 3.14.7, from
-the `Benchmarks` workflow, before (`878c7d1`) and after (`12a69b3`); the files
-are `benchmarks/results/ipv6-text-before-Linux-py3.14.json` and
-`...-after-...`:
+the `Benchmarks` workflow, without the cache (`878c7d1`) and with it
+(`12a69b3`); the files are
+`benchmarks/results/ipv6-text-before-Linux-py3.14.json` and `...-after-...`:
 
-| Metric | Before | After |
+| Metric | Without | With |
 | --- | --- | --- |
 | `read_frames/pcap-2000` (not changed: it shows the two machines) | 3.76 | 4.10 |
 | `read_dissected/ethernet-ipv4-udp-2000` (not changed) | 19.83 | 22.19 |
 | `read_dissected/ethernet-ipv6-udp-2000` | 38.57 | 21.19 |
 
-The IPv6 figure halved in every pair of runs on all three hosted systems
+The IPv6 figure halves in every pair of runs on all three hosted systems
 (ubuntu 38.6 and 39.8 to 21.2, windows 37.2 to 20.4 on machines of like speed,
 macos 26.8 and 26.9 to 11.1).
 
@@ -179,27 +195,39 @@ macos 26.8 and 26.9 to 11.1).
 times on every metric, on ubuntu and on windows, because the jobs landed on
 different machines; and the proportion between two metrics moved with the
 machine too (the fragment-joining metric cost between 7.1 and 8.8 times a
-frame read with the same code). A change to the walk's own loop that measured
-about 6% faster on a developer's machine could not be told from that spread
-and was not kept. Compare a changed metric with one the change cannot touch,
+frame read with the same code). A difference of about 6% in the walk's own loop
+cannot be told from that spread. Compare a changed metric with one the change cannot touch,
 from the same file, and run a control before believing a regression.
 
 ### Validation
 
-- Tests: 2,033 passed and 4 skipped on Windows on ARM64 (Python 3.14 and 3.9);
-  2,034 passed and 3 skipped on Intel macOS (Python 3.9) and on FreeBSD
-  (Python 3.11). The skips are live capture, which is Linux only, and the
-  configuration file's ownership checks, which need POSIX permissions or root.
-- The hosted matrix, 18 jobs, green: Python 3.9
-  to 3.14 on ubuntu, 3.9 and 3.14 on windows and macos, the dependency floors,
-  an install with no extra on each system, and lint with `mypy --strict` for
-  `--platform linux`, `darwin` and `win32`. netimps comes from PyPI.
+Measured on 2026-10-12 at commit `071a8d5`, with netimps 0.4.1 and duho 0.7.3.
+
+- Windows on ARM64: 2,583 passed and 9 skipped on Python 3.14; 2,584 passed
+  and 8 skipped on Python 3.9.
+- Linux (Fedora 44 under WSL2), unprivileged and as root, on Python 3.14 and
+  3.9: between 2,578 and 2,582 passed, no failure. As root the live-capture
+  tests run; elsewhere they skip, as do the configuration file's ownership
+  checks that need POSIX permissions or root.
+- Intel macOS 15.7, Python 3.9: 2,580 passed, 12 skipped. FreeBSD 16.0,
+  Python 3.11, an unprivileged account: 2,578 passed, 14 skipped.
+- The hosted matrix, 18 jobs, green: Python 3.9 to 3.14 on ubuntu, 3.9 and
+  3.14 on windows and macos, the dependency floors, an install with no extra
+  on each system, and lint with `mypy --strict` for `--platform linux`,
+  `darwin` and `win32`. netimps comes from PyPI.
 - `black --check` under both supported formatter versions, the caller's
   typing contract and `mkdocs build --strict`: clean.
-- Conformance: 41 captures against TShark 4.6.8, replayed with no tool
-  installed; `record.py --check` reports no drift from that version.
+- Mutation checks, every one caught by a test: 120 of the commands, 62 of the
+  record formats, 34 of the settings file plus 7 of its POSIX ownership rules,
+  106 of the TCP reassembler, and those of the plugin loader.
+- An independent adversarial review of the socket source, the hooks, the text
+  output and the command classes found 15 things; all were fixed or settled
+  before this release.
+- Conformance: 53 cases against TShark 4.6.8 (40 read, 9 refused, 4 written),
+  replayed with no tool installed; `tests/conformance/record.py --check`
+  re-records them against an installed tshark and reports drift.
 
 ### Publication state
 
-Public at `github.com/jose-pr/pktcap`, with its documentation site. Not
-tagged, and nothing is on PyPI.
+Published on PyPI and on GitHub (`github.com/jose-pr/pktcap`), tagged `v0.1.0`,
+with its documentation site.
