@@ -1,30 +1,18 @@
-"""The summary line a copying command prints, the stream a tool call writes, and
-the refusal of a format that needs a file to each record."""
+"""The summary line a copying command prints, and the refusal of a format that
+needs a file to each record."""
 
 from __future__ import annotations
 
-import sys
 from typing import List
 
 from .._copy import CopyResult
 from .._dissect import FrameDissector
 from .._formats import RECORD_FORMATS, record_format
 
-__all__ = ["TextSink", "refuse_one_file", "summary_parts"]
+__all__ = ["refuse_one_file", "summary_parts"]
 
 #: Link-type numbers named in the summary before it says "and more".
 _LISTED_LINKTYPES = 8
-
-
-class TextSink:
-    """A binary stream over the text stdout, for records, which are ASCII."""
-
-    def write(self, data: bytes) -> int:
-        sys.stdout.write(data.decode("utf-8"))
-        return len(data)
-
-    def flush(self) -> None:
-        sys.stdout.flush()
 
 
 def summary_parts(

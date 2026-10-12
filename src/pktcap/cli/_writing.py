@@ -22,7 +22,7 @@ from .._exceptions import UnsupportedFormatError
 from .._formats import CAPTURE_FORMATS, OUTPUT_FORMATS, infer_format
 from .._output import CaptureWriter
 from ._common import Counted, Selecting
-from ._line import TextSink, refuse_one_file, summary_parts
+from ._line import refuse_one_file, summary_parts
 
 __all__ = ["Writing"]
 
@@ -136,16 +136,7 @@ class Writing(Selecting):
                 "refusing to write a %s capture to a terminal: name a file with "
                 "--output" % name
             )
-        if not self.served():
-            return self._pk_built(sys.stdout.buffer, name)
-        # A tool call replaces stdout with a text stream and returns what was
-        # written to it as the result: records are ASCII text, a capture is not.
-        if name in CAPTURE_FORMATS:
-            raise ValueError(
-                "a %s capture cannot be returned as text: name a file with --output"
-                % name
-            )
-        return self._pk_built(TextSink(), name)
+        return self._pk_built(sys.stdout.buffer, name)
 
     def _pk_built(self, target: object, name: Optional[str]) -> CaptureWriter:
         return CaptureWriter(

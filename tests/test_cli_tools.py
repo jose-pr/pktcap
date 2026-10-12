@@ -80,11 +80,85 @@ def test_a_call_may_write_a_capture_to_the_file_it_names(trace, tmp_path):
 
 
 @pytest.mark.parametrize("name", ["pcap", "pcapng"])
-def test_capture_octets_are_never_returned_as_text(name, trace):
+def test_capture_octets_with_no_output_target_fail_the_call_and_write_nothing(
+    name, trace
+):
     result = call_tool(Pktcap, "pktcap.convert", {"input": str(trace), "format": name})
     assert result["isError"] is True
     text = result["content"][0]["text"]
-    assert "--output" in text and name in text
+    assert "no output target" in text and "_MCP_OUTPUT" in text
+
+
+@pytest.mark.parametrize("name", ["pcap", "pcapng"])
+def test_capture_octets_go_to_the_output_target_as_the_command_line_writes_them(
+    name, trace, tmp_path
+):
+    target = tmp_path / "target.bin"
+    target.write_bytes(b"")
+    descriptor = os.open(
+        str(target), os.O_WRONLY | os.O_APPEND | getattr(os, "O_BINARY", 0)
+    )
+    try:
+        result = call_tool(
+            Pktcap,
+            "pktcap.convert",
+            {"input": str(trace), "format": name},
+            output_fd=descriptor,
+        )
+    finally:
+        os.close(descriptor)
+    assert not result.get("isError")
+    (item,) = result["content"]
+    assert (
+        "bytes of output were written to" in item["text"] and "offset 0" in item["text"]
+    )
+    done = subprocess.run(
+        [sys.executable, "-m", "pktcap", "convert", "-i", str(trace), "--format", name],
+        capture_output=True,
+        timeout=120,
+    )
+    assert done.returncode == 0 and done.stdout
+    assert target.read_bytes() == done.stdout
+    assert str(len(done.stdout)) in item["text"]
+
+
+def test_the_real_server_writes_a_capture_to_the_file_its_variable_names(
+    trace, tmp_path
+):
+    target = tmp_path / "served.pcap"
+    env = dict(os.environ, PKTCAP_MCP="stdio", PKTCAP_MCP_OUTPUT=str(target))
+    arguments = {"input": str(trace), "format": "pcap"}
+    requests = [
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "test", "version": "0"},
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "pktcap.convert", "arguments": arguments},
+        },
+    ]
+    done = subprocess.run(
+        [sys.executable, "-m", "pktcap"],
+        input="".join(json.dumps(r) + "\n" for r in requests),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    replies = {r["id"]: r for r in map(json.loads, done.stdout.splitlines())}
+    text = replies[2]["result"]["content"][0]["text"]
+    assert "bytes of output were written to" in text
+    assert [f.data for f in read_frames(target)] == [FRAME] * 3
 
 
 def test_standard_input_is_refused_naming_the_option(trace):
