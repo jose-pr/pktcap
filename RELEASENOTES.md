@@ -40,18 +40,20 @@ How it was checked:
   in the file and absent from the one line printed; the default file's
   location on each platform, its owner and mode (POSIX, as root under Linux for
   the owner); a real server (`PKTCAP_MCP=stdio`) given the user's file, the
-  variable and a call naming `config`, and reading none of them; a subclass that
-  narrows the layers a list may come from.
+  variable and a call naming `config`, reading the user's own file and neither
+  of the others; a subclass that narrows the layers a list may come from.
 - 42 mutations (the loader's refusals, the cap, the default file's checks,
   the layers a list or a hook may come from, a served tree, the library
   reading a variable or a file) each make a test fail; the 36 of them that do
   not depend on file permissions run on Windows, the other six under Linux.
   One more was added when a repointed mutation first survived: the plugins are
   loaded before the output is looked at.
-- Measured 2026-10-11 on duho 0.7.2 (Python 3.9 and 3.14): the loader is called
-  with one path for the option's file, the variable's and the default; a real
-  server applies a class-level default file but not the variable's file, so
-  the run sets the default only when the tree is not served.
+- Measured 2026-10-12 on duho 0.7.3 (Python 3.9 and 3.14): the loader is told
+  where its path came from (`field`, `env` or `default`); a real server applies
+  the class-level default file but not the variable's file or a call's `config`;
+  `--config ""` and an empty `PKTCAP_CONFIG` read no file; a tool call that asks
+  for `pcap` or `pcapng` has its octets written to the server's output target
+  (`PKTCAP_MCP_OUTPUT`) byte for byte as the command line writes them.
 
 ### TCP stream reassembly
 

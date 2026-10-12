@@ -249,7 +249,7 @@ pktcap plugins        # the settings file, what was loaded, every filter key the
 The third is the settings file, `pktcap/pktcap.ini` under `$XDG_CONFIG_HOME`
 (else `~/.config`) on Linux, macOS and the BSDs and under `%APPDATA%` on
 Windows, or the file `pktcap --config FILE` (before the command's name) or
-`PKTCAP_CONFIG` names. A top-level `load` is the list of every command, and a
+`PKTCAP_CONFIG` names; an empty path (`--config ""`) reads no file. A top-level `load` is the list of every command, and a
 table named for a command sets that command's options:
 
 ```ini
