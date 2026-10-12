@@ -37,7 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   that is not valid are status 2 with one line that holds no text of the file.
   The default file is checked where owners are, as before; a served tree
   (`PKTCAP_MCP`) is given no settings file. `pktcap plugins` names the file the
-  root read. The `cli` extra needs duho 0.7.2.
+  root read. The `cli` extra needs duho 0.7.3, which publishes `running_mode()`: a command
+  tells a tool call by it, and no longer by the shape of standard output.
 - The plugin list of a command is the field `load` (`--load`, `PKTCAP_LOAD`,
   the key `load`), the tool-input key of `pktcap.convert` and `pktcap.plugins`
   is `load`, and `pktcap.convert` takes `append`. A top-level `load` of the
