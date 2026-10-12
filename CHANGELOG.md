@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `CaptureWriter.write(item, record=None, *, names=None)` has no `text=`
+  argument: a caller hands over the record and the writer renders it, so the
+  octets of a record are one library's. Nothing released took it.
 - The command line reads its settings the way every duho program does. The
   root takes `--config`/`-c FILE` before the command's name, else
   `PKTCAP_CONFIG`, else the user's own `pktcap/pktcap.ini`; the file is duho's
@@ -359,12 +362,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   never sent to, no raw frame is ever sent, the recorded timing is the
   default, each wait is capped at `max_delay`, and a `fragmented` or
   `truncated` datagram is counted and not sent.
-- `CaptureWriter.write(item, record=None, *, text=None, names=None)` takes a
-  record the caller rendered, for a record format: the writer keeps the
-  container (the growing file with its separator, the name pattern, the file
-  budget) and the octets are the caller's, written exactly as given. The
-  directories above a growing file are made at its first write, as a
-  per-record file's are.
+- `CaptureWriter.write(item, record=None, *, names=None)` makes the
+  directories above a growing file at its first write, as it does for a
+  per-record file.
 - `LiveCapture(interface=None, *, timeout=1.0)` captures every packet on Linux
   through an `AF_PACKET` socket, which needs `CAP_NET_RAW`, as Linux cooked v2
   frames a writer can save for other tools; `sniff(interface=None, *,
