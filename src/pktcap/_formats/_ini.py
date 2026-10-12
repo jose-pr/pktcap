@@ -8,7 +8,7 @@ import re
 from typing import Any, Dict, List, Mapping
 from urllib.parse import quote, unquote
 
-from ._contract import RecordFormat
+from ._contract import RecordFormat, has_surrogate
 from ._json import NotJSON, json_loads, json_text
 from ._read import Refusal, read
 
@@ -22,6 +22,10 @@ _MAIN_SECTION = "record"
 def _name(key: object) -> str:
     """A section or option name that every INI reader takes as one token."""
     text = key if isinstance(key, str) else str(key)
+    if not text:
+        raise ValueError("INI cannot hold an empty section or option name")
+    if has_surrogate(text):
+        raise ValueError("INI cannot hold a lone surrogate in a section or option name")
     if not _PLAIN.match(text):
         # A name may come from the wire: no bracket, separator, comment mark
         # or line break of it reaches the file.

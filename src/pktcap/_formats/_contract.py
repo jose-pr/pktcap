@@ -7,11 +7,21 @@ mapping of text keys to ``dict``, ``list``, ``str``, ``int``, ``float``,
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .._exceptions import MissingExtraError
 
-__all__ = ["RecordFormat", "missing_extra"]
+__all__ = ["RecordFormat", "has_surrogate", "missing_extra"]
+
+
+_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def has_surrogate(text: str) -> bool:
+    """Whether ``text`` holds half of a surrogate pair, which is no character
+    and which a format that must name it cannot write."""
+    return _SURROGATE.search(text) is not None
 
 
 def missing_extra(format: str, extra: str, use: str = "output") -> MissingExtraError:

@@ -50,10 +50,9 @@ def same(a, b, ordered=True):
 
 
 class Generator:
-    def __init__(self, seed, *, nulls, empty_names=True):
+    def __init__(self, seed, *, nulls):
         self.random = random.Random(seed)
         self.nulls = nulls
-        self.empty_names = empty_names
 
     def text(self, keyish=False):
         pick = self.random.choice
@@ -102,8 +101,7 @@ class Generator:
         return self.mapping(depth - 1)
 
     def key(self):
-        text = self.text(keyish=True)
-        return text if text or self.empty_names else "k"
+        return self.text(keyish=True)
 
     def mapping(self, depth):
         return {self.key(): self.value(depth) for _ in range(self.random.randint(0, 4))}
@@ -125,12 +123,32 @@ def toml_writes(text):
     return "".join("\ufffd" if "\ud800" <= c <= "\udfff" else c for c in text)
 
 
-def key_count(value):
-    if isinstance(value, dict):
-        return len(value) + sum(key_count(v) for v in value.values())
-    if isinstance(value, list):
-        return sum(key_count(v) for v in value)
-    return 0
+def lone_surrogate(text):
+    return any("\ud800" <= c <= "\udfff" for c in text)
+
+
+def unwritable_name(record, name):
+    """Whether ``record`` has a name ``name`` cannot write so that it reads
+    back: a lone surrogate in any TOML key; in INI, a lone surrogate or no
+    character in a section or option name."""
+    if name == "toml":
+        stack = [record]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                if any(lone_surrogate(key) for key in node):
+                    return True
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+        return False
+    if name == "ini":
+        names = list(record)
+        for value in record.values():
+            if isinstance(value, dict):
+                names.extend(value)
+        return any(not key or lone_surrogate(key) for key in names)
+    return False
 
 
 def json_reads(text):
@@ -158,16 +176,17 @@ def test_the_round_trip_holds_over_generated_records(name):
     generator = Generator(
         20261008 + RECORD_FORMATS.index(name),
         nulls=name != "toml",
-        empty_names=name != "ini",  # the empty name is an exception, pinned below
     )
-    checked = skipped = 0
+    checked = skipped = refused = 0
     while checked < RECORDS:
         record = generator.mapping(3)
         if name == "ini" and isinstance(record.get("record"), dict):
             skipped += 1  # an exception, pinned below
             continue
-        if name == "toml" and key_count(record) != key_count(expected(record, name)):
-            skipped += 1  # two keys that are one once written: pinned below
+        if unwritable_name(record, name):
+            with pytest.raises(ValueError):
+                dumps_record(record, name)
+            refused += 1
             continue
         try:
             text = dumps_record(record, name)
@@ -181,6 +200,7 @@ def test_the_round_trip_holds_over_generated_records(name):
         assert same(back, expected(record, name), ordered), (name, text)
         checked += 1
     assert checked == RECORDS and skipped < 2 * RECORDS
+    assert (refused > 0) == (name in ("toml", "ini"))
 
 
 # -- every exception to the law, each pinned ------------------------------------
@@ -208,15 +228,6 @@ def test_json_and_ini_return_a_key_that_was_not_text_as_its_text():
         assert same(loads_record(dumps_record(kept, "yaml"), "yaml"), kept)
 
 
-def test_toml_writes_two_names_that_differ_in_half_surrogates_as_one_twice():
-    record = {"a\ud800": 1, "a\udc00": 2, "t": {"\ud800": 1, "\udc00": 2}}
-    text = dumps_record(record, "toml")
-    assert text.count('"a\\uFFFD"') == 2
-    with pytest.raises(RecordFormatError) as caught:
-        loads_record(text, "toml")
-    assert "twice" in str(caught.value)
-
-
 def test_json_and_ini_join_a_high_surrogate_and_the_low_one_after_it():
     halves = ["a" + chr(0xD83D) + chr(0xDE00), chr(0xDE00) + chr(0xD83D)]
     # The two halves are written as the escapes of one character, and read as it.
@@ -225,14 +236,11 @@ def test_json_and_ini_join_a_high_surrogate_and_the_low_one_after_it():
         assert back == {"v": ["a\U0001f600", chr(0xDE00) + chr(0xD83D)]}
     # The other way round is two lone surrogates, which stay two.
     assert loads_record(dumps_record({"v": halves}, "yaml"), "yaml") == {"v": halves}
-    # INI cannot write one in a name at all, and says so as a ValueError.
-    with pytest.raises(ValueError):
-        dumps_record({"k\ud800": 1}, "ini")
 
 
 def test_toml_returns_half_of_a_surrogate_pair_as_the_replacement_character():
-    back = loads_record(dumps_record({"k\ud800": ["a\udfffb"]}, "toml"), "toml")
-    assert back == {"k\ufffd": ["a\ufffdb"]}
+    back = loads_record(dumps_record({"k": ["a\udfffb"]}, "toml"), "toml")
+    assert back == {"k": ["a\ufffdb"]}
     for name in ("json", "yaml"):
         record = {"k\ud800": ["a\udfffb"]}
         assert loads_record(dumps_record(record, name), name) == record
@@ -240,11 +248,7 @@ def test_toml_returns_half_of_a_surrogate_pair_as_the_replacement_character():
     assert loads_record(dumps_record(record, "ini"), "ini") == record
 
 
-def test_ini_cannot_read_the_empty_name_it_writes():
-    for record in ({"": 1}, {"a": {"": 1}}, {"": {"a": 1}}):
-        text = dumps_record(record, "ini")
-        with pytest.raises(RecordFormatError):
-            loads_record(text, "ini")
+def test_the_empty_name_round_trips_where_it_is_written():
     for name in ("json", "yaml", "toml"):
         record = {"": 1, "a": {"": [2]}}
         assert loads_record(dumps_record(record, name), name) == record

@@ -295,5 +295,60 @@ def test_ini_refuses_two_names_that_would_be_one():
         dumps_record({"x": 1, "record": {"y": 2}}, "ini")
 
 
+#: Text no message may quote: it stands in a name or a value of the record.
+SECRET = "SECRET-MARK-5d1c"
+
+
+def _refusal(record, name):
+    with pytest.raises(ValueError) as caught:
+        dumps_record(record, name)
+    message = str(caught.value)
+    assert SECRET not in message
+    assert "ud8" not in message and "\ud800" not in message
+    return message
+
+
+def test_ini_refuses_a_lone_surrogate_in_a_section_or_option_name():
+    for record in (
+        {SECRET + "\ud800": 1},
+        {"a": {SECRET + "\udfff": 1}},
+        {SECRET + "\udc00": {"a": 1}},
+    ):
+        assert "surrogate" in _refusal(record, "ini")
+
+
+def test_toml_refuses_a_lone_surrogate_in_a_name_at_any_depth():
+    pytest.importorskip("tomli_w")
+    for record in (
+        {SECRET + "\ud800": 1},
+        {"t": {SECRET + "\udc00": 1}},
+        {"t": [{"u": [{SECRET + "\udbff": 1}]}]},
+        {"a\ud800": 1, "a\udc00": 2},
+    ):
+        assert "surrogate" in _refusal(record, "toml")
+
+
+def test_a_surrogate_in_a_value_is_not_refused_and_a_name_only_where_it_breaks():
+    pytest.importorskip("tomli_w")
+    # A value is text to the format: TOML writes the replacement character.
+    assert dumps_record({"n": "a\udcffb"}, "toml").count("\\uFFFD") == 1
+    assert "\\udcff" in dumps_record({"n": "a\udcffb"}, "ini")
+    # JSON and YAML write any name; INI takes one inside a JSON value.
+    for name in ("json", "yaml"):
+        assert "\\ud800" in dumps_record({"a\ud800": 1}, name).lower()
+    assert dumps_record({"t": [{"\ud800": 1}]}, "ini")
+
+
+def test_ini_refuses_an_empty_section_or_option_name():
+    for record in ({"": 1, SECRET: 2}, {"a": {"": SECRET}}, {"": {"a": SECRET}}):
+        assert "empty" in _refusal(record, "ini")
+
+
+def test_json_yaml_and_toml_write_the_empty_name():
+    pytest.importorskip("tomli_w")
+    for name in ("json", "yaml", "toml"):
+        assert dumps_record({"": 1, "a": {"": 2}}, name)
+
+
 def test_nothing_about_formats_is_reachable_but_through_the_root():
     assert not hasattr(pktcap, "formats")
