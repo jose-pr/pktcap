@@ -10,11 +10,12 @@ from typing import Any, Dict, Optional, Sequence
 
 from duho import AUTO, Cli, ConfigArgs, DefaultsFormatter, LoggingArgs
 from duho import main as run
+from duho.config import user_path
 
 from .._exceptions import MissingExtraError
 from ._common import error
 from ._loader import read_settings
-from ._settings import check_variable, choose_default, forget
+from ._settings import check_variable, forget
 from .capture import Capture
 from .convert import Convert
 from .plugins import Plugins
@@ -23,10 +24,11 @@ from .replay import Replay
 __all__ = ["Pktcap", "execute"]
 
 
-def _settings_of(path: pathlib.Path) -> Dict[str, Any]:
+def _settings_of(root: Any, path: pathlib.Path, source: str) -> Dict[str, Any]:
     """The settings file ``--config``, ``PKTCAP_CONFIG`` or the user's own
-    names, read for :class:`Pktcap`."""
-    return read_settings(path, Pktcap) or {}
+    names, read for ``root`` (a subclass of :class:`Pktcap` included);
+    ``source`` says which."""
+    return read_settings(path, source, root)
 
 
 class Pktcap(ConfigArgs, LoggingArgs, Cli):
@@ -35,7 +37,9 @@ class Pktcap(ConfigArgs, LoggingArgs, Cli):
     _parsername_ = "pktcap"
     _logger_name_ = "pktcap"
     _config_env_ = "PKTCAP_CONFIG"
-    _config_loader_ = staticmethod(_settings_of)
+    _config_ = user_path("pktcap", "pktcap.ini")
+    _config_loader_ = classmethod(_settings_of)
+    _config_validate_ = "strict"
     _version_ = AUTO
     _distribution_ = "pktcap"
     _help_formatter_ = DefaultsFormatter
@@ -105,13 +109,8 @@ def execute(argv: Optional[Sequence[str]]) -> int:
 
 
 def _execute(argv: Optional[Sequence[str]]) -> int:
-    tokens = list(sys.argv[1:] if argv is None else argv)
     try:
         check_variable()
-        # The user's own file is the default for this run, and only for it.
-        Pktcap._config_ = choose_default(
-            tokens, {command._parsername_ for command in Pktcap._subcommands_}
-        )
         status = run(Pktcap, argv)
     except SystemExit as stop:
         # The parser exits through SystemExit: 0 after --help and --version, 2
@@ -135,6 +134,5 @@ def _execute(argv: Optional[Sequence[str]]) -> int:
             error(str(exc))
         return 1
     finally:
-        Pktcap._config_ = None
         forget()
     return 0 if status is None else int(status)

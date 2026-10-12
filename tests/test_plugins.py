@@ -470,7 +470,7 @@ def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(tmp_path)
     work.mkdir()
     code = _CHILD.replace(
         "package = os.path.dirname",
-        "from pktcap.cli._settings import default_path\ndefault_path()\n"
+        "from pktcap.cli._settings import check_variable\ncheck_variable()\n"
         "package = os.path.dirname",
     )
     env = dict(os.environ)
@@ -483,9 +483,7 @@ def test_the_recording_of_the_test_above_sees_a_read_when_there_is_one(tmp_path)
         timeout=120,
     )
     assert done.returncode == 0, done.stderr[-2000:]
-    assert json.loads(done.stdout)["seen"] == [
-        "APPDATA" if os.name == "nt" else "XDG_CONFIG_HOME"
-    ]
+    assert json.loads(done.stdout)["seen"] == ["PKTCAP_CONFIG"]
 
 
 # -- always: what a command loads without being asked ---------------------------

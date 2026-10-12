@@ -1,10 +1,10 @@
-"""Where the user's settings file is, and reading it safely (internal).
+"""Reading the settings file safely (internal).
 
-The default file is ``pktcap/pktcap.ini`` under the user's configuration
-directory. It is found by this module alone and checked before it is read; a
-file the user names (``--config``, ``PKTCAP_CONFIG``) is theirs and is read as
-it is. This is the one module of the command line that reads the process
-environment, and only when asked, never at import.
+The root's default file is ``pktcap/pktcap.ini`` under the user's configuration
+directory, which duho finds. It is checked before it is read; a file the user
+names (``--config``, ``PKTCAP_CONFIG``) is theirs and is read as it is. This is
+the one module of the command line that reads the process environment, and
+only when asked, never at import.
 """
 
 from __future__ import annotations
@@ -12,17 +12,13 @@ from __future__ import annotations
 import os
 import pathlib
 import stat
-from typing import Container, Dict, List, Optional, Sequence
+from typing import List, Optional
 
 __all__ = [
     "SettingsError",
     "check_variable",
-    "choose_default",
-    "default_path",
     "file_read",
     "forget",
-    "is_default",
-    "names_a_file",
     "note_read",
     "read_octets",
 ]
@@ -54,33 +50,6 @@ class SettingsError(ValueError):
         super().__init__(message)
         self.path = path
         self.lineno = lineno
-
-
-def _home() -> Optional[str]:
-    home = os.path.expanduser("~")
-    return None if home == "~" else home
-
-
-def default_path() -> Optional[pathlib.Path]:
-    """``pktcap/pktcap.ini`` under the user's configuration directory: a
-    relative ``APPDATA`` or ``XDG_CONFIG_HOME`` is ignored, so neither can
-    point into the working directory. ``None`` where the platform gives no
-    home."""
-    if os.name == "nt":
-        base = os.environ.get("APPDATA", "")
-        if not os.path.isabs(base):
-            home = _home()
-            if home is None:
-                return None
-            base = os.path.join(home, "AppData", "Roaming")
-    else:
-        base = os.environ.get("XDG_CONFIG_HOME", "")
-        if not os.path.isabs(base):
-            home = _home()
-            if home is None:
-                return None
-            base = os.path.join(home, ".config")
-    return pathlib.Path(base) / "pktcap" / "pktcap.ini"
 
 
 def read_octets(path: pathlib.Path, named: bool) -> Optional[bytes]:
@@ -132,14 +101,14 @@ def read_octets(path: pathlib.Path, named: bool) -> Optional[bytes]:
 
 # -- the run -------------------------------------------------------------------
 
-#: What this run set as the root's default file, and the file the root read.
-_state: Dict[str, Optional[str]] = {"default": None, "read": None}
+#: The file the root read in this run.
+_state: List[Optional[str]] = [None]
 
 
 def check_variable() -> None:
-    """``PKTCAP_CONFIG`` must be an absolute path: a variable outlives the
-    directory it was set in."""
-    text = os.environ.get("PKTCAP_CONFIG", "").strip()
+    """``PKTCAP_CONFIG`` must be an absolute path, or empty for no file: a
+    variable outlives the directory it was set in."""
+    text = os.environ.get("PKTCAP_CONFIG", "")
     if text and not os.path.isabs(text):
         raise SettingsError(
             None,
@@ -149,49 +118,15 @@ def check_variable() -> None:
         )
 
 
-def names_a_file(tokens: Sequence[str], commands: Container[str]) -> bool:
-    """Whether the user names the settings file: ``PKTCAP_CONFIG``, or
-    ``-c``/``--config`` (or an abbreviation of it) before the command's name.
-    A false answer leaves the user's own file in force, checked."""
-    if os.environ.get("PKTCAP_CONFIG", "").strip():
-        return True
-    for token in tokens:
-        if token == "--" or token in commands:
-            return False
-        if token.startswith("--c") or token.startswith("-c"):
-            return True
-    return False
-
-
-def choose_default(tokens: Sequence[str], commands: Container[str]) -> Optional[str]:
-    """The user's own file as the root's default for this run, or ``None``: a
-    served tree is given no settings file (``PKTCAP_MCP``), and a file the
-    user names makes the default moot. Remembered, so the loader knows which
-    file to check."""
-    _state["read"] = None
-    _state["default"] = None
-    if os.environ.get("PKTCAP_MCP", "").strip() or names_a_file(tokens, commands):
-        return None
-    path = default_path()
-    if path is not None:
-        _state["default"] = str(path)
-    return _state["default"]
-
-
 def forget() -> None:
-    """End the run's state: no default file, no file read."""
-    _state["default"] = _state["read"] = None
-
-
-def is_default(path: pathlib.Path) -> bool:
-    """Whether ``path`` is the file :func:`choose_default` set."""
-    return _state["default"] is not None and str(path) == _state["default"]
+    """End the run's state: no file read."""
+    _state[0] = None
 
 
 def note_read(path: pathlib.Path) -> None:
-    _state["read"] = str(path)
+    _state[0] = str(path)
 
 
 def file_read() -> Optional[str]:
     """The settings file the root read in this run, or ``None``."""
-    return _state["read"]
+    return _state[0]

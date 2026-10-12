@@ -1,18 +1,20 @@
 """Reading a settings file for the root (internal): duho's layout, checked.
 
-``duho.config`` reads the document in whichever format its name says; this
-module adds what that reader leaves to the program: the default file is checked
-before it is read, an unknown key or table is refused, and a top-level ``load``
-is the plugin list of every command that has none of its own.
+``duho.config`` reads the document in whichever format its name says and, with
+``_config_validate_ = "strict"``, refuses a key or table nobody has. This module
+adds what that leaves to the program: the file found by default is checked
+before it is read, a ``config`` key and a ``[pktcap]`` table are answered with
+a line of their own, and a top-level ``load`` is the plugin list of every
+command that has none of its own.
 """
 
 from __future__ import annotations
 
 import io
 import pathlib
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping
 
-from ._settings import SettingsError, is_default, note_read, read_octets
+from ._settings import SettingsError, note_read, read_octets
 
 __all__ = ["read_settings"]
 
@@ -40,64 +42,56 @@ def _names(cls: Any) -> set:  # type: ignore[type-arg]
     return {builder.name for builder in cls._getargs_()}
 
 
-def _checked(data: Any, name: str, root: Any) -> Dict[str, Any]:
-    """``data`` with every key known to the root or one of its commands, and
-    the top-level ``load`` copied into the table of each command that takes
-    one and names none."""
+def _shaped(data: Any, name: str, root: Any) -> Dict[str, Any]:
+    """``data`` with the top-level ``load`` copied into the table of each
+    command that takes one and names none. A key nobody has is left for duho's
+    strict validation; the two that are answered here are refused."""
     if not isinstance(data, Mapping):
         raise SettingsError(name, None, "the top level must be a table")
     commands = {command._parsername_: command for command in root._subcommands_}
-    known = _names(root) - {"config"}
     result: Dict[str, Any] = {}
     for key, value in data.items():
-        if key in commands:
-            if not isinstance(value, Mapping):
-                raise SettingsError(name, None, "%s must be a table" % _shown(key))
-            unknown = [k for k in value if k not in _names(commands[key])]
-            if unknown:
-                raise SettingsError(
-                    name,
-                    None,
-                    "unknown key %s in [%s]" % (_shown(unknown[0]), key),
-                )
-            result[key] = dict(value)
-        elif key == root._parsername_ and isinstance(value, Mapping):
+        if key == "config":
+            raise SettingsError(name, None, "unknown key %s" % _shown(key))
+        if key == root._parsername_ and isinstance(value, Mapping):
             raise SettingsError(
                 name,
                 None,
                 "the table [%s] is not a settings table: write load at the top "
                 "level, or in the table of a command" % key,
             )
-        elif key in known or key == LOAD:
-            result[key] = value
-        else:
-            kind = "table" if isinstance(value, Mapping) else "key"
-            raise SettingsError(name, None, "unknown %s %s" % (kind, _shown(key)))
+        result[key] = (
+            dict(value) if key in commands and isinstance(value, Mapping) else value
+        )
     if LOAD in result:
         everywhere = result.pop(LOAD)
         for key, command in commands.items():
-            if LOAD in _names(command):
-                result.setdefault(key, {}).setdefault(LOAD, everywhere)
+            table = result.get(key, {})
+            if LOAD in _names(command) and isinstance(table, dict):
+                result[key] = table
+                table.setdefault(LOAD, everywhere)
     return result
 
 
-def read_settings(path: pathlib.Path, root: Any) -> Optional[Dict[str, Any]]:
+def read_settings(path: pathlib.Path, source: str, root: Any) -> Dict[str, Any]:
     """The settings ``path`` holds, in the layout duho reads: top-level keys
     for ``root``, a table for each of its commands.
 
-    The file is read once, at most 65,536 octets. The file this run found by
-    default is checked first (it must be the user's own or root's, and not
-    writable by everyone, on POSIX); a file named is read as it is.
+    ``source`` is where duho got the path: ``"default"`` is the user's own
+    file, which is checked first (it must be the user's own or root's, and not
+    writable by everyone, on POSIX); any other is a file the user named, read
+    as it is. The file is read once, at most 65,536 octets.
 
-    :raises SettingsError: a key or table nobody has, or a file that is not
-        trusted. A document that is not valid is duho's ``ConfigError``, whose
-        message holds the position and never the text; both are ``ValueError``.
+    :raises SettingsError: a ``config`` key, a ``[pktcap]`` table, or a file
+        that is not trusted. A document that is not valid is duho's
+        ``ConfigError``, whose message holds the position and never the text;
+        both are ``ValueError``.
     """
     from duho.config import backend_for
 
-    octets = read_octets(path, not is_default(path))
+    octets = read_octets(path, source != "default")
     if octets is None:
         return {}
     backend = backend_for(path)
     note_read(path)
-    return _checked(backend.load(_Document(octets, str(path))), str(path), root)
+    return _shaped(backend.load(_Document(octets, str(path))), str(path), root)

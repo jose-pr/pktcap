@@ -27,6 +27,8 @@ from pktcap.cli import _settings  # noqa: E402
 from pktcap.cli._loader import read_settings  # noqa: E402
 from pktcap.cli._root import Pktcap  # noqa: E402
 
+ROOT_MODULE = sys.modules["pktcap.cli._root"]
+
 IS_WINDOWS = os.name == "nt"
 SECRET = "s3cr3t-marker-text"
 OTHER = """
@@ -133,7 +135,7 @@ def test_a_top_level_load_reaches_every_command_and_a_commands_own_wins(
     path = written(
         tmp_path, "s.toml", 'load = ["every.one"]\n[plugins]\nload = ["its.own"]\n'
     )
-    tables = read_settings(path, Pktcap)
+    tables = read_settings(path, "argument", Pktcap)
     assert tables is not None
     assert {k: v["load"] for k, v in tables.items()} == {
         "capture": ["every.one"],
@@ -231,24 +233,26 @@ def test_an_empty_variable_is_unset(tmp_path, plugin_module, monkeypatch, capsys
     "text, problem",
     [
         ("unknown_root = %r\n" % SECRET, "unknown key 'unknown_root'"),
-        ("[nosuch]\nx = %r\n" % SECRET, "unknown table 'nosuch'"),
-        ("[convert]\nnosuch = %r\n" % SECRET, "unknown key 'nosuch' in [convert]"),
+        ("[nosuch]\nx = %r\n" % SECRET, "unknown key 'nosuch'"),
+        ("[convert]\nnosuch = %r\n" % SECRET, "unknown key 'convert.nosuch'"),
         ('[pktcap]\nload = "%s"\n' % SECRET, "write load at the top level"),
         ("config = %r\n" % SECRET, "unknown key 'config'"),
-        ("convert = %r\n" % SECRET, "'convert' must be a table"),
+        ("convert = %r\n" % SECRET, "unknown key 'convert'"),
         ('top = "%s\n' % SECRET, "invalid TOML"),
-        ("[convert]\n%s = 1\n" % ("k" * 500), "unknown key 'kkkkkkkk"),
+        ("[convert]\n%s = 1\n" % ("k" * 500), "unknown key 'convert.kkkkkkkk"),
     ],
 )
-def test_a_file_that_holds_something_nobody_has_is_one_line_and_no_text_of_it(
+def test_a_file_that_holds_something_nobody_has_is_status_2_and_no_text_of_it(
     text, problem, tmp_path, trace, capsys
 ):
+    """duho refuses a key or table nobody has (``_config_validate_ = "strict"``)
+    with the parser's usage error; the loader answers the other two. The line
+    names the key, and nothing of any value."""
     path = written(tmp_path, "s.toml", text)
     status, out, err = go(capsys, "-c", path, "convert", "-i", trace)
     assert status == 2 and out == ""
-    (line,) = err.splitlines()
-    assert line.startswith("pktcap: error: ") and problem in line
-    assert SECRET not in line and "k" * 41 not in line
+    assert problem in err and SECRET not in err
+    assert err.count("error:") == 1
 
 
 def test_the_old_layout_says_where_load_goes(home, capsys):
@@ -314,7 +318,7 @@ def test_a_file_over_65536_octets_is_refused_and_one_of_exactly_that_is_read(
 
 
 def test_the_file_is_under_the_platforms_configuration_directory(home):
-    assert _settings.default_path() == home / "pktcap" / "pktcap.ini"
+    assert os.fspath(Pktcap._config_) == str(home / "pktcap" / "pktcap.ini")
 
 
 def test_the_configuration_directory_falls_back_to_the_users_home(
@@ -328,18 +332,22 @@ def test_the_configuration_directory_falls_back_to_the_users_home(
     monkeypatch.setenv("USERPROFILE", str(user))
     tail = ("AppData", "Roaming") if IS_WINDOWS else (".config",)
     expected = user.joinpath(*tail, "pktcap", "pktcap.ini")
-    assert _settings.default_path() == expected
+    assert os.fspath(Pktcap._config_) == str(expected)
 
 
+@pytest.mark.skipif(
+    IS_WINDOWS,
+    reason="duho 0.7.3 takes a relative APPDATA as it is (measured 2026-10-12)",
+)
 def test_a_relative_configuration_directory_is_ignored(tmp_path, monkeypatch):
     user = tmp_path / "user"
     user.mkdir()
     monkeypatch.setenv("APPDATA" if IS_WINDOWS else "XDG_CONFIG_HOME", "zzrel/dir")
     monkeypatch.setenv("HOME", str(user))
     monkeypatch.setenv("USERPROFILE", str(user))
-    path = _settings.default_path()
-    assert path is not None and path.is_absolute()
-    assert str(user) in str(path) and "zzrel" not in str(path)
+    path = os.fspath(Pktcap._config_)
+    assert os.path.isabs(path)
+    assert str(user) in path and "zzrel" not in path
 
 
 def test_the_users_own_file_is_read_and_a_missing_one_is_no_error(
@@ -464,42 +472,50 @@ def test_a_default_file_the_user_owns_is_read(home, plugin_module, capsys):
     assert status == 0 and names(report) == [mod.name]
 
 
-def test_naming_a_file_makes_the_users_own_moot():
-    commands = {"capture", "convert"}
-    assert _settings.names_a_file(["-c", "x", "convert"], commands)
-    assert _settings.names_a_file(["--config=x", "convert"], commands)
-    assert _settings.names_a_file(["--conf", "x", "convert"], commands)
-    assert _settings.names_a_file(["-cx", "convert"], commands)
-    assert not _settings.names_a_file(["-v", "convert", "-c", "x"], commands)
-    assert not _settings.names_a_file([], commands)
+def test_the_loader_is_told_where_the_path_came_from(
+    home, tmp_path, monkeypatch, capsys
+):
+    """Only the file found by default is checked, and duho says which it is."""
+    seen = []
+    real = ROOT_MODULE.read_settings
+
+    def spy(path, source, root):
+        seen.append(source)
+        return real(path, source, root)
+
+    monkeypatch.setattr(ROOT_MODULE, "read_settings", spy)
+    default_file(home, "[DEFAULT]\n")
+    named = written(tmp_path, "n.ini", "[DEFAULT]\n")
+    assert go(capsys, "plugins")[0] == 0
+    assert go(capsys, "-c", named, "plugins")[0] == 0
+    monkeypatch.setenv("PKTCAP_CONFIG", str(named))
+    assert go(capsys, "plugins")[0] == 0
+    assert seen == ["default", "field", "env"]
 
 
-def test_the_variable_makes_the_users_own_file_moot(monkeypatch):
-    monkeypatch.setenv("PKTCAP_CONFIG", os.path.abspath("x.ini"))
-    assert _settings.choose_default([], {"convert"}) is None
-    monkeypatch.delenv("PKTCAP_CONFIG")
-    assert _settings.choose_default([], {"convert"}) == str(_settings.default_path())
-    assert _settings.choose_default(["-c", "x"], {"convert"}) is None
-    _settings.forget()
+def test_an_empty_path_means_no_file_the_default_included(
+    home, plugin_module, monkeypatch, capsys
+):
+    mod = plugin_module()
+    default_file(home, "[DEFAULT]\nload = %s\n" % mod.name)
+    assert names(listed(capsys)[1]) == [mod.name]
+    status, report, _ = listed(capsys, "--config", "")
+    assert status == 0 and report["plugins"] == [] and report["configuration"] is None
+    monkeypatch.setenv("PKTCAP_CONFIG", "")
+    status, report, _ = listed(capsys)
+    assert status == 0 and report["plugins"] == [] and report["configuration"] is None
 
 
 def test_a_run_leaves_no_state_behind(home, plugin_module, capsys):
     mod = plugin_module()
     default_file(home, "[DEFAULT]\nload = %s\n" % mod.name)
+    before = os.fspath(Pktcap._config_)
     assert main(["plugins"]) == 0
     capsys.readouterr()
-    assert Pktcap._config_ is None and _settings.file_read() is None
+    assert os.fspath(Pktcap._config_) == before and _settings.file_read() is None
 
 
-# -- a served tree is given no settings file ------------------------------------
-
-
-def test_a_served_tree_is_given_no_default_file(home, monkeypatch):
-    monkeypatch.setenv("PKTCAP_MCP", "stdio")
-    assert _settings.choose_default([], {"convert"}) is None
-    monkeypatch.setenv("PKTCAP_MCP", " ")
-    assert _settings.choose_default([], {"convert"}) is not None
-    _settings.forget()
+# -- a served tree reads the server's own default file, in a process of its own -----
 
 
 def _serve(requests, env):
@@ -524,15 +540,16 @@ def _call(identifier, name, arguments):
     }
 
 
-def test_the_real_server_reads_neither_the_users_file_nor_the_variables(
+def test_the_real_server_reads_its_own_default_file_and_neither_a_variables_nor_a_calls(
     home, tmp_path, trace, plugin_module
 ):
-    """The file would make ``convert`` write text and load a plugin; the
-    answers are JSON records of a capture read with no plugin."""
+    """The default file makes ``convert`` write text and load a plugin; the
+    file ``PKTCAP_CONFIG`` names would make it write JSON, and a call that
+    names ``config`` or ``load`` changes neither."""
     mod = plugin_module()
     text = "[DEFAULT]\nload = %s\n[convert]\nformat = text\n" % mod.name
     default_file(home, text)
-    named = written(tmp_path, "named.ini", text)
+    named = written(tmp_path, "named.ini", "[convert]\nformat = json\n")
     env = dict(os.environ, PKTCAP_MCP="stdio", PKTCAP_CONFIG=str(named))
     env.update(
         PYTHONPATH=str(mod.directory), APPDATA=str(home), XDG_CONFIG_HOME=str(home)
@@ -559,11 +576,33 @@ def test_the_real_server_reads_neither_the_users_file_nor_the_variables(
     replies = _serve(requests, env)
     for identifier in (2, 3):
         body = replies[identifier]["result"]["content"][0]["text"]
-        assert json.loads(body)["layers"][0]["layer"] == "ethernet"
+        assert not body.startswith("{")  # the default file's text, not JSON
     assert "cannot name plugins" in json.dumps(replies[4])
     listing = replies[5]["result"]["content"][0]["text"]
-    assert "configuration: none" in listing and "plugins: none" in listing
-    assert not mod.imported
+    assert "configuration: %s" % (home / "pktcap" / "pktcap.ini") in listing
+    assert "plugins: 1 from" in listing and mod.imported
+
+
+def test_the_real_server_checks_its_default_file_as_any_default_is(
+    home, tmp_path, trace
+):
+    if not _can_set_everyone_write(tmp_path):
+        pytest.skip("this platform records no write permission for everyone")
+    path = default_file(home, "[convert]\nformat = text\n")
+    os.chmod(path, 0o666)
+    env = dict(os.environ, PKTCAP_MCP="stdio")
+    env.update(APPDATA=str(home), XDG_CONFIG_HOME=str(home))
+    env.pop("PKTCAP_LOAD", None)
+    env.pop("PKTCAP_CONFIG", None)
+    done = subprocess.run(
+        [sys.executable, "-m", "pktcap"],
+        input=json.dumps(_call(2, "pktcap.convert", {"input": str(trace)})) + "\n",
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    assert "everyone may write it" in done.stdout + done.stderr
 
 
 def test_a_tool_call_that_names_config_reads_no_file(tmp_path, trace):

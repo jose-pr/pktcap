@@ -311,10 +311,11 @@ def test_the_scanners_see_a_planted_violation(tmp_path):
     assert _naming(root, ("exec", "eval"), set()) == ["_exec.py"]
 
 
-def test_importing_the_command_line_loads_no_config_reader_until_a_file_is_read(
+def test_importing_the_command_line_loads_no_config_reader_until_a_command_runs(
     tmp_path,
 ):
-    """`duho.config` is imported when a settings file is read, not before."""
+    """`duho.config` is imported when a command runs, which resolves the
+    user's own file, and not when the command line is imported."""
     settings = tmp_path / "s.json"
     settings.write_bytes(b"{}")
     code = "\n".join(
@@ -335,7 +336,7 @@ def test_importing_the_command_line_loads_no_config_reader_until_a_file_is_read(
         env=dict(os.environ, APPDATA=str(tmp_path), XDG_CONFIG_HOME=str(tmp_path)),
         timeout=120,
     )
-    assert done.stdout.splitlines()[-1] == "False False True", done.stderr[-1000:]
+    assert done.stdout.splitlines()[-1] == "False True True", done.stderr[-1000:]
 
 
 def test_the_hooks_job_resumes_its_program_with_documented_calls_alone():
