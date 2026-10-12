@@ -7,140 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
-
-- A tool call may ask for `pcap` or `pcapng` on standard output: the octets go
-  to the server's output target (file descriptor 3, or what
-  `PKTCAP_MCP_OUTPUT` names: a descriptor number, a file or a pipe) and the
-  result says how many bytes went where; with no target the call fails with
-  duho's message. It was refused with "cannot be returned as text", unless an
-  `output` file was named, which still works.
-- The settings file is read with what duho 0.7.3 provides. The user's own file
-  is the root's `_config_` (`duho.config.user_path`), told from a named one by
-  the `source` duho gives the loader, so no per-run state remembers which is
-  the default; duho refuses a key or table nobody has (`_config_validate_`),
-  with a usage error that names the key and never holds a value, so a key of
-  any length is named whole. An empty path (`--config ""`, `PKTCAP_CONFIG=`)
-  means no file, the user's own included. A served tree reads the server's own
-  default file, checked as any default is, and neither `PKTCAP_CONFIG` nor a
-  `config` a call names. A relative `APPDATA` is no longer ignored on Windows
-  (duho's `user_path` takes it as it is).
-- What a library that subclasses the commands had to work round is given by the
-  base. `Capture._endpoints(self, dissector)` is given the dissector the frames
-  are read with, so a protocol is registered on the port that was bound
-  without keeping the dissector in an attribute; it was `_endpoints(self)`.
-  `Capture._listen_` (default `None`: every interface) is what the command
-  listens on when neither `--listen` nor `--interface` is given, so a class
-  need not override `_frames` to make listening its default. `Loading._env_prefix_`
-  (default `None`) gives every option of a class that names no variable,
-  inherited ones among them, the variable made of the prefix and its field name
-  in upper case (`MYPROG_CAPTURE_FORMAT`); the logging options and `--load`,
-  which keeps `PKTCAP_LOAD`, are not renamed, and `Meta(env="")` keeps an
-  option without a variable. `--format toml` or `ini` without
-  `--per-record` is status 2 with a line that names `--per-record`, the option,
-  and not `per_record=True`, the library's keyword.
-- `CaptureWriter.write(item, record=None, *, names=None)` has no `text=`
-  argument: a caller hands over the record and the writer renders it, so the
-  octets of a record are one library's. Nothing released took it.
-- The command line reads its settings the way every duho program does. The
-  root takes `--config`/`-c FILE` before the command's name, else
-  `PKTCAP_CONFIG`, else the user's own `pktcap/pktcap.ini`; the file is duho's
-  layout (top-level keys for the root, a table for each command), in INI,
-  TOML, JSON or YAML by its name, and a `[convert]` table sets the options of
-  `convert`. No command has a configuration option, so a library that
-  subclasses the commands names its settings file on its own root and meets no
-  clash. An unknown key or table, a `config` key, a `[pktcap]` table and a file
-  that is not valid are status 2 with one line that holds no text of the file.
-  The default file is checked where owners are, as before; a served tree
-  (`PKTCAP_MCP`) is given no settings file. `pktcap plugins` names the file the
-  root read. The `cli` extra needs duho 0.7.3, which publishes `running_mode()`: a command
-  tells a tool call by it, and no longer by the shape of standard output.
-- The plugin list of a command is the field `load` (`--load`, `PKTCAP_LOAD`,
-  the key `load`), the tool-input key of `pktcap.convert` and `pktcap.plugins`
-  is `load`, and `pktcap.convert` takes `append`. A top-level `load` of the
-  settings file is the list of every command. `Loading._load_from_` names the
-  layers a class takes the list from, as `Capture._hook_from_` does for a hook.
-  `--config none`, `PKTCAP_CONFIG=none` and the file layout `[pktcap]` with a
-  `load` key are gone: the file's `load` goes at the top level. A variable that
-  is only white space is a list with no plugin and not unset; only an empty one
-  is unset.
-  pktcap needs netimps 0.4.1.
-- Every private member of the command classes that is not an override point
-  begins `_pk_` (`_written` is `_pk_written`, `_source` is `_pk_source`, and
-  so on), and the header says a subclass defines and uses none, so a subclass
-  that keeps its own data in an attribute named like one no longer replaces it.
-  The line for a missing live capture names the program that runs, and the
-  help of `--interface` names no option a subclass may not have.
-- Dissecting an IPv6 frame costs about half. An IPv6 address keeps its text
-  (the 1,024 a process used last), since a capture names few hosts and every
-  frame names two. What a caller gets back is the same.
-- A field value used in a per-record file name and longer than 64 characters
-  is cut to 55 and ends in `-` and 8 hexadecimal digits of the SHA-256 of the
-  whole value, so two long values that start alike name two files. Before, the
-  value was cut at 64 characters and they named one.
-- A field value can no longer make a directory of a per-record path
-  (`{client}/{index}.json`) a name Windows opens as a device: the part gets a
-  leading `_` on every platform, as the file's own name did. Before, a value
-  of `nul` there made every write under it fail on Windows. A part the
-  pattern spells out is kept as written.
-
-### Fixed
-
-- A command whose standard output the reader closed ended on Windows with
-  status 120 and two lines on standard error, because Windows reports a closed
-  pipe as `EINVAL` and the interpreter's own flush at exit failed again. It is
-  status 1 and no line there as it is elsewhere; an `EINVAL` of a file or a
-  socket stays an error with its line.
-- On Windows the hook's program is resumed with documented calls
-  (a Toolhelp snapshot to find its thread, then `ResumeThread`) and no longer
-  with `NtResumeProcess`, which Microsoft does not document. Measured: no
-  start in 400 missed its thread; each costs about 60 ms more.
-
 ### Added
 
-- The command classes are the base of a protocol library's commands.
-  `pktcap.cli` exports `main`, `Loading`, `Selecting` (was `Base`), `Writing`,
-  `Capture`, `Convert`, `Replay` and `Plugins`, bound on first use so that
-  importing it still needs no `duho`. A subclass sets `_plugins_`, `_filter_`,
-  `_fields_`, `_format_`, `_interruptible_`, `_default_port_`, `_listen_` and
-  `_env_prefix_`, and
-  overrides `_select`, `_frames`, `_names`, `_limit`, `_hook`, `_report`,
-  `_endpoints`, `_stop`, `_datagrams` and `_replay`; the loop that `convert`
-  and `capture` each held is `Writing.__call__`. `Replay` is split into
-  `_destination`, `_datagrams`, `_replay` and `_report`.
-- `pktcap capture --listen SPEC` (repeatable, excludes `--interface`) captures
-  the datagrams that arrive at UDP ports, on every platform and with no
-  privilege; `SPEC` is the grammar of `netimps.parse_listen`, bound with
-  `netimps.bind_listen`. `--hook`, `--hook-fail-fast` and `--hook-timeout`
-  run a program (or a Python `MODULE:FUNCTION`) for each record written.
-  `--append` on `convert` and `capture` adds to a record file.
-- A hook and a plugin list come from the command line, not from a settings
-  file or a variable a library's root applies to every field: such a value is
-  status 2 naming the layer. `Capture._hook_from_` (default `("argument",)`)
-  lists the layers a subclass takes a hook from, of `"argument"`,
-  `"environment"` and `"file"`; the plugin list never comes from a root's
-  layers. A tool call cannot name `append`.
-- `Capture._stop` is asked whatever the options are, a hook is given the format
-  the writer writes (the ending of `--output` when it decides), a repeated
-  endpoint is a `ValueError` at the construction of `UDPCapture`, the sockets
-  a command bound are closed when the source refuses them, and `--append`
-  with `--per-record` is status 2 (`CaptureWriter` raises `ValueError`).
-- `UDPCapture` asks each endpoint whether it admits a datagram
-  (`UDPEndpoint.admits`): one it does not is counted in the new
-  `not_admitted` and gives no frame, in `sniff_udp` and `asniff_udp` as well.
-- A UDP socket is a capture source, on every platform and with no privilege.
-  `UDPCapture(endpoints, *, timeout=1.0, max_size=65535)` reads datagrams
-  from bound `netimps.UDPEndpoint` objects (at most 256) and returns each as a
-  raw-IP frame (link type 101) with the arrival interface when the host
-  reports one; a datagram over `max_size` is counted in `truncated` and not
-  returned. `sniff_udp(endpoints, *, stop=None, dissector=None)` yields them
-  dissected, with the registered dissector of the port applied, and closes the
-  sockets when it ends, fails, is closed or is dropped. `asniff_udp(endpoints,
-  *, dissector=None)` is its asynchronous twin on `UDPEndpoint.arecv`, with
-  `UDPCapture.aread()` and `aclose()`; every task is cancelled and every
-  socket closed when it stops, and `import pktcap` still imports no `asyncio`.
-  The IP header of such a frame is made up, and a socket never sees other
-  hosts' traffic, the link layer or fragments.
+Python 3.9 or newer; `netimps>=0.4.1,<0.5` is the one dependency. Optional
+extras: `yaml` (`PyYAML>=6.0,<7`), `toml` (`tomli-w>=1.0,<2`, and
+`tomli>=2.0,<3` before Python 3.11) and `cli` (`duho>=0.7.3,<0.8`). `import
+pktcap` imports none of them, reads no variable and imports no plugin.
+
+**The package**
+
+- The package, with one exception base, `PktcapError`, and `__version__`.
+- `MissingExtraError`, an `ImportError` and a `PktcapError`, is what a format
+  whose optional dependency is not installed raises. `format` is the format's
+  name and `extra` the pktcap extra that installs what it needs (`"toml"`), so
+  a library that offers the format under its own extra words its own message
+  without reading this one.
+
+**Reading captures**
+
+- `read_frames(source, *, max_frame_size=262144)` reads every frame of a pcap
+  or pcapng capture, from a path or from a stream that cannot seek, as
+  `CapturedFrame(time, linktype, data, interface=None)` named tuples, whatever
+  the link type. Every length the file states is checked against a ceiling
+  before it is read: a 48-octet file whose record claims 1 GiB raises
+  `CaptureFormatError` having allocated under 1 MiB. Any damaged capture
+  raises `CaptureFormatError`, a `ValueError`, with the octet offset.
+
+**Dissecting frames**
+
+- `FrameDissector(registry=None, *, reassemble=True, max_reassemblies=256,
+  reassembly_timeout=30.0)` and `read_dissected(source, *, dissector=None)`
+  dissect frames layer by layer into `DissectedFrame` named tuples: the layer
+  records in order, the octets after each, and what no dissector read. A
+  frame is never raised for: a layer cut short is counted `malformed` and
+  named in `DissectedFrame.error`, a link type with no dissector is counted
+  `unsupported` and returned whole, and at most 32 dissectors run on one
+  frame (`DissectStats`).
+- `FrameDissector.unsupported_linktypes` is a read-only snapshot mapping each
+  link type that had no dissector to the number of frames of it (`{105: 3}`),
+  so a caller can say which link type a capture it could not read was made
+  on. The first 64 distinct link types are told apart;
+  `DissectStats.unsupported` counts every frame.
+- Built-in dissectors for Ethernet, 802.1Q and 802.1ad tags, Linux cooked
+  capture v1 and v2, BSD loopback, raw IP, IPv4, IPv6 with its hop-by-hop,
+  routing, destination and fragment headers, UDP and TCP, each making a named
+  tuple: `EthernetLayer`, `VLANLayer`, `LinuxCookedLayer`, `LoopbackLayer`,
+  `IPv4Layer`, `IPv6Layer`, `IPv6ExtensionLayer`, `IPv6FragmentLayer`,
+  `UDPLayer`, `TCPLayer`. TCP is read a segment at a time and no checksum is
+  verified. An IPv6 address keeps its text (the 1,024 a process used last),
+  since a capture names few hosts and every frame names two.
+- A dissector is any callable `(data: bytes) -> Dissected(layer, payload,
+  next=(), fragment=None)`. `DissectorRegistry(*, builtins=True)` maps a
+  selector `(kind, number)` (`linktype`, `ethertype`, `ip`, `udp`, `tcp`, or
+  any other kind) to one, refusing a selector that is taken unless
+  `replace=True`; `default_registry()` and `register_dissector(kind, value,
+  dissector)` are the process-wide one. Entry points are not read. A
+  registered dissector that raises costs that frame one layer, is counted
+  `failed` and logged once per selector; the reader goes on.
+  `check_dissector(dissector, samples)` runs the contract check the built-in
+  dissectors pass. `DissectError` is the `ValueError` they raise.
+- IP reassembly, for any protocol, is on by default and bounded: 256
+  datagrams in flight, 65,535 octets and 1,024 fragments each, 30 seconds of
+  capture time. A fragment costs a binary search whatever the order of
+  arrival, and a fragment that overlaps another discards its datagram.
+- `read_datagrams(source, *, dissector=None)` and `DissectedFrame.datagram()`
+  give the UDP view, `CapturedDatagram(time, source, destination, payload,
+  fragmented, truncated)`; a datagram cut by the snap length is marked
+  `truncated`.
 - A layer may say how it reads: a layer record may have a method `summary()`
   returning one line saying what it holds. Every built-in layer has one, and
   a registered layer without one is described by its name.
@@ -149,61 +82,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   The line is escaped to printable ASCII, cut at 512 characters, and a
   `summary()` that raises or gives no text is logged once for its class and
   never stops anything.
-- `"text"` joins `OUTPUT_FORMATS` (endings `.txt` and `.log`): `CaptureWriter`
-  writes a frame's `frame_summary`, or a line for a datagram, many lines to a
-  file or one file a line with `per_record`. It is not a record format, so
-  `RECORD_FORMATS` is unchanged and `dumps_record` and `loads_record` refuse
-  it, as they refuse `pcap`. `pktcap convert` and `pktcap capture` take
-  `--format text`, and an output file ending in `.txt` or `.log` is text.
-- `load_plugins(..., always=())` loads the plugins a caller's own code names
-  before the user's list, with the source `"always"`. They are never read from
-  `PKTCAP_LOAD` or the configuration file, which still decide the user's list.
-  An item of the user's list that is the same hook is skipped; a different
-  hook claiming a selector that is taken is still a `CapturePluginError`, and
-  a failure anywhere leaves the registry as it was.
-- `command_hook(command, *, format="json", timeout=10.0, fail_fast=False,
-  names=None, datagrams=False)` is a hook for a copy that runs a program for
-  each frame written: the record of the frame on standard input, the values
-  `names(frame)` gives as `PKTCAP_HOOK_<FIELD>` variables (each passing the
-  file-name rule of `CaptureWriter`), no argument and no shell. The program is
-  found once, as an absolute path (a bare name in the directories `PATH`
-  lists and nowhere else), and a `.bat` or `.cmd` file is refused on Windows.
-  The run is the program's own exit: a process it leaves holding its streams
-  delays nothing. Past `timeout` the program and everything it started are
-  killed (a job object on Windows, the process group on POSIX). A program that
-  cannot be started is a failure like a non-zero exit. A failure is counted in
-  the callable's `failures`, logged on
-  `pktcap._copy._hook` with a bounded, escaped tail of the error output (the
-  first, then at most one a minute), and with `fail_fast` raises the new
-  `CaptureHookError(message, *, status=None, timed_out=False)`, a
-  `PktcapError` and an `OSError`.
-- `copy_frames` takes `names`, called for each frame kept to give the writer
-  the values of its `fields`, and `each`, called with the frame after its
-  item is written and not for a frame that was dropped, had no datagram or
-  was turned away by the file budget.
-- `datagram_frame(datagram, *, interface=None, ident=0)` builds the raw-IP
-  frame of a `CapturedDatagram`, the octets `PcapWriter` writes for it, so
-  that dissecting it gives the datagram back for a whole datagram; a payload
-  that is not bytes-like is a `TypeError`.
-- `loads_record(text, format="json")` reads one record back from the text
-  `dumps_record` writes, in the same four formats, as its inverse: for every
-  record `dumps_record` takes, `loads_record(dumps_record(r, f), f) == r`,
-  with the exceptions the formats force, which the header lists (a key that
-  was not text comes back as text in JSON and INI, a lone surrogate in a value
-  is U+FFFD in TOML, and a few more). A name a format could not write so that
-  it reads back is refused with a `ValueError` that quotes nothing of the
-  record: a lone surrogate in a TOML key, a lone surrogate or an empty name in
-  an INI section or option name. Text that is not one record raises the new
-  `RecordFormatError(message, *, format, lineno=None)`, a `PktcapError` and a
-  `ValueError`, whose message never quotes the text and which chains nothing.
-  The text is untrusted: a key written twice, `NaN` and the infinities in
-  JSON, a YAML tag that is not plain, a YAML merge key, a YAML alias, a date
-  in TOML or YAML, and nesting past the recursion limit are refused. The YAML
-  writer writes no anchor and no alias: an object a record holds twice is
-  written twice. In INI a value
-  that is not JSON is its text, so a file written by hand reads. YAML needs
-  the `yaml` extra; TOML is read with `tomllib` from Python 3.11 and needs
-  `tomli` before it, which the `toml` extra now installs there.
+
+**Filtering**
+
+- `parse_capture_filter(text)` and `compile_capture_filter(text, build)` read
+  the `key=value and key!=value` filter expression into `FilterClause` named
+  tuples and one predicate; `build` gives each key its meaning, once per
+  clause, and its `ValueError` becomes a `CaptureFilterError` naming the
+  clause. `frame_filter` is the `build` for dissected frames, with the keys
+  of `FRAME_FILTER_KEYS`: `src`, `dst`, `host`, `sport`, `dport`, `port`,
+  `proto`, `vlan`, `linktype`. `or` is refused by name.
+- `DissectorRegistry.register_layer(layer, *, name=None, keys=None,
+  replace=False)`, `unregister_layer(name)` and `layers()` declare the class
+  of a layer a dissector returns, and optionally the filter keys over it.
+  `frame_filter_for(registry)` is the filter `build` that knows them:
+  `LAYER.FIELD` reads any field of a built-in or declared layer by the type of
+  its value (`ipv4.ttl=64`, `udp.destination_port=0x270f`), `LAYER.KEY` and
+  the bare `KEY` read a library's own keys, and a wrong key or a value that
+  can never match is refused when the filter is compiled.
+  `frame_filter_keys(registry=None)` lists every key that compiles.
+  `frame_filter` reads no registry; it answers `LAYER.FIELD` of the built-in
+  layers.
+
+**TCP stream reassembly**
+
 - `TCPReassembler(*, max_streams=1024, max_buffered=16777216,
   idle_timeout=300.0)` puts TCP streams back together from dissected frames:
   `add(frame)` returns the `TCPStreamData` the frame made deliverable, each
@@ -243,120 +145,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `read_tcp_streams(source, *, reassembler=None, dissector=None,
   max_frame_size=262144)` reads the TCP streams of a capture in one call:
   `read_dissected` through `TCPReassembler.add`, then `flush()` at the end.
-- `DissectorRegistry.register_layer(layer, *, name=None, keys=None,
-  replace=False)`, `unregister_layer(name)` and `layers()` declare the class
-  of a layer a dissector returns, and optionally the filter keys over it.
-  `frame_filter_for(registry)` is the filter `build` that knows them:
-  `LAYER.FIELD` reads any field of a built-in or declared layer by the type of
-  its value (`ipv4.ttl=64`, `udp.destination_port=0x270f`), `LAYER.KEY` and
-  the bare `KEY` read a library's own keys, and a wrong key or a value that
-  can never match is refused when the filter is compiled.
-  `frame_filter_keys(registry=None)` lists every key that compiles.
-  `frame_filter` reads no registry; it answers `LAYER.FIELD` of the built-in
-  layers.
-- `load_plugins(registry, plugins=None, *, always=())` imports the modules a
-  list names and calls each one's hook, `pktcap_plugin(registry)` (or any
-  `MODULE.CALLABLE` taking the registry), so a protocol library's dissector and
-  filter keys are registered with no code of the user's. The list is the one
-  it is given: the library reads no variable and no configuration file, and a
-  program passes a list only from a place it trusts. `LoadedPlugin` is one
-  result. A plugin that cannot be loaded raises `CapturePluginError` and leaves
-  the registry as it was. `import pktcap` reads no variable and imports no
-  plugin.
-- The `pktcap` command, also `python -m pktcap`, behind the new `cli` extra
-  (`pip install "pktcap[cli]"`, which brings `duho`). Without the extra the
-  command prints the one line naming it and exits 1. `import pktcap` imports
-  neither `duho` nor the command package, `pktcap.cli`, which is not library
-  API. Exit status: 0 done, 1 the operation failed, 2 the invocation was
-  wrong.
-- `pktcap convert --input FILE|- [--output TARGET] [--format FMT] [--filter
-  EXPR] [--datagrams] [--per-record] [--max-files N] [--limit N]` copies a
-  pcap or pcapng capture into pcap, pcapng or records (json, yaml, toml,
-  ini), through `copy_frames`. Standard output is the default target and may
-  be the capture; the summary is on standard error.
-- `pktcap replay --input FILE|- --to HOST:PORT [--filter EXPR] [--speed X |
-  --no-delay] [--max-delay SECONDS] [--limit N] [--source-port N]
-  [--broadcast] [--json]` sends the UDP payloads of a capture, in order and in
-  time, through `replay_to`. `--to` is the only destination there is: the
-  addresses in the file are never sent to. The result is the one line
-  `sent 12, partial 0`, or an object with `--json`.
-- `pktcap capture [--interface NAME] [--filter EXPR] [--output TARGET]
-  [--format FMT] [--datagrams] [--per-record] [--max-files N] [--count N]
-  [--duration SECONDS]` captures live through `sniff_frames` and `copy_frames`
-  (Linux, `CAP_NET_RAW`). Ctrl-C ends it with status 0 and the summary; off
-  Linux the one line says to pipe a capture tool into `pktcap convert`.
-- Every command takes `--load NAME` (repeatable; `none` for none), loading
-  into a registry of its own before the filter is compiled, so `pktcap capture
-  -f "proto=dhcp"` and a library's own keys work with no code written; the
-  root takes `--config`/`-c FILE`, and `--count` of `capture` has no short
-  form. `pktcap plugins [--layer NAME] [--json]` shows the settings file, what
-  was loaded and every filter key, and is served as the tool `pktcap.plugins`.
-  A tool call cannot name `load`: it is refused, and the server's own
-  `PKTCAP_LOAD` decides.
-- `PKTCAP_MCP=stdio pktcap` serves `convert` as a tool (`pktcap.convert`):
-  the records come back as the tool's result, and a capture format is refused
-  for standard output, which a tool call has no octets for. `capture` and
-  `replay` are not served: one runs until stopped and needs a privilege, the
-  other puts datagrams on a network.
-- `sniff_frames(interface=None, *, stop=None, dissector=None)` yields every
-  frame seen live, dissected, as `read_dissected` does for a file; `sniff` is
-  its datagram view, with the behaviour it had.
-- `copy_frames(frames, writer, *, select=None, datagrams=False, limit=None)`
-  writes the frames a predicate accepts into a `CaptureWriter` the caller
-  owns, optionally as the UDP datagram of each, and stops reading at `limit`;
-  it returns `CopyResult(read, written, skipped, refused)`.
-- `MissingExtraError`, an `ImportError` and a `PktcapError`, is what a format
-  whose optional dependency is not installed raises. `format` is the format's
-  name and `extra` the pktcap extra that installs what it needs (`"toml"`,
-  `"toml"`), so a library that offers the format under its own extra words
-  its own message without reading this one. The message is unchanged, and
-  `except ImportError` still catches it.
-- `FrameDissector.unsupported_linktypes`, a read-only snapshot mapping each
-  link type that had no dissector to the number of frames of it (`{105: 3}`),
-  so a caller can say which link type a capture it could not read was made
-  on. The first 64 distinct link types are told apart;
-  `DissectStats.unsupported` counts every frame.
-- The package, with one exception base, `PktcapError`, and `__version__`.
-- `read_frames(source, *, max_frame_size=262144)` reads every frame of a pcap
-  or pcapng capture, from a path or from a stream that cannot seek, as
-  `CapturedFrame(time, linktype, data, interface=None)` named tuples, whatever
-  the link type. Every length the file states is checked against a ceiling
-  before it is read: a 48-octet file whose record claims 1 GiB raises
-  `CaptureFormatError` having allocated under 1 MiB. Any damaged capture
-  raises `CaptureFormatError`, a `ValueError`, with the octet offset.
-- `FrameDissector(registry=None, *, reassemble=True, max_reassemblies=256,
-  reassembly_timeout=30.0)` and `read_dissected(source, *, dissector=None)`
-  dissect frames layer by layer into `DissectedFrame` named tuples: the layer
-  records in order, the octets after each, and what no dissector read. A
-  frame is never raised for: a layer cut short is counted `malformed` and
-  named in `DissectedFrame.error`, a link type with no dissector is counted
-  `unsupported` and returned whole, and at most 32 dissectors run on one
-  frame (`DissectStats`).
-- Built-in dissectors for Ethernet, 802.1Q and 802.1ad tags, Linux cooked
-  capture v1 and v2, BSD loopback, raw IP, IPv4, IPv6 with its hop-by-hop,
-  routing, destination and fragment headers, UDP and TCP, each making a named
-  tuple: `EthernetLayer`, `VLANLayer`, `LinuxCookedLayer`, `LoopbackLayer`,
-  `IPv4Layer`, `IPv6Layer`, `IPv6ExtensionLayer`, `IPv6FragmentLayer`,
-  `UDPLayer`, `TCPLayer`. TCP is read a segment at a time; streams are not
-  reassembled, and no checksum is verified.
-- A dissector is any callable `(data: bytes) -> Dissected(layer, payload,
-  next=(), fragment=None)`. `DissectorRegistry(*, builtins=True)` maps a
-  selector `(kind, number)` (`linktype`, `ethertype`, `ip`, `udp`, `tcp`, or
-  any other kind) to one, refusing a selector that is taken unless
-  `replace=True`; `default_registry()` and `register_dissector(kind, value,
-  dissector)` are the process-wide one. Entry points are not read. A
-  registered dissector that raises costs that frame one layer, is counted
-  `failed` and logged once per selector; the reader goes on.
-  `check_dissector(dissector, samples)` runs the contract check the built-in
-  dissectors pass. `DissectError` is the `ValueError` they raise.
-- IP reassembly, for any protocol, is on by default and bounded: 256
-  datagrams in flight, 65,535 octets and 1,024 fragments each, 30 seconds of
-  capture time. A fragment costs a binary search whatever the order of
-  arrival, and a fragment that overlaps another discards its datagram.
-- `read_datagrams(source, *, dissector=None)` and `DissectedFrame.datagram()`
-  give the UDP view, `CapturedDatagram(time, source, destination, payload,
-  fragmented, truncated)`; a datagram cut by the snap length is marked
-  `truncated`.
+
+**Writing, and the record formats**
+
 - `PcapWriter(target)` and `PcapngWriter(target)` write captures:
   `write_frame(frame)` writes a captured frame back with its link type, octet
   for octet, and `write(time, source, destination, payload)` writes a UDP
@@ -369,22 +160,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `CaptureWriter(target, format=None, *, per_record=False, append=False,
   fields=(), max_files=1000)` writes datagrams or dissected frames as `pcap`
   or `pcapng`, or the records made of them as `json` (one line each), `yaml`
-  (one document each), `toml` or `ini` (one file each), into one growing file
-  or one file per record under a name pattern. `dumps_record(record, format)`
-  writes one record as text; `datagram_record(datagram)` and
-  `frame_record(frame)` are the default records; `OUTPUT_FORMATS`,
-  `RECORD_FORMATS` and `has_output_format(name)` say what can be written.
-  `yaml` and `toml` need the extras of those names and raise `ImportError`
-  naming the extra without them. Every record format writes printable ASCII.
-  A per-record writer creates at most `max_files` files and makes each field
-  value safe for a file name.
-- `parse_capture_filter(text)` and `compile_capture_filter(text, build)` read
-  the `key=value and key!=value` filter expression into `FilterClause` named
-  tuples and one predicate; `build` gives each key its meaning, once per
-  clause, and its `ValueError` becomes a `CaptureFilterError` naming the
-  clause. `frame_filter` is the `build` for dissected frames, with the keys
-  of `FRAME_FILTER_KEYS`: `src`, `dst`, `host`, `sport`, `dport`, `port`,
-  `proto`, `vlan`, `linktype`. `or` is refused by name.
+  (one document each), `toml` or `ini` (one file each), or as `text`, into one
+  growing file or one file per record under a name pattern.
+  `write(item, record=None, *, names=None)` takes the record, or renders it
+  itself, so the octets of a record are one library's, and makes the
+  directories above a growing file at its first write, as it does for a
+  per-record file. `append=True` adds to a record file; with `per_record` it
+  raises `ValueError`.
+- `dumps_record(record, format)` writes one record as text;
+  `datagram_record(datagram)` and `frame_record(frame)` are the default
+  records; `OUTPUT_FORMATS`, `RECORD_FORMATS` and `has_output_format(name)`
+  say what can be written. `yaml` and `toml` need the extras of those names
+  and raise `MissingExtraError` naming the extra without them. Every record
+  format writes printable ASCII.
+- `"text"` is in `OUTPUT_FORMATS` (endings `.txt` and `.log`): `CaptureWriter`
+  writes a frame's `frame_summary`, or a line for a datagram, many lines to a
+  file or one file a line with `per_record`. It is not a record format, so
+  `RECORD_FORMATS` does not hold it and `dumps_record` and `loads_record`
+  refuse it, as they refuse `pcap`.
+- A per-record writer creates at most `max_files` files and makes each field
+  value safe for a file name. A value longer than 64 characters is cut to 55
+  and ends in `-` and 8 hexadecimal digits of the SHA-256 of the whole value,
+  so two long values that start alike name two files. A value cannot make a
+  directory of a per-record path (`{client}/{index}.json`) a name Windows opens
+  as a device: the part gets a leading `_` on every platform, as the file's
+  own name does. A part the pattern spells out is kept as written.
+- `copy_frames(frames, writer, *, select=None, datagrams=False, limit=None,
+  names=None, each=None)` writes the frames a predicate accepts into a
+  `CaptureWriter` the caller owns, optionally as the UDP datagram of each,
+  and stops reading at `limit`; it returns `CopyResult(read, written,
+  skipped, refused)`. `names` is called for each frame kept to give the writer
+  the values of its `fields`, and `each` with the frame after its item is
+  written, not for a frame that was dropped, had no datagram or was turned
+  away by the file budget.
+- `datagram_frame(datagram, *, interface=None, ident=0)` builds the raw-IP
+  frame of a `CapturedDatagram`, the octets `PcapWriter` writes for it, so
+  that dissecting it gives the datagram back for a whole datagram; a payload
+  that is not bytes-like is a `TypeError`.
+
+**Reading a record back**
+
+- `loads_record(text, format="json")` reads one record back from the text
+  `dumps_record` writes, in the same four formats, as its inverse: for every
+  record `dumps_record` takes, `loads_record(dumps_record(r, f), f) == r`,
+  with the exceptions the formats force, which the header lists (a key that
+  was not text comes back as text in JSON and INI, a lone surrogate in a value
+  is U+FFFD in TOML, and a few more). A name a format could not write so that
+  it reads back is refused with a `ValueError` that quotes nothing of the
+  record: a lone surrogate in a TOML key, a lone surrogate or an empty name in
+  an INI section or option name. Text that is not one record raises
+  `RecordFormatError(message, *, format, lineno=None)`, a `PktcapError` and a
+  `ValueError`, whose message never quotes the text and which chains nothing.
+- The text is untrusted: a key written twice, `NaN` and the infinities in
+  JSON, a YAML tag that is not plain, a YAML merge key, a YAML alias, a date
+  in TOML or YAML, and nesting past the recursion limit are refused. The YAML
+  writer writes no anchor and no alias: an object a record holds twice is
+  written twice. In INI a value that is not JSON is its text, so a file
+  written by hand reads. YAML needs the `yaml` extra; TOML is read with
+  `tomllib` from Python 3.11 and needs `tomli` before it, which the `toml`
+  extra installs there.
+
+**Replay**
+
 - `replay_schedule(source, *, speed=1.0, max_delay=5.0, limit=None)` yields
   `(delay, item)` for a capture's datagrams or any iterable of datagrams or
   frames, and reads no clock; `replay(source, deliver)` sleeps each delay and
@@ -394,14 +231,173 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   never sent to, no raw frame is ever sent, the recorded timing is the
   default, each wait is capped at `max_delay`, and a `fragmented` or
   `truncated` datagram is counted and not sent.
-- `CaptureWriter.write(item, record=None, *, names=None)` makes the
-  directories above a growing file at its first write, as it does for a
-  per-record file.
+
+**Live capture, and the UDP socket source**
+
 - `LiveCapture(interface=None, *, timeout=1.0)` captures every packet on Linux
   through an `AF_PACKET` socket, which needs `CAP_NET_RAW`, as Linux cooked v2
-  frames a writer can save for other tools; `sniff(interface=None, *,
-  stop=None, dissector=None)` is its UDP datagram view; `has_live_capture()`
-  says whether the platform has one, and `LiveCaptureError`, an `OSError`, is
+  frames a writer can save for other tools; `sniff_frames(interface=None, *,
+  stop=None, dissector=None)` yields every frame seen live, dissected, as
+  `read_dissected` does for a file; `sniff(interface=None, *, stop=None,
+  dissector=None)` is its UDP datagram view; `has_live_capture()` says
+  whether the platform has one, and `LiveCaptureError`, an `OSError`, is
   raised where it does not.
+- A UDP socket is a capture source, on every platform and with no privilege.
+  `UDPCapture(endpoints, *, timeout=1.0, max_size=65535)` reads datagrams
+  from bound `netimps.UDPEndpoint` objects (at most 256; a repeated endpoint
+  is a `ValueError`) and returns each as a raw-IP frame (link type 101) with
+  the arrival interface when the host reports one; a datagram over `max_size`
+  is counted in `truncated` and not returned, and one an endpoint does not
+  admit (`UDPEndpoint.admits`) is counted in `not_admitted` and gives no
+  frame. `sniff_udp(endpoints, *, stop=None, dissector=None)` yields them
+  dissected, with the registered dissector of the port applied, and closes the
+  sockets when it ends, fails, is closed or is dropped. `asniff_udp(endpoints,
+  *, dissector=None)` is its asynchronous twin on `UDPEndpoint.arecv`, with
+  `UDPCapture.aread()` and `aclose()`; every task is cancelled and every
+  socket closed when it stops, and `import pktcap` imports no `asyncio`.
+  The IP header of such a frame is made up, and a socket never sees other
+  hosts' traffic, the link layer or fragments.
+
+**Hooks**
+
+- `command_hook(command, *, format="json", timeout=10.0, fail_fast=False,
+  names=None, datagrams=False)` is a hook for a copy that runs a program for
+  each frame written: the record of the frame on standard input, the values
+  `names(frame)` gives as `PKTCAP_HOOK_<FIELD>` variables (each passing the
+  file-name rule of `CaptureWriter`), no argument and no shell. The program is
+  found once, as an absolute path (a bare name in the directories `PATH`
+  lists and nowhere else), and a `.bat` or `.cmd` file is refused on Windows.
+  The run is the program's own exit: a process it leaves holding its streams
+  delays nothing. Past `timeout` the program and everything it started are
+  killed (a job object on Windows, started suspended and resumed through
+  documented calls; the process group on POSIX). A program that cannot be
+  started is a failure like a non-zero exit. A failure is counted in the
+  callable's `failures`, logged on `pktcap._copy._hook` with a bounded,
+  escaped tail of the error output (the first, then at most one a minute), and
+  with `fail_fast` raises `CaptureHookError(message, *, status=None,
+  timed_out=False)`, a `PktcapError` and an `OSError`.
+
+**Plugins**
+
+- `load_plugins(registry, plugins=None, *, always=())` imports the modules a
+  list names and calls each one's hook, `pktcap_plugin(registry)` (or any
+  `MODULE.CALLABLE` taking the registry), so a protocol library's dissector and
+  filter keys are registered with no code of the user's. The list is the one
+  it is given: the library reads no variable and no configuration file, and a
+  program passes a list only from a place it trusts. `LoadedPlugin` is one
+  result. A plugin that cannot be loaded raises `CapturePluginError` and leaves
+  the registry as it was.
+- `always` loads the plugins a caller's own code names before the user's list,
+  with the source `"always"`. They are never read from `PKTCAP_LOAD` or the
+  configuration file, which still decide the user's list. An item of the
+  user's list that is the same hook is skipped; a different hook claiming a
+  selector that is taken is still a `CapturePluginError`, and a failure
+  anywhere leaves the registry as it was.
+
+**The command line and its settings file**
+
+- The `pktcap` command, also `python -m pktcap`, behind the `cli` extra
+  (`pip install "pktcap[cli]"`, which brings `duho`). Without the extra the
+  command prints the one line naming it and exits 1. `import pktcap` imports
+  neither `duho` nor the command package, `pktcap.cli`, which is not library
+  API. Exit status: 0 done, 1 the operation failed, 2 the invocation was
+  wrong. A command whose standard output the reader closed ends with status 1
+  and no line on standard error, on Windows as elsewhere; an `EINVAL` of a
+  file or a socket stays an error with its line.
+- `pktcap convert --input FILE|- [--output TARGET] [--format FMT] [--filter
+  EXPR] [--datagrams] [--per-record] [--append] [--max-files N] [--limit N]`
+  copies a pcap or pcapng capture into pcap, pcapng, records (json, yaml,
+  toml, ini) or text, through `copy_frames`. Standard output is the default
+  target and may be the capture; the summary is on standard error. An output
+  file ending in `.txt` or `.log` is text. `--format toml` or `ini` without
+  `--per-record` is status 2 with a line that names `--per-record`;
+  `--append` with `--per-record` is status 2.
+- `pktcap replay --input FILE|- --to HOST:PORT [--filter EXPR] [--speed X |
+  --no-delay] [--max-delay SECONDS] [--limit N] [--source-port N]
+  [--broadcast] [--json]` sends the UDP payloads of a capture, in order and in
+  time, through `replay_to`. `--to` is the only destination there is: the
+  addresses in the file are never sent to. The result is the one line
+  `sent 12, partial 0`, or an object with `--json`.
+- `pktcap capture [--interface NAME | --listen SPEC...] [--filter EXPR]
+  [--output TARGET] [--format FMT] [--datagrams] [--per-record] [--append]
+  [--max-files N] [--count N] [--duration SECONDS] [--hook COMMAND]
+  [--hook-fail-fast] [--hook-timeout SECONDS]` captures live through
+  `sniff_frames` and `copy_frames` (Linux, `CAP_NET_RAW`). Ctrl-C ends it with
+  status 0 and the summary; off Linux the one line says to pipe a capture tool
+  into `pktcap convert`. `--listen SPEC` (repeatable, excludes `--interface`)
+  captures the datagrams that arrive at UDP ports, on every platform and with
+  no privilege; `SPEC` is the grammar of `netimps.parse_listen`, bound with
+  `netimps.bind_listen`. `--hook` runs a program (or a Python
+  `MODULE:FUNCTION`) for each record written, as `command_hook` does; a hook
+  is given the format the writer writes (the ending of `--output` when it
+  decides), and the sockets a command bound are closed when the source refuses
+  them. `--count` has no short form.
+- Every command takes `--load NAME` (repeatable; `none` for none), loading
+  into a registry of its own before the filter is compiled, so `pktcap capture
+  -f "proto=dhcp"` and a library's own keys work with no code written. The
+  plugin list of a command is the field `load` (`--load`, `PKTCAP_LOAD`, the
+  key `load`); a variable that is only white space is a list with no plugin,
+  and only an empty one is unset. `pktcap plugins [--layer NAME] [--json]`
+  shows the settings file the root read, what was loaded and every filter key.
+  A hook and a plugin list come from the command line, not from a settings
+  file or a variable a library's root applies to every field: such a value is
+  status 2 naming the layer.
+- The root takes `--config`/`-c FILE` before the command's name, else
+  `PKTCAP_CONFIG`, else the user's own `pktcap/pktcap.ini`. The file is duho's
+  layout (top-level keys for the root, a table for each command), in INI,
+  TOML, JSON or YAML by its name, and a `[convert]` table sets the options of
+  `convert`. A top-level `load` is the list of every command. The argument
+  wins over the variable, the variable over the file. An empty path
+  (`--config ""`, `PKTCAP_CONFIG=`) means no file, the user's own included. An
+  unknown key or table (duho's usage error, which names the key and never
+  holds a value), a `config` key, a `[pktcap]` table and a file that is not
+  valid are status 2 with one line that holds no text of the file. The default
+  file is checked where owners are: on POSIX it must be the user's or root's
+  and not writable by everyone. A relative `APPDATA` is taken as it is on
+  Windows. The `cli` extra needs duho 0.7.3, which publishes `running_mode()`:
+  a command tells a tool call by it.
+
+**The command classes as a base**
+
+- The command classes are the base of a protocol library's commands.
+  `pktcap.cli` exports `main`, `Loading`, `Selecting`, `Writing`, `Capture`,
+  `Convert`, `Replay` and `Plugins`, bound on first use so that importing it
+  still needs no `duho`. A subclass sets `_plugins_`, `_filter_`, `_fields_`,
+  `_format_`, `_interruptible_`, `_default_port_`, `_listen_` and
+  `_env_prefix_`, and overrides `_select`, `_frames`, `_names`, `_limit`,
+  `_hook`, `_report`, `_endpoints`, `_stop`, `_datagrams` and `_replay`; the
+  loop that `convert` and `capture` share is `Writing.__call__`.
+- `Capture._endpoints(self, dissector)` is given the dissector the frames are
+  read with, so a protocol is registered on the port that was bound without
+  keeping the dissector in an attribute. `Capture._listen_` (default `None`:
+  every interface) is what the command listens on when neither `--listen` nor
+  `--interface` is given. `Capture._stop` is asked whatever the options are.
+  `Capture._hook_from_` (default `("argument",)`) lists the layers a subclass
+  takes a hook from, of `"argument"`, `"environment"` and `"file"`;
+  `Loading._load_from_` names the layers a class takes the plugin list from,
+  and the plugin list never comes from a root's layers beyond them.
+- `Loading._env_prefix_` (default `None`) gives every option of a class that
+  names no variable, inherited ones among them, the variable made of the
+  prefix and its field name in upper case (`MYPROG_CAPTURE_FORMAT`); the
+  logging options and `--load`, which keeps `PKTCAP_LOAD`, are not renamed,
+  and `Meta(env="")` keeps an option without a variable.
+- No command has a configuration option, so a library that subclasses the
+  commands names its settings file on its own root and meets no clash. Every
+  private member of the command classes that is not an override point begins
+  `_pk_`, and a subclass defines and uses none.
+
+**Tools served over MCP**
+
+- `PKTCAP_MCP=stdio pktcap` serves `convert` as a tool (`pktcap.convert`) and `plugins` as `pktcap.plugins`: the records come
+  back as the tool's result. A call asking for `pcap` or `pcapng` on standard
+  output has its octets written to the server's output target (file descriptor
+  3, or what `PKTCAP_MCP_OUTPUT` names: a descriptor number, a file or a pipe)
+  and the result says how many bytes went where; with no target the call fails
+  with duho's message. `capture` and `replay` are not served: one runs until
+  stopped and needs a privilege, the other puts datagrams on a network.
+- A tool call that names `load` or `append` is refused, and the server's own
+  `PKTCAP_LOAD` decides the plugins. The settings file a served tree reads is
+  the server's own default file, checked as any default is; neither
+  `PKTCAP_CONFIG` nor a `config` a call names is read.
 
 [Unreleased]: https://github.com/jose-pr/pktcap/commits/main
