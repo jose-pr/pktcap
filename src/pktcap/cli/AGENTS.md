@@ -128,8 +128,7 @@ Copies a pcap or pcapng capture into pcap, pcapng or records.
   then ends with status 2 and a line naming the file and how many were
   written. A file that is not a capture is status 2; one that cannot be opened
   is status 1.
-- `--format toml` or `ini`, or an `--output` ending `.toml` or `.ini`, without
-  `--per-record` is status 2 naming `--per-record` (also in `capture`).
+- `toml` or `ini` (`--format`, or the ending of `--output`) without `--per-record` is status 2 naming it.
 
 ## `pktcap replay`
 
@@ -203,23 +202,24 @@ options `--layer` and `--json` and the JSON object are in `_plugins/AGENTS.md`.
   **`convert`** is served as the tool `pktcap.convert` with the options above
   as its input (`input` is required; the rest have the defaults above), and
   **`plugins`** as `pktcap.plugins`, which only reads. The records come back as
-  the tool's result; a capture format cannot be returned as text, so `format`
-  `pcap` or `pcapng` needs an `output` file, and an `input` of `-` is refused.
+  the tool's result; `format` `pcap` or `pcapng` with no `output` writes the
+  octets to the server's output target (descriptor 3, or what
+  **`PKTCAP_MCP_OUTPUT`** names: a descriptor number, a file or a pipe) and the
+  result says how many went where; with no target the call fails. An `input` of
+  `-` is refused.
   A tool call that names `load` or `append` is refused (status 2, naming
-  `PKTCAP_LOAD` for the first). `capture` runs until stopped and binds ports or
-  needs a privilege, and `replay` puts datagrams on a network: neither is
-  served, and a subclass that serves `capture` is refused a `hook` in a call.
+  `PKTCAP_LOAD` for the first). `capture` and `replay` are not served, and a
+  subclass that serves `capture` is refused a `hook` in a call.
 - `AGENT_HELP=1` makes `--help` print one JSON document describing every
-  command; `NO_COLOR` and `FORCE_COLOR` decide the colour of the help and the
-  log.
+  command; `NO_COLOR` and `FORCE_COLOR` set the colour of help and log.
 
 ## Subclassing
 
 A library with a protocol of its own subclasses these classes and adds only what
 is the protocol's. `from pktcap.cli import Loading, Selecting, Writing, Capture,
 Convert, Replay, Plugins` binds each on first use, so `import pktcap.cli` needs
-no `duho`; without it the name is an `ImportError` (`MissingExtraError`)
-naming `pip install "pktcap[cli]"`. Class attributes ending in `_` and methods
+no `duho`; without it the name is an `ImportError` (`MissingExtraError`) naming
+`pip install "pktcap[cli]"`. Class attributes ending in `_` and methods
 beginning with `_` listed below are the **override points**; every other name
 the base defines begins `_pk_`, and a subclass defines and uses none.
 

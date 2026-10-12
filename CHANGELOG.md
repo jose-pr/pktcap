@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A tool call may ask for `pcap` or `pcapng` on standard output: the octets go
+  to the server's output target (file descriptor 3, or what
+  `PKTCAP_MCP_OUTPUT` names: a descriptor number, a file or a pipe) and the
+  result says how many bytes went where; with no target the call fails with
+  duho's message. It was refused with "cannot be returned as text", unless an
+  `output` file was named, which still works.
 - The settings file is read with what duho 0.7.3 provides. The user's own file
   is the root's `_config_` (`duho.config.user_path`), told from a named one by
   the `source` duho gives the loader, so no per-run state remembers which is
