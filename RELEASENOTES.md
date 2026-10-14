@@ -4,6 +4,28 @@ The detailed companion to [`CHANGELOG.md`](CHANGELOG.md): benchmark figures,
 their caveats and the validation evidence behind each release. The changelog
 says *what changed*; this says *what it costs and how it was checked*.
 
+## 0.1.1 — 2026-10-14
+
+A dependency release: the `cli` extra requires duho 0.7.4, and what that
+changes for a user of the command line is in [`CHANGELOG.md`](CHANGELOG.md).
+Nothing on a measured path changed, so no benchmark was run.
+
+### Validation
+
+Measured on 2026-10-14 at commit `e5a128e`, with netimps 0.4.1 and duho 0.7.4,
+each as published.
+
+- Windows on ARM64: 2,584 passed and 8 skipped on Python 3.14; 2,585 passed
+  and 7 skipped on Python 3.9. That is one more passed than 0.1.0 on each: the
+  test of a relative `APPDATA` runs on Windows now.
+- Linux (Fedora 44 under WSL2), unprivileged and as root, on Python 3.14 and
+  3.9: between 2,578 and 2,582 passed, no failure.
+- Intel macOS 15.7, Python 3.9: 2,580 passed, 12 skipped. FreeBSD 16.0,
+  Python 3.11, an unprivileged account: 2,578 passed, 14 skipped.
+- The hosted matrix, 18 jobs, green, as for 0.1.0. `black --check`, `mypy
+  --strict` for the three platforms, the caller's typing contract and `mkdocs
+  build --strict`: clean.
+
 ## 0.1.0 — 2026-10-12
 
 The first release of `pktcap`: reading, dissecting, filtering, writing and

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.1] - 2026-10-14
+
 ### Changed
 
 - **The `cli` extra requires `duho>=0.7.4,<0.8`.** With it every error of the settings
@@ -411,5 +415,6 @@ pktcap` imports none of them, reads no variable and imports no plugin.
   the server's own default file, checked as any default is; neither
   `PKTCAP_CONFIG` nor a `config` a call names is read.
 
-[Unreleased]: https://github.com/jose-pr/pktcap/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jose-pr/pktcap/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/jose-pr/pktcap/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jose-pr/pktcap/releases/tag/v0.1.0
