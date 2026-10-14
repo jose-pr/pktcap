@@ -80,8 +80,8 @@ level (examples in `_plugins/AGENTS.md`).
   the default; a higher layer replaces a lower for that option only, so lists
   do not add up. A top-level `load` is the list of every command whose table
   names none.
-- **Refused**, status 2, never with text of a value: a key or table nobody has
-  (duho's usage error, `unknown key 'convert.nosuch'`, which names the key), a
+- **Refused**, status 2, in one line and never with text of a value: a key or
+  table nobody has (`unknown key 'convert.nosuch'`, which names the key), a
   `config` key, a `[pktcap]` table (`load` goes at the top level), an invalid
   document, a file over 65,536 octets. A named file that does not exist is status 2 from `--config`
   and 1 from the variable.

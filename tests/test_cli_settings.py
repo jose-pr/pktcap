@@ -245,14 +245,14 @@ def test_an_empty_variable_is_unset(tmp_path, plugin_module, monkeypatch, capsys
 def test_a_file_that_holds_something_nobody_has_is_status_2_and_no_text_of_it(
     text, problem, tmp_path, trace, capsys
 ):
-    """duho refuses a key or table nobody has (``_config_validate_ = "strict"``)
-    with the parser's usage error; the loader answers the other two. The line
-    names the key, and nothing of any value."""
+    """duho refuses a key or table nobody has (``_config_validate_ = "strict"``),
+    ``config`` among them; the loader answers the other two. Each is one line,
+    which names the key, and nothing of any value."""
     path = written(tmp_path, "s.toml", text)
     status, out, err = go(capsys, "-c", path, "convert", "-i", trace)
     assert status == 2 and out == ""
     assert problem in err and SECRET not in err
-    assert err.count("error:") == 1
+    assert len(err.splitlines()) == 1 and err.startswith("pktcap: error: ")
 
 
 def test_the_old_layout_says_where_load_goes(home, capsys):
@@ -335,10 +335,6 @@ def test_the_configuration_directory_falls_back_to_the_users_home(
     assert os.fspath(Pktcap._config_) == str(expected)
 
 
-@pytest.mark.skipif(
-    IS_WINDOWS,
-    reason="duho 0.7.3 takes a relative APPDATA as it is (measured 2026-10-12)",
-)
 def test_a_relative_configuration_directory_is_ignored(tmp_path, monkeypatch):
     user = tmp_path / "user"
     user.mkdir()

@@ -22,13 +22,6 @@ __all__ = ["read_settings"]
 LOAD = "load"
 
 
-def _shown(text: object) -> str:
-    """``text`` as one short quoted line: a key from a file is bounded and its
-    control characters escaped."""
-    shown = str(text)
-    return repr(shown if len(shown) <= 40 else shown[:40] + "...")
-
-
 class _Document(io.BytesIO):
     """The octets read once, named, for ``duho.config``: the file is opened
     and checked here and not a second time there."""
@@ -44,15 +37,14 @@ def _names(cls: Any) -> set:  # type: ignore[type-arg]
 
 def _shaped(data: Any, name: str, root: Any) -> Dict[str, Any]:
     """``data`` with the top-level ``load`` copied into the table of each
-    command that takes one and names none. A key nobody has is left for duho's
-    strict validation; the two that are answered here are refused."""
+    command that takes one and names none. A key nobody has, ``config`` among
+    them, is left for duho's strict validation; a table named for the root is
+    refused here, with where ``load`` goes."""
     if not isinstance(data, Mapping):
         raise SettingsError(name, None, "the top level must be a table")
     commands = {command._parsername_: command for command in root._subcommands_}
     result: Dict[str, Any] = {}
     for key, value in data.items():
-        if key == "config":
-            raise SettingsError(name, None, "unknown key %s" % _shown(key))
         if key == root._parsername_ and isinstance(value, Mapping):
             raise SettingsError(
                 name,

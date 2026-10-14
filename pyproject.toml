@@ -40,9 +40,9 @@ yaml = ["PyYAML>=6.0,<7"]
 toml = ["tomli-w>=1.0,<2", "tomli>=2.0,<3; python_version < '3.11'"]
 # The command line: duho, and only the modules under pktcap.cli import it. Its
 # root is a ConfigArgs root, which reads the settings file with duho.config;
-# TOML before Python 3.11 and YAML are duho's own extras. 0.7.3 publishes
-# running_mode(), which tells a tool call from a command line.
-cli = ["duho>=0.7.3,<0.8"]
+# TOML before Python 3.11 and YAML are duho's own extras. 0.7.4 refuses a
+# `config` key in the file and reports every error of the file in one line.
+cli = ["duho>=0.7.4,<0.8"]
 # The tests exercise every extra, so dev refers to them rather than repeating
 # their ranges.
 dev = ["pktcap[yaml,toml,cli]", "build", "twine", "hatchling", "pytest", "black", "mypy<2", "types-PyYAML"]

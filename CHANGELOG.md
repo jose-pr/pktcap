@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **The `cli` extra requires `duho>=0.7.4,<0.8`.** With it every error of the settings
+  file is one line, `pktcap: error: ...`, status 2: a key or table nobody has no longer
+  prints the usage lines before that line. A `config` key in the file is refused by
+  duho's own check, in its words (`duho: config file <file>: unknown key 'config'`).
+- On Windows a relative `APPDATA` is ignored when the default settings file is
+  looked for, as a relative `XDG_CONFIG_HOME` already was elsewhere.
 
 ## [0.1.0] - 2026-10-12
 
