@@ -51,6 +51,7 @@ EXPECTED = [
     "ReplaySource",
     "Selector",
     "TCPLayer",
+    "TCPFlowWriter",
     "TCPReassembler",
     "TCPStreamData",
     "TCPStreamStats",
@@ -96,6 +97,16 @@ POSITIONAL = {
     # A datagram is four things, and there is nothing to name among them.
     "PcapWriter.write": 4,
     "PcapngWriter.write": 4,
+    # A segment is a datagram's four things; its numbers are named options.
+    "PcapWriter.write_tcp": 4,
+    "PcapngWriter.write_tcp": 4,
+    # The writer, and the connection's two ends.
+    "TCPFlowWriter": 3,
+    # When, which side, and what it sends.
+    "TCPFlowWriter.send": 3,
+    # When, and which side.
+    "TCPFlowWriter.close": 2,
+    "TCPFlowWriter.reset": 2,
     # The expression and what turns a clause into a test: both are operands.
     "compile_capture_filter": 2,
     # The frames to copy and the writer that takes them.

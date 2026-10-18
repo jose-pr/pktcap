@@ -238,3 +238,31 @@ chunks.extend(reassembler.flush())
 print(b"".join(chunk.data for chunk in chunks if chunk.source[1] == 50000))
 print(reassembler.stats.missing)
 ```
+
+## Writing a TCP connection
+
+**`TCPFlowWriter(writer, client, server, *, mss=1460, client_isn=None, server_isn=None)`**
+— one TCP connection, written through `writer` (a `PcapWriter` or
+`PcapngWriter`) as the segments a reader reassembles: Wireshark's *Follow
+TCP Stream* and `TCPReassembler` give back exactly the octets given to
+`send`, per direction. `client` and `server` are `(host, port)` as for
+`write`; the client opens. Sequence numbers start at `client_isn` and
+`server_isn` (random when `None`, else 0 to 2**32 - 1) and wrap as TCP's do.
+Every segment acknowledges all the other side has sent; nothing is lost,
+duplicated or reordered. `mss` (1 to 65,495) is the largest payload of one
+segment. Not safe to share between threads.
+
+- **`TCPFlowWriter.open(time) -> None`** — SYN, SYN-ACK, ACK. A second
+  `open` is a `ValueError`.
+- **`TCPFlowWriter.send(time, sender, data) -> None`** — `data` from
+  `sender`, `"client"` or `"server"`, as `PA` segments of at most `mss`
+  octets; empty `data` writes nothing.
+- **`TCPFlowWriter.close(time, sender) -> None`** — that direction's FIN and
+  the other side's ACK; the other direction stays open until its own `close`.
+- **`TCPFlowWriter.reset(time, sender) -> None`** — an `RA` segment; both
+  directions end.
+
+`send` and `close` before `open`, after the sender's direction ended, or
+with an unknown `sender` raise `ValueError`; so does an `mss` or initial
+sequence number out of range. A wrong type is a `TypeError`. The writer's own
+errors (a closed writer, a time out of range) pass through.

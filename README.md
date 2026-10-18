@@ -217,7 +217,7 @@ Everything is imported from `pktcap`; the modules below it are private.
 | `Dissector`, `Dissected`, `Fragment`, `Selector`, `DissectorRegistry`, `default_registry`, `register_dissector`, `check_dissector` | write, register and check a dissector |
 | `read_datagrams`, `CapturedDatagram` | the UDP datagram view |
 | `read_tcp_streams`, `TCPReassembler`, `TCPStreamData`, `TCPStreamStats` | TCP streams: each direction's octets in order, within bounds |
-| `PcapWriter`, `PcapngWriter` | write frames and datagrams as a capture |
+| `PcapWriter`, `PcapngWriter`, `TCPFlowWriter` | write frames, datagrams and TCP connections as a capture |
 | `CaptureWriter`, `dumps_record`, `loads_record`, `datagram_record`, `frame_record`, `frame_summary`, `OUTPUT_FORMATS`, `RECORD_FORMATS`, `has_output_format` | write frames, datagrams or records in a named format (text is a line a person reads), and read a record back |
 | `copy_frames`, `CopyResult`, `command_hook` | copy a source of dissected frames, filtered, into a writer, and run a program for each frame written |
 | `load_plugins`, `LoadedPlugin` | load the plugins a user names into a registry |

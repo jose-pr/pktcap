@@ -84,6 +84,7 @@ from ._streams import (
 )
 from ._sources import UDPCapture, asniff_udp, sniff_udp
 from ._summary import frame_summary
+from ._tcpflow import TCPFlowWriter
 from ._writer import PcapngWriter, PcapWriter, datagram_frame
 
 __all__ = [
@@ -128,6 +129,7 @@ __all__ = [
     "ReplaySource",
     "Selector",
     "TCPLayer",
+    "TCPFlowWriter",
     "TCPReassembler",
     "TCPStreamData",
     "TCPStreamStats",

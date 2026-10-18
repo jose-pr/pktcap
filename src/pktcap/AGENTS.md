@@ -27,7 +27,7 @@ installed package (`importlib.resources.files("pktcap")`):
 | `pktcap/_dissectors/AGENTS.md` | the dissector contract, the registry, writing and checking a dissector, each built-in dissector and each layer record |
 | `pktcap/_plugins/AGENTS.md` | layers and the filter keys a registry holds for them, how a filter reads a layer's fields, and loading plugins by name |
 | `pktcap/cli/AGENTS.md` | the `pktcap` command: `capture`, `replay`, `convert` and `plugins`, every option, what each prints, its statuses |
-| `pktcap/_streams/AGENTS.md` | `TCPReassembler`, `TCPStreamData`, `TCPStreamStats`: the rules for putting TCP streams back together, and the bounds |
+| `pktcap/_streams/AGENTS.md` | `TCPReassembler`, `TCPStreamData`, `TCPStreamStats`: the rules for putting TCP streams back together, and the bounds; `TCPFlowWriter`, a connection written from its streams |
 | `pktcap/_sources/AGENTS.md` | capturing live from an interface, and from UDP sockets: `LiveCapture`, `sniff_frames`, `sniff`, `UDPCapture`, `sniff_udp`, `asniff_udp`, `datagram_frame` |
 | `pktcap/_copy/AGENTS.md` | `copy_frames` and `CopyResult`, `command_hook` and `CaptureHookError`: frames into a writer, and a program run for each one |
 | `pktcap/_formats/AGENTS.md` | `PcapWriter` and `PcapngWriter`, `CaptureWriter` in full, what a record is, and exactly what each record format writes |
@@ -225,7 +225,9 @@ capture from one of a link type nothing dissects.
 
 **`PcapWriter(target)`** and **`PcapngWriter(target)`** write a capture that
 tcpdump and Wireshark read; their contract is in `pktcap/_formats/AGENTS.md`,
-with `CaptureWriter`. A capture format takes the frame or datagram itself; a
+with `CaptureWriter` (`write_tcp` writes one TCP segment). `TCPFlowWriter`,
+a whole TCP connection written from the octets of each direction, is in
+`pktcap/_streams/AGENTS.md`. A capture format takes the frame or datagram itself; a
 record format takes a **record**: plain data (`dict`, `list`, `str`, `int`,
 `float`, `bool`, `None`) describing it.
 

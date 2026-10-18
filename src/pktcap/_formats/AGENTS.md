@@ -34,6 +34,15 @@ tcpdump and Wireshark read. The same three methods; each is a context manager.
   the epoch, from 0 up to 2**32. `payload` is at most 65,507 octets for IPv4
   and 65,527 for IPv6. A v4-mapped address is written as IPv4; a datagram
   with one IPv4 and one IPv6 end is written as IPv6, the IPv4 end mapped.
+- **`PcapWriter.write_tcp(time, source, destination, payload=b'', *, seq, ack=0, flags='PA', window=65535) -> None`**
+  — append one TCP segment under synthesised IPv4 or IPv6 and TCP headers,
+  raw IP (link type 101) as for a datagram: valid IP and TCP checksums, a
+  20-octet TCP header with no options, the addresses handled as `write`
+  handles them. `seq` and `ack` are 0 to 2**32 - 1, `window` 0-65535,
+  `flags` letters of `FSRPAUEC` in any case (`"S"`, `"SA"`, `"PA"`, `"FA"`,
+  `"RA"`) or the flags octet as an `int`. `payload` is at most 65,495 octets
+  for IPv4 and 65,515 for IPv6. It writes exactly the segment asked for;
+  keeping a connection's numbers is `TCPFlowWriter`'s job.
 - **`PcapWriter.write_datagram(datagram) -> None`** — `write` for a
   `CapturedDatagram`. A partial one is written with the payload it has.
 - **`PcapWriter.close() -> None`** — complete on return, harmless when

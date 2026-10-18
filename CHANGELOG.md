@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `PcapWriter.write_tcp()` and `PcapngWriter.write_tcp()` append one TCP
+  segment under synthesised IPv4/IPv6 and TCP headers with valid checksums.
+- `TCPFlowWriter` writes a whole TCP connection (handshake, data split at an
+  `mss`, FIN or RST) from the octets of each direction, keeping the sequence
+  numbers, so a reader that reassembles TCP gets exactly those octets back.
 
 ## [0.1.1] - 2026-10-14
 

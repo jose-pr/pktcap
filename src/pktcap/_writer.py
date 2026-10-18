@@ -17,9 +17,10 @@ import struct
 from types import TracebackType
 from typing import BinaryIO, Dict, Optional, Tuple, Type, TypeVar, Union
 
-from netimps import IPAddress, SocketAddress, split_zone, unmap
+from netimps import SocketAddress
 
 from ._captured import CapturedDatagram, CapturedFrame
+from ._packets import ip_packet, tcp_packet
 
 __all__ = ["PcapWriter", "PcapngWriter", "datagram_frame"]
 
@@ -28,34 +29,7 @@ _Self = TypeVar("_Self", bound="_CaptureFileWriter")
 _LINKTYPE_RAW = 101
 #: libpcap's MAXIMUM_SNAPLEN: the most octets of one frame a reader accepts.
 _SNAPLEN = 262144
-_MAX_IPV4_PAYLOAD = 65535 - 20 - 8
-_MAX_IPV6_PAYLOAD = 65535 - 8
 _MAX_SECONDS = 1 << 32
-_MAPPED = bytes(10) + b"\xff\xff"
-
-
-def _checksum(data: bytes) -> int:
-    """The Internet checksum (RFC 1071) of ``data``."""
-    if len(data) % 2:
-        data += b"\0"
-    total: int = sum(struct.unpack("!%dH" % (len(data) // 2), data))
-    while total >> 16:
-        total = (total & 0xFFFF) + (total >> 16)
-    return ~total & 0xFFFF
-
-
-def _endpoint(address: SocketAddress, what: str) -> Tuple[IPAddress, int]:
-    if not isinstance(address, tuple) or len(address) < 2:
-        raise TypeError("%s must be a (host, port) socket address" % what)
-    host, port = address[0], address[1]
-    if isinstance(port, bool) or not isinstance(port, int):
-        raise TypeError("%s port must be an int" % what)
-    if not 0 <= port <= 65535:
-        raise ValueError("%s port %d is outside 0-65535" % (what, port))
-    if not isinstance(host, str):
-        raise TypeError("%s host must be address text" % what)
-    # A scoped address carries its zone in the text; the wire does not.
-    return unmap(split_zone(host)[0]), port
 
 
 def _stamp(time: float) -> Tuple[int, int]:
@@ -72,52 +46,6 @@ def _stamp(time: float) -> Tuple[int, int]:
         else:  # the last microsecond a 32-bit count of seconds can hold
             micros = 999_999
     return seconds, micros
-
-
-def _ip_packet(
-    source: SocketAddress, destination: SocketAddress, payload: bytes, ident: int
-) -> bytes:
-    """The datagram under the IP and UDP headers it never had at a socket."""
-    if not isinstance(payload, (bytes, bytearray, memoryview)):
-        raise TypeError("payload must be bytes-like")
-    src, sport = _endpoint(source, "source")
-    dst, dport = _endpoint(destination, "destination")
-    data = bytes(payload)
-    both_v4 = src.version == 4 and dst.version == 4
-    limit = _MAX_IPV4_PAYLOAD if both_v4 else _MAX_IPV6_PAYLOAD
-    if len(data) > limit:
-        raise ValueError(
-            "a payload of %d octets does not fit an IPv%d datagram (%d at most)"
-            % (len(data), 4 if both_v4 else 6, limit)
-        )
-    length = 8 + len(data)
-    udp = struct.pack("!HHHH", sport, dport, length, 0) + data
-    if both_v4:
-        pseudo = src.packed + dst.packed + struct.pack("!BBH", 0, 17, length)
-        # A computed zero is sent as all ones: zero means "no checksum".
-        udp = udp[:6] + struct.pack("!H", _checksum(pseudo + udp) or 0xFFFF) + udp[8:]
-        header = struct.pack(
-            "!BBHHHBBH4s4s",
-            0x45,
-            0,
-            20 + length,
-            ident & 0xFFFF,
-            0,
-            64,
-            17,
-            0,
-            src.packed,
-            dst.packed,
-        )
-        return header[:10] + struct.pack("!H", _checksum(header)) + header[12:] + udp
-    # One end is IPv6: the other is written in its v4-mapped form.
-    packed_src = src.packed if src.version == 6 else _MAPPED + src.packed
-    packed_dst = dst.packed if dst.version == 6 else _MAPPED + dst.packed
-    pseudo = packed_src + packed_dst + struct.pack("!I3xB", length, 17)
-    udp = udp[:6] + struct.pack("!H", _checksum(pseudo + udp) or 0xFFFF) + udp[8:]
-    return (
-        struct.pack("!IHBB", 0x60000000, length, 17, 64) + packed_src + packed_dst + udp
-    )
 
 
 def datagram_frame(
@@ -149,7 +77,7 @@ def datagram_frame(
     if isinstance(ident, bool) or not isinstance(ident, int):
         raise TypeError("ident must be an int")
     _stamp(datagram.time)
-    packet = _ip_packet(datagram.source, datagram.destination, datagram.payload, ident)
+    packet = ip_packet(datagram.source, datagram.destination, datagram.payload, ident)
     return CapturedFrame(datagram.time, _LINKTYPE_RAW, packet, interface)
 
 
@@ -218,7 +146,50 @@ class _CaptureFileWriter:
         """
         if self._closed:
             raise ValueError("the writer is closed")
-        packet = _ip_packet(source, destination, payload, self._ident + 1)
+        packet = ip_packet(source, destination, payload, self._ident + 1)
+        self._emit(_LINKTYPE_RAW, time, packet)
+        self._ident = (self._ident + 1) & 0xFFFF
+
+    def write_tcp(
+        self,
+        time: float,
+        source: SocketAddress,
+        destination: SocketAddress,
+        payload: bytes = b"",
+        *,
+        seq: int,
+        ack: int = 0,
+        flags: Union[str, int] = "PA",
+        window: int = 65535,
+    ) -> None:
+        """Append one TCP segment, under synthesised IP and TCP headers.
+
+        Raw IP (link type 101), as for a datagram, with valid IP and TCP
+        checksums and a 20-octet TCP header (no options). :class:`TCPFlowWriter`
+        keeps the sequence numbers of a whole connection; this writes exactly
+        the segment asked for.
+
+        :param seq: the sequence number, 0 to 2**32 - 1.
+        :param ack: the acknowledgment number, 0 to 2**32 - 1.
+        :param flags: letters of ``FSRPAUEC`` (``"S"``, ``"SA"``, ``"PA"``,
+            ``"FA"``, ``"R"``) or the flags octet as an int.
+        :param window: the receive window, 0-65535.
+        :raises ValueError: what :meth:`write` refuses, a payload over 65,495
+            octets (IPv4) or 65,515 (IPv6), an unknown flag letter, or a
+            number out of range. Nothing is written.
+        """
+        if self._closed:
+            raise ValueError("the writer is closed")
+        packet = tcp_packet(
+            source,
+            destination,
+            payload,
+            seq=seq,
+            ack=ack,
+            flags=flags,
+            window=window,
+            ident=self._ident + 1,
+        )
         self._emit(_LINKTYPE_RAW, time, packet)
         self._ident = (self._ident + 1) & 0xFFFF
 
