@@ -4,6 +4,40 @@ The detailed companion to [`CHANGELOG.md`](CHANGELOG.md): benchmark figures,
 their caveats and the validation evidence behind each release. The changelog
 says *what changed*; this says *what it costs and how it was checked*.
 
+## 0.1.2 — 2026-10-18
+
+Writing TCP: `write_tcp()` on both writers, one segment under synthesised
+IPv4 or IPv6 and TCP headers, and `TCPFlowWriter`, a whole connection written
+from the octets of each direction (see [`CHANGELOG.md`](CHANGELOG.md)). The
+IP and UDP synthesis behind `write()` moved to a module shared by both
+transports, so the write path was measured.
+
+### Benchmarks
+
+`benchmarks/run.py` on Windows on ARM64, 0.1.1 and 0.1.2 run one after the
+other on the same machine, medians of 15 samples. A local sanity check, not a
+claim: nothing moved by more than 10%. `PcapWriter.write/2000` went from
+15.98 to 16.74 ms on Python 3.14 (+4.7%) and from 25.51 to 26.33 ms on 3.9
+(+3.2%); every reading benchmark is within 5% either way.
+
+### Validation
+
+Measured on 2026-10-18 at commit `b59b8dc`, with netimps 0.4.1 and duho
+0.7.4, each as published.
+
+- Windows on ARM64: 2,650 passed and 8 skipped on Python 3.14; 2,651 passed
+  and 7 skipped on Python 3.9. The 66 new tests include the law that every
+  written connection reads back exactly through `read_tcp_streams` (IPv4,
+  IPv6, mixed, sequence numbers wrapping, `mss` from 1), with the checksums
+  verified by an independent implementation.
+- Linux (Fedora 44 under WSL2), unprivileged and as root, on Python 3.14 and
+  3.9: between 2,644 and 2,648 passed, no failure.
+- Intel macOS 15.7, Python 3.9: 2,646 passed, 12 skipped. FreeBSD 16.0,
+  Python 3.11, an unprivileged account: 2,644 passed, 14 skipped.
+- The hosted matrix, 18 jobs, green (run 39144331983). `black --check`,
+  `mypy --strict` for the three platforms, `mkdocs build --strict`, the build
+  and `twine check`: clean.
+
 ## 0.1.1 — 2026-10-14
 
 A dependency release: the `cli` extra requires duho 0.7.4, and what that
