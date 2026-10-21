@@ -75,23 +75,13 @@ class Loading(LoggingArgs, Cmd):
     _load_from_: ClassVar[Tuple[str, ...]] = ("argument", "environment", "file")
     #: When set (``"MYPROG_CAPTURE_"``), every option of the class that names no
     #: variable of its own, inherited ones among them, takes the variable made
-    #: of this prefix and its field name in upper case. The logging options are
-    #: the root's and get none.
+    #: of this prefix and its field name in upper case, as duho's
+    #: ``_env_prefix_`` does. The logging options are the root's and get none.
     _env_prefix_: ClassVar[Optional[str]] = None
 
     load: Annotated[Optional[List[str]], Meta(env="PKTCAP_LOAD")] = None
     "Plugins to load, each a dotted module name or MODULE.CALLABLE; repeat the option, or separate by , ; : or space; none for no plugin. Omitted: PKTCAP_LOAD, then the settings file, then none. A tool call cannot name it"
     ("--load",)
-
-    @classmethod
-    def _getargs_(cls) -> List[Any]:
-        builders: List[Any] = super()._getargs_()
-        if cls._env_prefix_ is not None:
-            logging = {builder.name for builder in LoggingArgs._getargs_()}
-            for builder in builders:
-                if builder.env is None and builder.name not in logging:
-                    builder.env = cls._env_prefix_ + builder.name.upper()
-        return builders
 
     def served(self) -> bool:
         """Whether this is a tool call: duho's ``running_mode()`` says ``"mcp"``."""
