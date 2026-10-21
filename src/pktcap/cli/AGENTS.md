@@ -28,7 +28,7 @@ returns the status and does not call `sys.exit`.
 ## Every command
 
 - **Options of the root**, before the command name: `--version` (prints
-  `pktcap 0.1.1`), `-h`/`--help`, and the logging flags `-v`/`--verbose` and
+  `pktcap 0.1.3`), `-h`/`--help`, and the logging flags `-v`/`--verbose` and
   `-q`/`--quiet` (repeatable), `--loglevel [NAME:]LEVEL[,...]`. Each command
   accepts the same three after its own name. Logging is on stderr, under the
   logger `pktcap`.

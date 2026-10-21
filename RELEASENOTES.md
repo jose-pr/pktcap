@@ -4,6 +4,28 @@ The detailed companion to [`CHANGELOG.md`](CHANGELOG.md): benchmark figures,
 their caveats and the validation evidence behind each release. The changelog
 says *what changed*; this says *what it costs and how it was checked*.
 
+## 0.1.3 — 2026-10-22
+
+A dependency release: the `cli` extra requires duho 0.7.8, and the command
+line ends and reports errors through duho. The statuses and the
+`pktcap: error: ...` lines are the same; Ctrl-C in `convert` or `replay`
+is status 130 without the `interrupted` line (see
+[`CHANGELOG.md`](CHANGELOG.md)). Nothing on a measured path changed, so no
+benchmark was run.
+
+### Validation
+
+Measured on 2026-10-22 at commit `d5849b1`, with netimps 0.4.1 and duho 0.7.8,
+each as published.
+
+- Windows on ARM64: 2,649 passed and 8 skipped on Python 3.14; 2,650 passed
+  and 7 skipped on Python 3.9. That is one fewer passed than 0.1.2 on each: the
+  unit test of the removed closed-pipe helper is gone, and the closed
+  standard output is still tested through the command.
+- `black --check` and `mypy` for the three platforms: clean.
+- Not run for this release by its author: Linux, macOS, FreeBSD and the
+  hosted matrix.
+
 ## 0.1.2 — 2026-10-18
 
 Writing TCP: `write_tcp()` on both writers, one segment under synthesised
