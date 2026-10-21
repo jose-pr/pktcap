@@ -643,12 +643,12 @@ def _root(command):
 
 def _status(root, argv):
     try:
-        run(root, argv)
+        status = run(root, argv)
     except SystemExit as stop:
         return stop.code
     except ValueError:
         return 2
-    return 0
+    return 0 if status is None else status
 
 
 def test_a_class_that_narrows_the_layers_refuses_the_files_list_and_the_default_takes_it(
@@ -658,9 +658,7 @@ def test_a_class_that_narrows_the_layers_refuses_the_files_list_and_the_default_
     path = written(tmp_path, "s.toml", 'load = ["%s"]\n' % mod.name)
     argv = ["-c", str(path), "convert", "-i", str(trace), "-f", "demo.opcode=1"]
     assert _status(_root(NarrowConvert), argv) == 2
-    assert "--load was set from the file layer" in str(
-        pytest.raises(ValueError, run, _root(NarrowConvert), argv).value
-    )
+    assert "--load was set from the file layer" in capsys.readouterr().err
     assert not mod.imported
     assert _status(_root(TakesConvert), argv) == 0
     assert mod.imported

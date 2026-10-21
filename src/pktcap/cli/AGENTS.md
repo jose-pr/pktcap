@@ -56,7 +56,7 @@ returns the status and does not call `sys.exit`.
   refused for the file budget), **2** the invocation was wrong (the parser's
   own errors, a bad filter, an unknown format, a combination that cannot work,
   a capture that is not one or is damaged), **130** Ctrl-C in `convert` or
-  `replay`. Standard output closed by the reader is status 1 with no line.
+  `replay`, silently. Standard output closed by the reader is status 1, no line.
 - **A capture is untrusted input** and the library's bounds hold through every
   command (the reader's frame ceiling, the reassembly limits, `--max-files`),
   and the commands keep no state of their own that a file could grow.

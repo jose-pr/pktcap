@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **The `cli` extra requires `duho>=0.7.8,<0.8`.** The command line's exit and error
+  handling is duho's (`duho.run`): the statuses and the `pktcap: error: ...` lines are
+  the same, and a standard output closed by its reader is still status 1 with no line.
+- Ctrl-C in `convert` or `replay` ends with status 130 and no `pktcap: error: interrupted`
+  line.
 
 ## [0.1.2] - 2026-10-18
 

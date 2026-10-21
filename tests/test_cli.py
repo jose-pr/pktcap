@@ -151,15 +151,27 @@ def test_an_exception_of_the_library_is_a_status_and_one_line(capsys, tmp_path):
     assert "colour" in capsys.readouterr().err
 
 
-def test_a_closed_standard_output_is_a_status_and_no_traceback(monkeypatch, capsys):
+def _command_raises(monkeypatch, error):
+    """``pktcap convert`` runs a command that ends with ``error``."""
+    from pktcap.cli import Convert
+
+    def broken(self):
+        raise error
+
+    monkeypatch.setattr(Convert, "__call__", broken)
+
+
+def _convert(tmp_path):
     from pktcap.cli import _root
 
-    def broken(cls, argv):
-        raise BrokenPipeError()
+    return _root.execute(["convert", "-i", str(tmp_path / "in.pcap")])
 
-    monkeypatch.setattr(_root, "run", broken)
-    monkeypatch.setattr(_root, "_silence_stdout", lambda: None)
-    assert _root.execute([]) == 1
+
+def test_a_closed_standard_output_is_a_status_and_no_traceback(
+    monkeypatch, capsys, tmp_path
+):
+    _command_raises(monkeypatch, BrokenPipeError())
+    assert _convert(tmp_path) == 1
     assert capsys.readouterr().err == ""
 
 
@@ -215,66 +227,32 @@ def _einval():
     return OSError(errno.EINVAL, "Invalid argument")
 
 
-def test_einval_is_a_closed_pipe_only_on_windows_and_only_for_standard_output(
-    monkeypatch,
-):
-    from pktcap.cli import _root
-
-    monkeypatch.setattr(sys, "stdout", _Stdout(_einval()))
-    assert _root._closed_pipe(_einval(), windows=True) is True
-    assert _root._closed_pipe(_einval(), windows=False) is False
-    assert _root._closed_pipe(BrokenPipeError(), windows=False) is True
-    monkeypatch.setattr(sys, "stdout", _Stdout())
-    assert _root._closed_pipe(_einval(), windows=True) is False  # a file's EINVAL
-    assert _root._closed_pipe(OSError(errno.ENOENT, "x"), windows=True) is False
-
-
 def test_an_einval_from_a_closed_standard_output_is_status_1_and_no_line(
-    monkeypatch, capsys
+    monkeypatch, capsys, tmp_path
 ):
-    from pktcap.cli import _root
-
-    def broken(cls, argv):
-        raise _einval()
-
-    stdout = _Stdout(_einval())
-    silenced = []
-
-    def silence():  # the descriptor now leads to the null device
-        silenced.append(True)
-        stdout.error = None
-
-    monkeypatch.setattr(_root, "run", broken)
-    monkeypatch.setattr(_root, "_WINDOWS", True)
-    monkeypatch.setattr(_root, "_silence_stdout", silence)
-    monkeypatch.setattr(sys, "stdout", stdout)
-    assert _root.execute([]) == 1
-    assert silenced == [True] and capsys.readouterr().err == ""
+    _command_raises(monkeypatch, _einval())
+    monkeypatch.setattr(sys, "stdout", _Stdout(_einval()))
+    assert _convert(tmp_path) == 1
+    assert capsys.readouterr().err == ""
 
 
-def test_an_einval_from_somewhere_else_is_an_error_with_its_line(monkeypatch, capsys):
-    from pktcap.cli import _root
-
-    def broken(cls, argv):
-        raise _einval()
-
-    monkeypatch.setattr(_root, "run", broken)
-    monkeypatch.setattr(_root, "_WINDOWS", True)
-    assert _root.execute([]) == 1
+def test_an_einval_from_somewhere_else_is_an_error_with_its_line(
+    monkeypatch, capsys, tmp_path
+):
+    _command_raises(monkeypatch, _einval())
+    assert _convert(tmp_path) == 1
     assert capsys.readouterr().err.startswith("pktcap: error: ")
 
 
-@pytest.mark.parametrize("error", [BrokenPipeError(), _einval()])
+@pytest.mark.parametrize(
+    "error", [BrokenPipeError(errno.EPIPE, "Broken pipe"), _einval()]
+)
 def test_the_flush_at_the_end_of_a_run_is_where_a_closed_pipe_is_found_too(
-    error, monkeypatch, capsys
+    error, monkeypatch, capsys, tmp_path
 ):
-    from pktcap.cli import _root
+    from pktcap.cli import Convert
 
-    silenced = []
-    monkeypatch.setattr(_root, "run", lambda cls, argv: None)
-    monkeypatch.setattr(_root, "_WINDOWS", True)
-    monkeypatch.setattr(_root, "_silence_stdout", lambda: silenced.append(True))
+    monkeypatch.setattr(Convert, "__call__", lambda self: None)
     monkeypatch.setattr(sys, "stdout", _Stdout(error))
-    assert _root.execute([]) == 1
-    assert silenced == [True]
+    assert _convert(tmp_path) == 1
     assert capsys.readouterr().err == ""
