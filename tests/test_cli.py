@@ -6,6 +6,7 @@ or as a process; ``--help`` is not a check. The commands themselves are in
 """
 
 import errno
+import io
 import re
 import subprocess
 import sys
@@ -220,7 +221,8 @@ class _Stdout:
             raise self.error
 
     def fileno(self):
-        raise ValueError("no descriptor")
+        # What a stream with no descriptor raises (``io.StringIO`` does the same).
+        raise io.UnsupportedOperation("fileno")
 
 
 def _einval():
